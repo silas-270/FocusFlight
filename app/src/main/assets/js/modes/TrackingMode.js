@@ -45,11 +45,6 @@ export class TrackingMode extends CameraMode {
         const yOffset = -xyDistance * Math.sin(headingRad);
         const zOffset = INITIAL_DISTANCE * Math.sin(Math.abs(pitchRad));
         const localOffset = new Cesium.Cartesian3(xOffset, yOffset, zOffset);
-        
-        // Ensure viewFrom is undefined. This mathematically forces Cesium to natively inherit 
-        // the exact camera position at the end of the animation, preventing it from abruptly 
-        // snapping to a World-Aligned (ENU) offset!
-        this.engine.trackerEntity.viewFrom = undefined;
 
         // Verhindere alte Ghost-Listener, falls reset() gespammt wird
         if (this._tickListener) {
@@ -88,30 +83,30 @@ export class TrackingMode extends CameraMode {
                 this.transitionVirtualElapsed += deltaReal;
             }
 
+            // Berechne die absolute Zielposition des Trackers in DIESEM Frame
+            let currentAirplanePos = this.engine.positionProperty.getValue(clock.currentTime);
+            let currentAirplaneOri = this.engine.trackerEntity.orientation.getValue(clock.currentTime);
+
+            if (!currentAirplanePos || !currentAirplaneOri) return;
+
+            const rotationMatrix = Cesium.Matrix3.fromQuaternion(currentAirplaneOri, scratchRotationMatrix);
+            const worldOffset = Cesium.Matrix3.multiplyByVector(rotationMatrix, localOffset, scratchWorldOffset);
+            const targetCameraPos = Cesium.Cartesian3.add(currentAirplanePos, worldOffset, scratchTargetCameraPos);
+            
+            // Die Kamera muss auf das Flugzeug gucken
+            let targetCameraDir = Cesium.Cartesian3.subtract(currentAirplanePos, targetCameraPos, scratchTargetCameraDir);
+            Cesium.Cartesian3.normalize(targetCameraDir, targetCameraDir);
+            
+            // Kamera 'Up' Vektor aus der Flugzeug-Rotation berechnen
+            const targetAirplaneUp = Cesium.Matrix3.getColumn(rotationMatrix, 2, scratchTargetAirplaneUp);
+            const right = Cesium.Cartesian3.cross(targetCameraDir, targetAirplaneUp, scratchRight);
+            Cesium.Cartesian3.normalize(right, right);
+            const targetCameraUp = Cesium.Cartesian3.cross(right, targetCameraDir, scratchTargetCameraUp);
+            Cesium.Cartesian3.normalize(targetCameraUp, targetCameraUp);
+
             let rawT = this.transitionVirtualElapsed / this.transitionDurationSeconds;
             
             if (rawT < 1.0) {
-                // Berechne die absolute Zielposition des Trackers in DIESEM Frame
-                let currentAirplanePos = this.engine.positionProperty.getValue(clock.currentTime);
-                let currentAirplaneOri = this.engine.trackerEntity.orientation.getValue(clock.currentTime);
-
-                if (!currentAirplanePos || !currentAirplaneOri) return;
-
-                const rotationMatrix = Cesium.Matrix3.fromQuaternion(currentAirplaneOri, scratchRotationMatrix);
-                const worldOffset = Cesium.Matrix3.multiplyByVector(rotationMatrix, localOffset, scratchWorldOffset);
-                const targetCameraPos = Cesium.Cartesian3.add(currentAirplanePos, worldOffset, scratchTargetCameraPos);
-                
-                // Die Kamera muss auf das Flugzeug gucken
-                let targetCameraDir = Cesium.Cartesian3.subtract(currentAirplanePos, targetCameraPos, scratchTargetCameraDir);
-                Cesium.Cartesian3.normalize(targetCameraDir, targetCameraDir);
-                
-                // Kamera 'Up' Vektor aus der Flugzeug-Rotation berechnen
-                const targetAirplaneUp = Cesium.Matrix3.getColumn(rotationMatrix, 2, scratchTargetAirplaneUp);
-                const right = Cesium.Cartesian3.cross(targetCameraDir, targetAirplaneUp, scratchRight);
-                Cesium.Cartesian3.normalize(right, right);
-                const targetCameraUp = Cesium.Cartesian3.cross(right, targetCameraDir, scratchTargetCameraUp);
-                Cesium.Cartesian3.normalize(targetCameraUp, targetCameraUp);
-
                 // Smooth Interpolation anwenden
                 const t = easeInOutCubic(rawT);
                 const currentPos = Cesium.Cartesian3.lerp(this.startPos, targetCameraPos, t, scratchCurrentPos);
@@ -134,6 +129,12 @@ export class TrackingMode extends CameraMode {
             } else {
                 // Perfekt angekommen. Übergabe an Cesium Tracking Engine.
                 if (this.engine.cameraController.getCurrentModeId() === 'TRACKING') {
+                    // Directly assign the inverted constant localOffset to bypass coordinate mapping and float-precision errors
+                    this.engine.trackerEntity.viewFrom = new Cesium.Cartesian3(
+                        -localOffset.x,
+                        -localOffset.y,
+                        localOffset.z
+                    );
                     this.viewer.trackedEntity = this.engine.trackerEntity;
                 }
                 
