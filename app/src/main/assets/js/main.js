@@ -26,6 +26,12 @@ window.setMode = (modeId) => engine.setMode(modeId);
 window.setMapStyle = (styleId) => engine.setMapStyle(styleId);
 
 /**
+ * Switches the sunset mode.
+ * @param {'CUSTOM' | 'DEFAULT'} modeId
+ */
+window.setSunsetMode = (modeId) => engine.setSunsetMode(modeId);
+
+/**
  * Starts or resumes the flight animation.
  */
 window.play = () => engine.play();

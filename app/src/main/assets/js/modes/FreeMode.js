@@ -2,9 +2,8 @@ import { CameraMode } from './CameraMode.js';
 
 export class FreeMode extends CameraMode {
     activate() {
-        if (this.engine.flightRectangle) {
-            this.viewer.camera.flyTo({
-                destination: this.engine.flightRectangle,
+        if (this.engine.flightBoundingSphere) {
+            this.viewer.camera.flyToBoundingSphere(this.engine.flightBoundingSphere, {
                 duration: 1.5
             });
         }
@@ -14,9 +13,8 @@ export class FreeMode extends CameraMode {
     }
 
     reset() {
-        if (this.engine.flightRectangle) {
-            this.viewer.camera.flyTo({
-                destination: this.engine.flightRectangle,
+        if (this.engine.flightBoundingSphere) {
+            this.viewer.camera.flyToBoundingSphere(this.engine.flightBoundingSphere, {
                 duration: 1.5
             });
         }

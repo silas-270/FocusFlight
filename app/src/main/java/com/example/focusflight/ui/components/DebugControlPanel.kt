@@ -60,6 +60,7 @@ fun DebugControlPanel(
 ) {
     val cameraMode by viewModel.cameraMode.collectAsState()
     val mapStyle by viewModel.mapStyle.collectAsState()
+    val sunsetMode by viewModel.sunsetMode.collectAsState()
     val isPlaying by viewModel.isPlaying.collectAsState()
     val speedMultiplier by viewModel.speedMultiplier.collectAsState()
     val fpsMode by viewModel.fpsMode.collectAsState()
@@ -114,17 +115,65 @@ fun DebugControlPanel(
 
                 // ── Section: Karte ───────────────────────────────────────
                 SectionLabel("KARTE")
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                
+                val isDarkMode = mapStyle == "NIGHTLIGHTS" || mapStyle == "MINIMALIST_DARK"
+                val isMinimalist = mapStyle == "MINIMALIST" || mapStyle == "MINIMALIST_DARK"
+
+                Row(
+                    modifier = Modifier.padding(bottom = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    listOf("OSM", "DARK", "NIGHTLIGHTS", "HYBRID").forEach { style ->
-                        ToggleChip(
-                            label = style,
-                            isActive = mapStyle == style,
-                            onClick = { viewModel.setMapStyle(style) }
-                        )
-                    }
+                    ToggleChip(
+                        label = "☀️ LIGHT",
+                        isActive = !isDarkMode,
+                        onClick = { 
+                            if (isMinimalist) viewModel.setMapStyle("MINIMALIST") 
+                            else viewModel.setMapStyle("SATELLITE")
+                        }
+                    )
+                    ToggleChip(
+                        label = "🌙 DARK",
+                        isActive = isDarkMode,
+                        onClick = { 
+                            if (isMinimalist) viewModel.setMapStyle("MINIMALIST_DARK") 
+                            else viewModel.setMapStyle("NIGHTLIGHTS")
+                        }
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ToggleChip(
+                        label = "SATELLIT",
+                        isActive = !isMinimalist,
+                        onClick = { 
+                            if (isDarkMode) viewModel.setMapStyle("NIGHTLIGHTS") 
+                            else viewModel.setMapStyle("SATELLITE")
+                        }
+                    )
+                    ToggleChip(
+                        label = "MINIMALIST",
+                        isActive = isMinimalist,
+                        onClick = { 
+                            if (isDarkMode) viewModel.setMapStyle("MINIMALIST_DARK") 
+                            else viewModel.setMapStyle("MINIMALIST")
+                        }
+                    )
+                }
+
+                PanelDivider()
+
+                // ── Section: Sunset Mode ─────────────────────────────────
+                SectionLabel("SUNSET")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ToggleChip(
+                        label = "CUSTOM",
+                        isActive = sunsetMode == "CUSTOM",
+                        onClick = { viewModel.setSunsetMode("CUSTOM") }
+                    )
+                    ToggleChip(
+                        label = "DEFAULT",
+                        isActive = sunsetMode == "DEFAULT",
+                        onClick = { viewModel.setSunsetMode("DEFAULT") }
+                    )
                 }
 
                 PanelDivider()

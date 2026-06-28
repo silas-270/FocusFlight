@@ -1,5 +1,5 @@
 import { CameraMode } from './CameraMode.js';
-import { MathUtils } from '../MathUtils.js';
+
 
 // Static scratch variables to eliminate per-frame GC allocations
 const scratchRotationMatrix = new Cesium.Matrix3();

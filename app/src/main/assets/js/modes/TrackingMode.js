@@ -1,5 +1,5 @@
 import { CameraMode } from './CameraMode.js';
-import { MathUtils } from '../MathUtils.js';
+
 
 // Static scratch variables to eliminate per-frame GC allocations
 const scratchRotationMatrix = new Cesium.Matrix3();
@@ -46,8 +46,10 @@ export class TrackingMode extends CameraMode {
         const zOffset = INITIAL_DISTANCE * Math.sin(Math.abs(pitchRad));
         const localOffset = new Cesium.Cartesian3(xOffset, yOffset, zOffset);
         
-        // Diesen Offset schon mal für Cesium setzen, damit er nach der Animation greift
-        this.engine.trackerEntity.viewFrom = localOffset;
+        // Ensure viewFrom is undefined. This mathematically forces Cesium to natively inherit 
+        // the exact camera position at the end of the animation, preventing it from abruptly 
+        // snapping to a World-Aligned (ENU) offset!
+        this.engine.trackerEntity.viewFrom = undefined;
 
         // Verhindere alte Ghost-Listener, falls reset() gespammt wird
         if (this._tickListener) {

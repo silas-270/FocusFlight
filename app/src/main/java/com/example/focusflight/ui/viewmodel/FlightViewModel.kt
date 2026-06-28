@@ -41,8 +41,11 @@ class FlightViewModel : ViewModel() {
     private val _cameraMode = MutableStateFlow("TRACKING")
     val cameraMode: StateFlow<String> = _cameraMode.asStateFlow()
 
-    private val _mapStyle = MutableStateFlow("OSM")
+    private val _mapStyle = MutableStateFlow("SATELLITE")
     val mapStyle: StateFlow<String> = _mapStyle.asStateFlow()
+    
+    private val _sunsetMode = MutableStateFlow("CUSTOM")
+    val sunsetMode: StateFlow<String> = _sunsetMode.asStateFlow()
 
     private val _isPlaying = MutableStateFlow(true)
     val isPlaying: StateFlow<Boolean> = _isPlaying.asStateFlow()
@@ -132,6 +135,15 @@ class FlightViewModel : ViewModel() {
     /** Called from Bridge only */
     fun onMapStyleChangedFromBridge(style: String) {
         _mapStyle.value = style
+    }
+
+    // ── Sunset Mode ──────────────────────────────────────────────────────
+
+    fun setSunsetMode(mode: String) {
+        _sunsetMode.value = mode
+        mainHandler.post {
+            webView?.evaluateJavascript("window.setSunsetMode('$mode')", null)
+        }
     }
 
     // ── Playback ─────────────────────────────────────────────────────────
