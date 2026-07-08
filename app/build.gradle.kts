@@ -1,3 +1,5 @@
+import java.io.File
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -32,10 +34,50 @@ android {
     }
     buildFeatures {
         compose = true
+        prefab = true
     }
 }
 
+tasks.register("cargoNdkBuild") {
+    doLast {
+        val absoluteRustPath = "C:/Users/kamme/Desktop/CesiumRS"
+        val targets = mapOf(
+            "aarch64-linux-android" to "arm64-v8a",
+            "x86_64-linux-android" to "x86_64"
+        )
+
+        targets.forEach { (rustTarget, androidAbi) ->
+            println("Building Rust library for target: $rustTarget (ABI: $androidAbi)...")
+            
+            val builder = ProcessBuilder("cmd", "/c", "cargo ndk --target $rustTarget build --lib --release")
+            builder.directory(File(absoluteRustPath))
+            
+            val logFile = File(absoluteRustPath, "cargo_build.log")
+            builder.redirectOutput(ProcessBuilder.Redirect.appendTo(logFile))
+            builder.redirectError(ProcessBuilder.Redirect.appendTo(logFile))
+            
+            val process = builder.start()
+            val exitCode = process.waitFor()
+            if (exitCode != 0) {
+                throw GradleException("cargo ndk build failed with exit code $exitCode. See cargo_build.log in CesiumRS for details.")
+            }
+            
+            val soFile = File("$absoluteRustPath/target/$rustTarget/release/libcesium_rs.so")
+            val destDir = File(projectDir, "src/main/jniLibs/$androidAbi")
+            destDir.mkdirs()
+            soFile.copyTo(File(destDir, "libcesium_rs.so"), overwrite = true)
+            println("Successfully copied libcesium_rs.so for ABI: $androidAbi")
+        }
+    }
+}
+
+tasks.named("preBuild") {
+    dependsOn("cargoNdkBuild")
+}
+
 dependencies {
+    implementation("androidx.games:games-activity:3.0.4")
+    implementation("androidx.appcompat:appcompat:1.7.0")
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)

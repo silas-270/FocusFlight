@@ -1,11 +1,4 @@
-import { CameraController } from './CameraController.js';
-import { EntityBuilder } from './EntityBuilder.js';
-import { FpsController, FlightPhase } from './FpsController.js';
-
-import { TelemetryManager } from './subsystems/TelemetryManager.js';
-import { PathManager } from './subsystems/PathManager.js';
-import { AtmosphereManager } from './subsystems/AtmosphereManager.js';
-import { LabelManager } from './subsystems/LabelManager.js';
+// Imports removed for clean slate (referencing from temporary folder if needed)
 
 export class CesiumEngine {
     constructor(containerId) {
@@ -44,11 +37,11 @@ export class CesiumEngine {
         this.cameraController = null;
         this.fpsController = null;
         
-        // Managers
-        this.telemetryManager = new TelemetryManager(this);
-        this.pathManager = new PathManager(this);
-        this.atmosphereManager = new AtmosphereManager(this);
-        this.labelManager = new LabelManager(this);
+        // Managers (set to null, code removed to temp folder)
+        this.telemetryManager = null;
+        this.pathManager = null;
+        this.atmosphereManager = null;
+        this.labelManager = null;
     }
 
     // =========================================================================
@@ -88,7 +81,7 @@ export class CesiumEngine {
                 requestRenderMode: true
             });
 
-            this.viewer.scene.globe.baseColor = Cesium.Color.fromCssColorString('#001133');
+            this.viewer.scene.globe.baseColor = Cesium.Color.fromCssColorString('#1E90FF'); // Blue sphere
             this.viewer.scene.fog.enabled = false;
             this.viewer.scene.globe.enableLighting = false;
 
@@ -102,6 +95,7 @@ export class CesiumEngine {
                 destination: Cesium.Cartesian3.fromDegrees(10, 48, 12000000)
             });
 
+            /*
             this.cameraController = new CameraController(this.viewer, this);
             this.fpsController = new FpsController(this.viewer);
 
@@ -115,6 +109,7 @@ export class CesiumEngine {
             });
 
             this.setMapStyle(this.currentMapStyle);
+            */
 
             if (window.AndroidBridge) {
                 window.AndroidBridge.onEngineInitialized();
@@ -292,19 +287,23 @@ export class CesiumEngine {
     }
     
     setSunsetMode(mode) {
-        this.atmosphereManager.setSunsetMode(mode);
+        if (this.atmosphereManager) {
+            this.atmosphereManager.setSunsetMode(mode);
+        }
     }
 
     // =========================================================================
     // HELPER METHODS CALLED BY MANAGERS
     // =========================================================================
     _buildEntities() {
+        /*
         this.pathManager.createPathLines();
         this.trackerEntity = EntityBuilder.createTracker(this.viewer, this.positionProperty, this.baseOrientationProperty);
         this.aircraftEntity = EntityBuilder.createAircraft(this.viewer, this.positionProperty, this.bankingOrientationProperty);
+        */
     }
 
     _detectPhase(altitude, verticalSpeed) {
-        return FlightPhase.CRUISE;
+        return 'CRUISE';
     }
 }
