@@ -14,17 +14,6 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.FocusFlight">
         <activity
-            android:name=".MainActivity"
-            android:exported="true"
-            android:hardwareAccelerated="true"
-            android:theme="@style/Theme.FocusFlight">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
-        <activity
             android:name=".CesiumActivity"
             android:theme="@style/Theme.CesiumTheme"
             android:configChanges="orientation|keyboardHidden|screenSize"
@@ -32,6 +21,10 @@
             <meta-data
                 android:name="android.app.lib_name"
                 android:value="cesium_rs" />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
         </activity>
     </application>
 
