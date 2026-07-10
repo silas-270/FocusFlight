@@ -1,7 +1,0 @@
-{
-  "dependencies": {
-    "@mapbox/vector-tile": "^3.0.0",
-    "node-fetch": "^2.7.0",
-    "pbf": "^5.1.0"
-  }
-}
