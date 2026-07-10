@@ -13,3 +13,18 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Node.js
+node_modules/
+
+# Large data files and preprocessors
+cities15000.txt
+worldcities.json
+*.tgz
+package/
+
+# Compiled native libraries (built via cargo NDK)
+app/src/main/jniLibs/
+
+# Backup / reference folders
+lookup/

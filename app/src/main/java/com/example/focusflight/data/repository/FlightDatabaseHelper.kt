@@ -74,17 +74,17 @@ class FlightDatabaseHelper(private val context: Context) {
                         airportsList.add(
                             Airport(
                                 id = cursor.getInt(idCol),
-                                ident = cursor.getString(identCol),
-                                iataCode = cursor.getString(iataCol),
-                                name = cursor.getString(nameCol),
+                                ident = cursor.getString(identCol) ?: "",
+                                iataCode = cursor.getString(iataCol) ?: "",
+                                name = cursor.getString(nameCol) ?: "",
                                 lat = cursor.getDouble(latCol),
                                 lon = cursor.getDouble(lonCol),
                                 elevationFt = cursor.getDouble(elevCol),
-                                continent = cursor.getString(contCol),
-                                isoCountry = cursor.getString(countryCol),
-                                isoRegion = cursor.getString(regionCol),
-                                municipality = cursor.getString(munCol),
-                                type = cursor.getString(typeCol)
+                                continent = cursor.getString(contCol) ?: "",
+                                isoCountry = cursor.getString(countryCol) ?: "",
+                                isoRegion = cursor.getString(regionCol) ?: "",
+                                municipality = cursor.getString(munCol) ?: "",
+                                type = cursor.getString(typeCol) ?: ""
                             )
                         )
                     } while (cursor.moveToNext())
