@@ -11,17 +11,23 @@ import androidx.compose.material3.Text
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 
+import com.example.focusflight.ui.theme.FocusFlightTheme
+
 class CesiumActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            MaterialTheme {
+            FocusFlightTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     Box(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(text = "FocusFlight UI Placeholder")
+                        Text(
+                            text = "FocusFlight UI Placeholder",
+                            style = MaterialTheme.typography.headlineMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
                     }
                 }
             }
