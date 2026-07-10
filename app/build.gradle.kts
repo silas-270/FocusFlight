@@ -71,9 +71,9 @@ tasks.register("cargoNdkBuild") {
     }
 }
 
-tasks.named("preBuild") {
-    dependsOn("cargoNdkBuild")
-}
+// tasks.named("preBuild") {
+//     dependsOn("cargoNdkBuild")
+// }
 
 dependencies {
     implementation("androidx.games:games-activity:3.0.4")

@@ -18,9 +18,6 @@
             android:theme="@style/Theme.CesiumTheme"
             android:configChanges="orientation|keyboardHidden|screenSize"
             android:exported="true">
-            <meta-data
-                android:name="android.app.lib_name"
-                android:value="cesium_rs" />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
