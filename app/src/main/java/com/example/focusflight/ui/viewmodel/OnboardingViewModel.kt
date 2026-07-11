@@ -62,6 +62,22 @@ class OnboardingViewModel(
         _searchResults.value = emptyList()
     }
 
+    fun selectAirportByIata(iataCode: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val airport = databaseHelper.getAirportByIata(iataCode)
+            if (airport != null) {
+                _selectedAirport.value = airport
+                _searchQuery.value = "${airport.municipality} (${airport.iataCode})"
+                _searchResults.value = emptyList()
+            }
+        }
+    }
+
+    fun clearSelection() {
+        _selectedAirport.value = null
+        _searchQuery.value = ""
+    }
+
     fun saveHomeAirport(): Boolean {
         val airport = _selectedAirport.value ?: return false
         preferencesRepository.setHomeAirport(airport.iataCode)

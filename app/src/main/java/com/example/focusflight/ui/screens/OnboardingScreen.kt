@@ -7,12 +7,16 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,7 +27,8 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -39,17 +44,28 @@ import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.text.font.FontFamily
+import com.example.focusflight.R
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -57,7 +73,11 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
-
+import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
+import coil3.svg.SvgDecoder
+import androidx.compose.ui.platform.LocalContext
+import coil3.ImageLoader
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -102,116 +122,195 @@ fun OnboardingScreen(
         ) {
             Spacer(modifier = Modifier.height(72.dp))
 
-            // ── Branding ────────────────────────────────────────────
+            // ── Freestanding A350 Silhouette Hero Graphic ───────────
             Icon(
-                imageVector = Icons.Outlined.AirplanemodeActive,
+                painter = painterResource(R.drawable.ic_airbus_a350),
                 contentDescription = "FocusFlight logo",
                 tint = Amber,
-                modifier = Modifier.size(48.dp)
-            )
-
-            Spacer(modifier = Modifier.height(Spacing.Medium))
-
-            Text(
-                text = "FOCUSFLIGHT",
-                style = MaterialTheme.typography.headlineMedium,
-                color = OffWhite,
-                letterSpacing = 4.0.sp
-            )
-
-            Spacer(modifier = Modifier.height(Spacing.Small))
-
-            Text(
-                text = "Earn your miles.",
-                style = MaterialTheme.typography.bodyLarge,
-                color = Haze
-            )
-
-            Spacer(modifier = Modifier.height(48.dp))
-
-            // ── Prompt ──────────────────────────────────────────────
-            Text(
-                text = "Where do you fly from?",
-                style = MaterialTheme.typography.headlineSmall,
-                color = OffWhite
+                modifier = Modifier
+                    .width(180.dp)
+                    .height(66.dp)
+                    .rotate(-8f) // Dynamic ascension angle
             )
 
             Spacer(modifier = Modifier.height(Spacing.Large))
 
-            // ── Search field ────────────────────────────────────────
-            TextField(
-                value = searchQuery,
-                onValueChange = { viewModel.onQueryChanged(it) },
-                modifier = Modifier.fillMaxWidth(),
-                placeholder = {
-                    Text(
-                        text = "Search airport or city\u2026",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = Dim
-                    )
-                },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Outlined.Search,
-                        contentDescription = "Search",
-                        tint = Haze,
-                        modifier = Modifier.size(24.dp)
-                    )
-                },
-                singleLine = true,
-                shape = RoundedCornerShape(12.dp),
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = Slate,
-                    unfocusedContainerColor = DeepNavy,
-                    cursorColor = Amber,
-                    focusedIndicatorColor = Amber,
-                    unfocusedIndicatorColor = Border,
-                    focusedTextColor = OffWhite,
-                    unfocusedTextColor = OffWhite,
-                    focusedLeadingIconColor = Amber,
-                    unfocusedLeadingIconColor = Haze
-                ),
-                textStyle = MaterialTheme.typography.bodyLarge
-            )
-
-            Spacer(modifier = Modifier.height(Spacing.Small))
-
-            // ── Search results ──────────────────────────────────────
-            AnimatedVisibility(
-                visible = searchResults.isNotEmpty(),
-                enter = expandVertically() + fadeIn(tween(200)),
-                exit = shrinkVertically() + fadeOut(tween(150))
+            // Premium Mixed-Weight Monospace Title
+            Row(
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(240.dp)
-                        .background(
-                            color = DeepNavy,
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                        .padding(vertical = Spacing.Small)
-                ) {
-                    items(searchResults, key = { it.id }) { airport ->
-                        AirportResultRow(
-                            airport = airport,
-                            isSelected = selectedAirport?.id == airport.id,
-                            onClick = { viewModel.selectAirport(airport) }
-                        )
+                Text(
+                    text = "FOCUS",
+                    style = MaterialTheme.typography.headlineMedium.copy(
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = 2.sp
+                    ),
+                    color = Amber
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "FLIGHT",
+                    style = MaterialTheme.typography.headlineMedium.copy(
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Light,
+                        letterSpacing = 2.sp
+                    ),
+                    color = OffWhite
+                )
+            }
+
+            Spacer(modifier = Modifier.height(48.dp))
+
+            // ── Search & Selection State ────────────────────────────
+            AnimatedContent(
+                targetState = selectedAirport,
+                transitionSpec = {
+                    (fadeIn(tween(300)) + androidx.compose.animation.slideInVertically(tween(300)) { 20 })
+                        .togetherWith(fadeOut(tween(150)) + androidx.compose.animation.slideOutVertically(tween(150)) { -20 })
+                        .using(androidx.compose.animation.SizeTransform(clip = false))
+                },
+                label = "airport_state"
+            ) { targetAirport ->
+                if (targetAirport == null) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            text = "Where do you fly from?",
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = OffWhite
+                    )
+
+                    Spacer(modifier = Modifier.height(Spacing.Large))
+
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { viewModel.onQueryChanged(it) },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = {
+                            Text(
+                                text = "Search airport or city…",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = Dim,
+                                modifier = Modifier.padding(start = 4.dp)
+                            )
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Outlined.Search,
+                                contentDescription = "Search",
+                                tint = Haze,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        },
+                        singleLine = true,
+                        shape = RoundedCornerShape(16.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = Slate,
+                            unfocusedContainerColor = DeepNavy,
+                            cursorColor = Amber,
+                            focusedBorderColor = Amber,
+                            unfocusedBorderColor = Color.Transparent,
+                            focusedTextColor = OffWhite,
+                            unfocusedTextColor = OffWhite,
+                            focusedLeadingIconColor = Amber,
+                            unfocusedLeadingIconColor = Haze
+                        ),
+                        textStyle = MaterialTheme.typography.bodyLarge
+                    )
+
+                    Spacer(modifier = Modifier.height(Spacing.Small))
+
+                    AnimatedVisibility(
+                        visible = searchResults.isNotEmpty(),
+                        enter = expandVertically() + fadeIn(tween(200)),
+                        exit = shrinkVertically() + fadeOut(tween(150))
+                    ) {
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(240.dp)
+                                .background(
+                                    color = DeepNavy,
+                                    shape = RoundedCornerShape(16.dp)
+                                )
+                                .padding(vertical = Spacing.Small)
+                        ) {
+                            items(searchResults, key = { it.id }) { airport ->
+                                AirportResultRow(
+                                    airport = airport,
+                                    isSelected = selectedAirport?.id == airport.id,
+                                    onClick = { viewModel.selectAirport(airport) }
+                                )
+                            }
+                        }
+                    }
+
+                    // ── Pre-Search Suggestion Grid ──────────────────────────
+                    AnimatedVisibility(
+                        visible = searchQuery.isEmpty(),
+                        enter = fadeIn(tween(200)) + expandVertically(),
+                        exit = fadeOut(tween(150)) + shrinkVertically()
+                    ) {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Spacer(modifier = Modifier.height(Spacing.Large))
+
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(Spacing.Medium)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(Spacing.Medium)
+                                ) {
+                                    Box(modifier = Modifier.weight(1f)) {
+                                        SuggestionTile(
+                                            code = "FRA",
+                                            city = "Frankfurt",
+                                            name = "Frankfurt Airport",
+                                            onClick = { viewModel.selectAirportByIata("FRA") }
+                                        )
+                                    }
+                                    Box(modifier = Modifier.weight(1f)) {
+                                        SuggestionTile(
+                                            code = "LHR",
+                                            city = "London",
+                                            name = "Heathrow Airport",
+                                            onClick = { viewModel.selectAirportByIata("LHR") }
+                                        )
+                                    }
+                                }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(Spacing.Medium)
+                                ) {
+                                    Box(modifier = Modifier.weight(1f)) {
+                                        SuggestionTile(
+                                            code = "BER",
+                                            city = "Berlin",
+                                            name = "Berlin Brandenburg",
+                                            onClick = { viewModel.selectAirportByIata("BER") }
+                                        )
+                                    }
+                                    Box(modifier = Modifier.weight(1f)) {
+                                        SuggestionTile(
+                                            code = "MUC",
+                                            city = "Munich",
+                                            name = "Munich Airport",
+                                            onClick = { viewModel.selectAirportByIata("MUC") }
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
+            } else {
+                SelectedAirportCard(
+                    airport = targetAirport,
+                    onClear = { viewModel.clearSelection() }
+                )
             }
-
-            // ── Selected airport indicator ──────────────────────────
-            AnimatedVisibility(
-                visible = selectedAirport != null && searchResults.isEmpty(),
-                enter = expandVertically() + fadeIn(tween(200)),
-                exit = shrinkVertically() + fadeOut(tween(150))
-            ) {
-                selectedAirport?.let { airport ->
-                    SelectedAirportCard(airport = airport)
-                }
-            }
+        }
 
             Spacer(modifier = Modifier.weight(1f))
 
@@ -226,7 +325,7 @@ fun OnboardingScreen(
                     .fillMaxWidth()
                     .height(56.dp),
                 enabled = selectedAirport != null,
-                shape = RoundedCornerShape(24.dp),
+                shape = RoundedCornerShape(16.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Amber,
                     contentColor = Midnight,
@@ -260,132 +359,30 @@ fun OnboardingScreen(
 
 @Composable
 private fun OnboardingBackground() {
-    val infiniteTransition = rememberInfiniteTransition(label = "bg_anim")
+    val context = LocalContext.current
+    val imageLoader = coil3.ImageLoader.Builder(context)
+        .components { add(coil3.svg.SvgDecoder.Factory()) }
+        .build()
 
-    // Slow pulsating glow intensity
-    val pulseAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.03f,
-        targetValue = 0.08f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 4000, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "pulse"
-    )
-
-    // Slow sweep for the moving dot on arc
-    val dotProgress by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 8000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "dot"
-    )
-
-    Canvas(modifier = Modifier.fillMaxSize()) {
-        val w = size.width
-        val h = size.height
-
-        // ── Subtle latitude/longitude grid lines ────────────────
-        val gridColor = Color(0xFF1E2636).copy(alpha = pulseAlpha * 3f)
-        val gridCount = 8
-        for (i in 1 until gridCount) {
-            val yFraction = i.toFloat() / gridCount
-            // Horizontal lines
-            drawLine(
-                color = gridColor,
-                start = Offset(0f, h * yFraction),
-                end = Offset(w, h * yFraction),
-                strokeWidth = 1f,
-                pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 12f))
-            )
-            // Vertical lines
-            drawLine(
-                color = gridColor,
-                start = Offset(w * yFraction, 0f),
-                end = Offset(w * yFraction, h),
-                strokeWidth = 1f,
-                pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 12f))
-            )
-        }
-
-        // ── Decorative flight arcs ──────────────────────────────
-        val arcColor = Amber.copy(alpha = pulseAlpha * 1.5f)
-        val arcStroke = Stroke(
-            width = 1.5f,
-            cap = StrokeCap.Round,
-            pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 10f))
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.BottomEnd
+    ) {
+        AsyncImage(
+            model = ImageRequest.Builder(context)
+                .data(R.raw.globe)
+                .build(),
+            imageLoader = imageLoader,
+            contentDescription = "Globe background",
+            modifier = Modifier
+                .fillMaxWidth(0.9f)
+                .aspectRatio(1f)
+                .offset(x = 170.dp, y = -10.dp)
+                .scale(2.8f)
+                .rotate(20f),
+            contentScale = ContentScale.Fit,
+            alpha = 0.25f
         )
-
-        // Arc 1 — sweeping from bottom-left to upper-right
-        val arc1 = Path().apply {
-            moveTo(w * 0.05f, h * 0.85f)
-            quadraticTo(
-                w * 0.35f, h * 0.45f,
-                w * 0.80f, h * 0.20f
-            )
-        }
-        drawPath(arc1, color = arcColor, style = arcStroke)
-
-        // Arc 2 — sweeping from left-center to right
-        val arc2 = Path().apply {
-            moveTo(w * 0.10f, h * 0.55f)
-            quadraticTo(
-                w * 0.55f, h * 0.30f,
-                w * 0.95f, h * 0.50f
-            )
-        }
-        drawPath(arc2, color = arcColor.copy(alpha = arcColor.alpha * 0.7f), style = arcStroke)
-
-        // Arc 3 — small one in bottom half
-        val arc3 = Path().apply {
-            moveTo(w * 0.30f, h * 0.92f)
-            quadraticTo(
-                w * 0.60f, h * 0.70f,
-                w * 0.90f, h * 0.78f
-            )
-        }
-        drawPath(arc3, color = arcColor.copy(alpha = arcColor.alpha * 0.5f), style = arcStroke)
-
-        // ── Animated dot traveling along arc 1 ──────────────────
-        val dotT = dotProgress
-        val dotX = (1 - dotT) * (1 - dotT) * (w * 0.05f) +
-                2 * (1 - dotT) * dotT * (w * 0.35f) +
-                dotT * dotT * (w * 0.80f)
-        val dotY = (1 - dotT) * (1 - dotT) * (h * 0.85f) +
-                2 * (1 - dotT) * dotT * (h * 0.45f) +
-                dotT * dotT * (h * 0.20f)
-
-        drawCircle(
-            color = Amber.copy(alpha = 0.6f),
-            radius = 6f,
-            center = Offset(dotX, dotY)
-        )
-        // Outer glow
-        drawCircle(
-            color = Amber.copy(alpha = 0.15f),
-            radius = 16f,
-            center = Offset(dotX, dotY)
-        )
-
-        // ── Small static dots at arc endpoints (like cities) ────
-        val endpoints = listOf(
-            Offset(w * 0.05f, h * 0.85f),
-            Offset(w * 0.80f, h * 0.20f),
-            Offset(w * 0.10f, h * 0.55f),
-            Offset(w * 0.95f, h * 0.50f),
-            Offset(w * 0.30f, h * 0.92f),
-            Offset(w * 0.90f, h * 0.78f)
-        )
-        endpoints.forEach { point ->
-            drawCircle(
-                color = Haze.copy(alpha = 0.4f),
-                radius = 3f,
-                center = point
-            )
-        }
     }
 }
 
@@ -413,49 +410,46 @@ private fun AirportResultRow(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = Icons.Outlined.LocationOn,
-                contentDescription = null,
-                tint = accentColor,
-                modifier = Modifier.size(20.dp)
-            )
+            Box(
+                modifier = Modifier
+                    .size(width = 46.dp, height = 28.dp)
+                    .border(
+                        width = 1.dp,
+                        color = accentColor.copy(alpha = 0.5f),
+                        shape = RoundedCornerShape(6.dp)
+                    )
+                    .background(
+                        color = accentColor.copy(alpha = 0.15f),
+                        shape = RoundedCornerShape(6.dp)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = airport.iataCode,
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold),
+                    color = accentColor
+                )
+            }
 
-            Spacer(modifier = Modifier.width(Spacing.Small))
+            Spacer(modifier = Modifier.width(Spacing.Medium))
 
-            // IATA code — monospace
-            Text(
-                text = airport.iataCode,
-                style = MaterialTheme.typography.labelLarge,
-                color = if (isSelected) Amber else OffWhite,
-                fontWeight = FontWeight.Bold
-            )
-
-            Spacer(modifier = Modifier.width(Spacing.Small))
-
-            // City + airport name
+            // City and Name
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = airport.municipality,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold),
                     color = OffWhite,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                 )
                 Text(
                     text = airport.name,
                     style = MaterialTheme.typography.bodySmall,
                     color = Haze,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                 )
             }
-
-            // Country code badge
-            Text(
-                text = airport.isoCountry,
-                style = MaterialTheme.typography.labelMedium,
-                color = Dim
-            )
         }
 
         HorizontalDivider(
@@ -471,66 +465,197 @@ private fun AirportResultRow(
 // ═════════════════════════════════════════════════════════════════════
 
 @Composable
-private fun SelectedAirportCard(airport: Airport) {
-    Box(
+private fun SelectedAirportCard(
+    airport: Airport,
+    onClear: () -> Unit
+) {
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(
-                color = DeepNavy,
-                shape = RoundedCornerShape(12.dp)
-            )
-            .padding(Spacing.Medium)
+            .clip(RoundedCornerShape(16.dp))
+            .background(DeepNavy)
     ) {
+        // Top section
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(Spacing.Medium),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Outlined.FlightTakeoff,
-                    contentDescription = null,
-                    tint = Amber,
-                    modifier = Modifier.size(24.dp)
+            Column {
+                Text(
+                    text = airport.iataCode,
+                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold),
+                    color = Amber
                 )
-
-                Spacer(modifier = Modifier.width(Spacing.Medium))
-
-                Column {
-                    Text(
-                        text = airport.iataCode,
-                        style = MaterialTheme.typography.labelLarge.copy(
-                            fontWeight = FontWeight.Bold
-                        ),
-                        color = Amber
-                    )
-                    Text(
-                        text = airport.municipality,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = OffWhite
-                    )
-                    Text(
-                        text = airport.name,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Haze
-                    )
-                }
+                Text(
+                    text = airport.name,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Haze,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                )
             }
+            IconButton(onClick = onClear) {
+                Icon(
+                    imageVector = Icons.Outlined.Close,
+                    contentDescription = "Clear selection",
+                    tint = Haze
+                )
+            }
+        }
 
-            // Dashed flight path decoration
-            Canvas(
-                modifier = Modifier
-                    .width(48.dp)
-                    .height(2.dp)
-            ) {
+        HorizontalDivider(color = Border, thickness = 1.dp)
+
+        // Facts section
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Spacing.Large, vertical = Spacing.Medium),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            FactItem("ELEV.", "${airport.elevationFt.toInt()} FT")
+            VerticalDivider(modifier = Modifier.height(32.dp), color = Border)
+            FactItem("LAT", formatCoord(airport.lat, true))
+            VerticalDivider(modifier = Modifier.height(32.dp), color = Border)
+            FactItem("LON", formatCoord(airport.lon, false))
+        }
+
+        // Map section
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(2f)
+                .background(Slate) // Backup color behind the map
+        ) {
+            Image(
+                painter = painterResource(R.drawable.ic_world_map),
+                contentDescription = "World Map",
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.FillBounds
+            )
+            
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val cx = size.width * ((airport.lon + 180) / 360f).toFloat()
+                val cy = size.height * ((90 - airport.lat) / 180f).toFloat()
+
+                // Horizontal line
                 drawLine(
-                    color = Amber.copy(alpha = 0.4f),
-                    start = Offset(0f, size.height / 2),
-                    end = Offset(size.width, size.height / 2),
-                    strokeWidth = 2f,
-                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 4f))
+                    color = Amber.copy(alpha = 0.8f),
+                    start = Offset(0f, cy),
+                    end = Offset(size.width, cy),
+                    strokeWidth = 2f
+                )
+                // Vertical line
+                drawLine(
+                    color = Amber.copy(alpha = 0.8f),
+                    start = Offset(cx, 0f),
+                    end = Offset(cx, size.height),
+                    strokeWidth = 2f
+                )
+                
+                // Center dot
+                drawCircle(
+                    color = Amber,
+                    radius = 4f,
+                    center = Offset(cx, cy)
                 )
             }
         }
     }
 }
+
+@Composable
+private fun FactItem(label: String, value: String) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = Dim
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold),
+            color = OffWhite
+        )
+    }
+}
+
+private fun formatCoord(value: Double, isLat: Boolean): String {
+    val dir = if (isLat) {
+        if (value >= 0) "N" else "S"
+    } else {
+        if (value >= 0) "E" else "W"
+    }
+    return String.format(java.util.Locale.US, "%.2f° %s", kotlin.math.abs(value), dir)
+}
+
+@Composable
+private fun SuggestionTile(
+    code: String,
+    city: String,
+    name: String,
+    onClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(Midnight.copy(alpha = 0.6f))
+            .border(
+                width = 1.dp,
+                color = Color.White.copy(alpha = 0.08f),
+                shape = RoundedCornerShape(16.dp)
+            )
+            .clickable(onClick = onClick)
+            .padding(Spacing.Medium),
+        horizontalAlignment = Alignment.Start
+    ) {
+        // Top-side badge: dark background, thin muted white outline, white sans-serif IATA code
+        Box(
+            modifier = Modifier
+                .size(width = 46.dp, height = 28.dp)
+                .border(
+                    width = 1.dp,
+                    color = Color.White.copy(alpha = 0.15f),
+                    shape = RoundedCornerShape(6.dp)
+                )
+                .background(
+                    color = Midnight,
+                    shape = RoundedCornerShape(6.dp)
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = code,
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontFamily = FontFamily.SansSerif,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                ),
+                color = OffWhite
+            )
+        }
+
+        Spacer(modifier = Modifier.height(Spacing.Medium))
+
+        // Bottom-side text
+        Text(
+            text = city,
+            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold),
+            color = OffWhite,
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+        )
+        Text(
+            text = name,
+            style = MaterialTheme.typography.bodySmall,
+            color = Haze,
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+        )
+    }
+}
+
