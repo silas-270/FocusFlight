@@ -17,3 +17,26 @@
 ## 4. Current Phase constraints
 - **Native Engine Bypass**: The native CesiumRS engine is temporarily mocked/disabled. Do not restore native C/Rust loader code until UI development is fully completed.
 - **Git Commits**: Commit changes locally using `git` as soon as a phase or distinct class/screen is verified.
+
+## Layout
+- NEVER stack components linearly top-to-bottom without a visual anchor or background layer
+- ALWAYS think in layers: background (Canvas/SVG/gradient), mid (content), foreground (controls)
+- Use Box with fillMaxSize to layer decorative SVG/Canvas behind content
+- Prefer scaffold-style full-screen layouts over scrollable lists of components
+- Dead whitespace below content = layout failure; fill it with a decorative background layer
+
+## Icons & Images  
+- NEVER use emoji as icons
+- ALWAYS use Material Symbols via androidx.compose.material:material-icons-extended
+- For network images: ALWAYS use Coil3 AsyncImage, NEVER load images manually
+- For placeholder/decorative visuals: use Canvas drawing or vector drawables, NOT emojis
+- Icon sizes: use standard Dp values (24.dp default, 48.dp for prominent actions)
+
+## Navigation & Transitions
+- NEVER use fadeIn/fadeOut as primary nav transition (looks sluggish)
+- ALWAYS use slideIntoContainer/slideOutOfContainer for screen transitions
+- Set duration to 300ms max (tween(300)), NEVER 1000ms+
+- Forward: SlideDirection.Start enter + SlideDirection.Start exit
+- Back: SlideDirection.End popEnter + SlideDirection.End popExit  
+- Enable predictive back: android:enableOnBackInvokedCallback="true" in AndroidManifest
+- Use Navigation Compose ≥ 2.8.0 for automatic predictive back gesture support

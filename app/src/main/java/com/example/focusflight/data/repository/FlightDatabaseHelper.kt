@@ -50,12 +50,21 @@ class FlightDatabaseHelper(private val context: Context) {
             SELECT * FROM airports 
             WHERE (iata_code LIKE ? OR municipality LIKE ? OR name LIKE ?) 
               AND iata_code != '' 
+            ORDER BY 
+              CASE 
+                WHEN iata_code = ? COLLATE NOCASE THEN 1
+                WHEN iata_code LIKE ? THEN 2
+                WHEN municipality LIKE ? THEN 3
+                ELSE 4 
+              END, name ASC
             LIMIT 15
         """.trimIndent()
         val cleanQuery = "%${query.trim()}%"
+        val trimmed = query.trim()
+        val startQuery = "${query.trim()}%"
         
         try {
-            db.rawQuery(sql, arrayOf(cleanQuery, cleanQuery, cleanQuery)).use { cursor ->
+            db.rawQuery(sql, arrayOf(cleanQuery, cleanQuery, cleanQuery, trimmed, startQuery, startQuery)).use { cursor ->
                 if (cursor.moveToFirst()) {
                     val idCol = cursor.getColumnIndexOrThrow("airport_id")
                     val identCol = cursor.getColumnIndexOrThrow("ident")
@@ -96,5 +105,48 @@ class FlightDatabaseHelper(private val context: Context) {
             db.close()
         }
         return airportsList
+    }
+
+    fun getAirportByIata(iataCode: String): Airport? {
+        val db = getReadableDatabase()
+        val sql = "SELECT * FROM airports WHERE iata_code = ? LIMIT 1"
+        try {
+            db.rawQuery(sql, arrayOf(iataCode)).use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val idCol = cursor.getColumnIndexOrThrow("airport_id")
+                    val identCol = cursor.getColumnIndexOrThrow("ident")
+                    val iataCol = cursor.getColumnIndexOrThrow("iata_code")
+                    val nameCol = cursor.getColumnIndexOrThrow("name")
+                    val latCol = cursor.getColumnIndexOrThrow("lat")
+                    val lonCol = cursor.getColumnIndexOrThrow("lon")
+                    val elevCol = cursor.getColumnIndexOrThrow("elevation_ft")
+                    val contCol = cursor.getColumnIndexOrThrow("continent")
+                    val countryCol = cursor.getColumnIndexOrThrow("iso_country")
+                    val regionCol = cursor.getColumnIndexOrThrow("iso_region")
+                    val munCol = cursor.getColumnIndexOrThrow("municipality")
+                    val typeCol = cursor.getColumnIndexOrThrow("type")
+                    
+                    return Airport(
+                        id = cursor.getInt(idCol),
+                        ident = cursor.getString(identCol) ?: "",
+                        iataCode = cursor.getString(iataCol) ?: "",
+                        name = cursor.getString(nameCol) ?: "",
+                        lat = cursor.getDouble(latCol),
+                        lon = cursor.getDouble(lonCol),
+                        elevationFt = cursor.getDouble(elevCol),
+                        continent = cursor.getString(contCol) ?: "",
+                        isoCountry = cursor.getString(countryCol) ?: "",
+                        isoRegion = cursor.getString(regionCol) ?: "",
+                        municipality = cursor.getString(munCol) ?: "",
+                        type = cursor.getString(typeCol) ?: ""
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error querying database by IATA", e)
+        } finally {
+            db.close()
+        }
+        return null
     }
 }
