@@ -40,7 +40,7 @@ android {
 
 tasks.register("cargoNdkBuild") {
     doLast {
-        val absoluteRustPath = "C:/Users/kamme/Desktop/CesiumRS"
+        val absoluteRustPath = "/home/silas270/CesiumRS"
         val targets = mapOf(
             "aarch64-linux-android" to "arm64-v8a",
             "x86_64-linux-android" to "x86_64"
@@ -49,8 +49,12 @@ tasks.register("cargoNdkBuild") {
         targets.forEach { (rustTarget, androidAbi) ->
             println("Building Rust library for target: $rustTarget (ABI: $androidAbi)...")
             
-            val builder = ProcessBuilder("cmd", "/c", "cargo ndk --target $rustTarget build --lib --release")
+            val builder = ProcessBuilder("/home/silas270/.cargo/bin/cargo", "ndk", "--target", rustTarget, "build", "--lib", "--release")
             builder.directory(File(absoluteRustPath))
+            
+            val ndkDir = "/home/silas270/android-sdk/ndk/27.1.12297006"
+            builder.environment()["ANDROID_NDK_HOME"] = ndkDir
+            builder.environment()["PATH"] = "/home/silas270/.cargo/bin:" + System.getenv("PATH")
             
             val logFile = File(absoluteRustPath, "cargo_build.log")
             builder.redirectOutput(ProcessBuilder.Redirect.appendTo(logFile))
@@ -71,11 +75,12 @@ tasks.register("cargoNdkBuild") {
     }
 }
 
-// tasks.named("preBuild") {
-//     dependsOn("cargoNdkBuild")
-// }
+tasks.named("preBuild") {
+    dependsOn("cargoNdkBuild")
+}
 
 dependencies {
+    implementation("net.java.dev.jna:jna:5.14.0@aar")
     implementation("androidx.games:games-activity:3.0.4")
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation(platform(libs.androidx.compose.bom))

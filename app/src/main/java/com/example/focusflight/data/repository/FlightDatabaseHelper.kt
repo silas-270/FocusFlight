@@ -149,4 +149,52 @@ class FlightDatabaseHelper(private val context: Context) {
         }
         return null
     }
+
+    fun getRandomAirports(limit: Int, excludeIata: String): List<Airport> {
+        val airportsList = mutableListOf<Airport>()
+        val db = getReadableDatabase()
+        val sql = "SELECT * FROM airports WHERE iata_code != '' AND iata_code != ? ORDER BY RANDOM() LIMIT ?"
+        try {
+            db.rawQuery(sql, arrayOf(excludeIata, limit.toString())).use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val idCol = cursor.getColumnIndexOrThrow("airport_id")
+                    val identCol = cursor.getColumnIndexOrThrow("ident")
+                    val iataCol = cursor.getColumnIndexOrThrow("iata_code")
+                    val nameCol = cursor.getColumnIndexOrThrow("name")
+                    val latCol = cursor.getColumnIndexOrThrow("lat")
+                    val lonCol = cursor.getColumnIndexOrThrow("lon")
+                    val elevCol = cursor.getColumnIndexOrThrow("elevation_ft")
+                    val contCol = cursor.getColumnIndexOrThrow("continent")
+                    val countryCol = cursor.getColumnIndexOrThrow("iso_country")
+                    val regionCol = cursor.getColumnIndexOrThrow("iso_region")
+                    val munCol = cursor.getColumnIndexOrThrow("municipality")
+                    val typeCol = cursor.getColumnIndexOrThrow("type")
+                    
+                    do {
+                        airportsList.add(
+                            Airport(
+                                id = cursor.getInt(idCol),
+                                ident = cursor.getString(identCol) ?: "",
+                                iataCode = cursor.getString(iataCol) ?: "",
+                                name = cursor.getString(nameCol) ?: "",
+                                lat = cursor.getDouble(latCol),
+                                lon = cursor.getDouble(lonCol),
+                                elevationFt = cursor.getDouble(elevCol),
+                                continent = cursor.getString(contCol) ?: "",
+                                isoCountry = cursor.getString(countryCol) ?: "",
+                                isoRegion = cursor.getString(regionCol) ?: "",
+                                municipality = cursor.getString(munCol) ?: "",
+                                type = cursor.getString(typeCol) ?: ""
+                            )
+                        )
+                    } while (cursor.moveToNext())
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error querying random airports", e)
+        } finally {
+            db.close()
+        }
+        return airportsList
+    }
 }
