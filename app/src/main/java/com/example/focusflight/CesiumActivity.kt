@@ -67,18 +67,21 @@ class CesiumActivity : ComponentActivity() {
                         }
 
                         composable(Screen.Hub.route) {
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                val currentBase = preferencesRepository.getCurrentAirport() ?: "Unknown"
-                                Text(
-                                    text = "Hub Screen Placeholder\nBase: $currentBase",
-                                    style = MaterialTheme.typography.headlineMedium,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    textAlign = TextAlign.Center
-                                )
+                            val viewModel: com.example.focusflight.ui.viewmodel.HubViewModel by viewModels {
+                                com.example.focusflight.ui.viewmodel.HubViewModelFactory(databaseHelper, preferencesRepository, cacheDir)
                             }
+                            com.example.focusflight.ui.screens.HubScreen(
+                                viewModel = viewModel,
+                                onBookFlightClick = {
+                                    // TODO: Navigate to Flight Search
+                                },
+                                onPassportClick = {
+                                    // TODO: Navigate to Passport
+                                },
+                                onSettingsClick = {
+                                    // TODO: Navigate to Settings
+                                }
+                            )
                         }
                     }
                 }
