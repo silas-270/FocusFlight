@@ -318,8 +318,8 @@ fun TimelineSlider(
         val containerWidth = maxWidth
         val sidePadding = 16.dp
         val availableWidth = containerWidth - (sidePadding * 2)
-        // 1 hour visible width difference = 60 minutes = 6 columns (each of 10m)
-        val itemWidth = availableWidth / 6
+        // 5 columns visible at a time for optimal, non-wrapping spacing and perfect symmetry
+        val itemWidth = availableWidth / 5
 
         val listState = rememberLazyListState()
         val coroutineScope = rememberCoroutineScope()
@@ -581,9 +581,8 @@ fun RouteMap(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(24.dp))
-            .background(Midnight.copy(alpha = 0.5f))
-            .border(1.dp, Border, RoundedCornerShape(24.dp))
+            .clip(RoundedCornerShape(20.dp))
+            .background(Midnight.copy(alpha = 0.35f))
     ) {
         Image(
             painter = painterResource(R.drawable.ic_world_map),
