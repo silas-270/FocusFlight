@@ -162,84 +162,10 @@ fun InFlightScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Midnight)
+            .background(Color.Transparent) // Make background transparent to see engine
     ) {
         // --- Layer 1: Background 3D Engine Placeholder / Tactical Radar ---
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val gridColor = Border.copy(alpha = 0.25f)
-            val strokeWidth = 1.dp.toPx()
-
-            // Draw circular radar sweep lines
-            val center = Offset(size.width / 2f, size.height / 2.2f)
-            for (r in 1..4) {
-                drawCircle(
-                    color = gridColor,
-                    radius = (size.width / 5f) * r,
-                    center = center,
-                    style = Stroke(
-                        width = strokeWidth,
-                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
-                    )
-                )
-            }
-
-            // Draw intersecting angular cross-hairs
-            drawLine(
-                color = gridColor,
-                start = Offset(0f, center.y),
-                end = Offset(size.width, center.y),
-                strokeWidth = strokeWidth
-            )
-            drawLine(
-                color = gridColor,
-                start = Offset(center.x, 0f),
-                end = Offset(center.x, size.height),
-                strokeWidth = strokeWidth
-            )
-
-            // Draw a minimal great-circle flight path arc
-            val startOffset = Offset(size.width * 0.2f, center.y * 1.3f)
-            val endOffset = Offset(size.width * 0.8f, center.y * 0.7f)
-            val controlOffset = Offset(size.width * 0.5f, center.y * 0.5f)
-
-            val path = androidx.compose.ui.graphics.Path().apply {
-                moveTo(startOffset.x, startOffset.y)
-                quadraticTo(controlOffset.x, controlOffset.y, endOffset.x, endOffset.y)
-            }
-
-            // Muted total route line
-            drawPath(
-                path = path,
-                color = Border,
-                style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
-            )
-
-            // Active path flown (drawn as solid Amber curve up to current progress)
-            val pathMeasure = android.graphics.PathMeasure(path.asAndroidPath(), false)
-            val activePath = androidx.compose.ui.graphics.Path()
-            if (pathMeasure.length > 0f) {
-                pathMeasure.getSegment(0f, pathMeasure.length * uiState.progress, activePath.asAndroidPath(), true)
-                drawPath(
-                    path = activePath,
-                    color = Amber,
-                    style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
-                )
-
-                // Draw current airplane coordinate position dot
-                val pos = FloatArray(2)
-                pathMeasure.getPosTan(pathMeasure.length * uiState.progress, pos, null)
-                drawCircle(
-                    color = Amber,
-                    radius = 5.dp.toPx(),
-                    center = Offset(pos[0], pos[1])
-                )
-                drawCircle(
-                    color = Amber.copy(alpha = 0.3f),
-                    radius = 12.dp.toPx(),
-                    center = Offset(pos[0], pos[1])
-                )
-            }
-        }
+        // (Removed 2D canvas, the Rust wgpu engine renders underneath this Compose layer)
 
         // --- Live Cockpit Coordinates Overlay ---
         Column(
@@ -618,9 +544,9 @@ fun InFlightScreen(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // Camera Views selectors (Mocked)
+                // Camera Views selectors
                 Text(
-                    text = "CAMERA MODE (MOCKED)",
+                    text = "CAMERA MODE",
                     style = MaterialTheme.typography.labelSmall,
                     color = Haze,
                     modifier = Modifier.padding(bottom = 10.dp)
@@ -630,20 +556,24 @@ fun InFlightScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    val cameraViews = listOf("CHASE", "COCKPIT", "FREE")
-                    var selectedCamera by remember { mutableStateOf("CHASE") }
-                    cameraViews.forEach { cam ->
+                    val cameraViews = listOf("FREE" to 0, "CHASE" to 1, "COCKPIT" to 2)
+                    var selectedCamera by remember { mutableStateOf(1) } // Default to CHASE
+                    
+                    cameraViews.forEach { (camName, camMode) ->
                         Box(
                             modifier = Modifier
                                 .weight(1f)
-                                .background(if (selectedCamera == cam) Amber else Slate, RoundedCornerShape(8.dp))
-                                .clickable { selectedCamera = cam }
+                                .background(if (selectedCamera == camMode) Amber else Slate, RoundedCornerShape(8.dp))
+                                .clickable { 
+                                    selectedCamera = camMode 
+                                    com.example.focusflight.engine.CesiumBridge.nativeSetCameraMode(camMode)
+                                }
                                 .padding(vertical = 10.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = cam,
-                                color = if (selectedCamera == cam) Midnight else OffWhite,
+                                text = camName,
+                                color = if (selectedCamera == camMode) Midnight else OffWhite,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold
                             )

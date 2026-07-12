@@ -168,24 +168,43 @@ class CesiumActivity : ComponentActivity() {
                             val destIata = backStackEntry.arguments?.getString("destIata") ?: ""
                             val durationMin = backStackEntry.arguments?.getInt("durationMin") ?: 0
 
-                            val viewModel: InFlightViewModel = viewModel(
-                                factory = InFlightViewModelFactory(
-                                    databaseHelper, preferencesRepository, cacheDir, flightNo, destIata, durationMin
-                                )
-                            )
-
-                            InFlightScreen(
-                                viewModel = viewModel,
-                                onLandingCelebration = { rank ->
-                                    preferencesRepository.setCurrentAirport(destIata)
+                            val context = androidx.compose.ui.platform.LocalContext.current
+                            val launcher = androidx.activity.compose.rememberLauncherForActivityResult(
+                                contract = androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+                            ) { result ->
+                                if (result.resultCode == android.app.Activity.RESULT_OK) {
+                                    val data = result.data
+                                    val rank = data?.getStringExtra("rank") ?: "CO-PILOT"
                                     navController.navigate(Screen.ArrivalCelebration.createRoute(flightNo, destIata, durationMin, rank)) {
                                         popUpTo(Screen.Hub.route) { inclusive = false }
                                     }
-                                },
-                                onExitFlight = {
+                                } else {
                                     navController.popBackStack()
                                 }
-                            )
+                            }
+
+                            androidx.compose.runtime.LaunchedEffect(Unit) {
+                                kotlinx.coroutines.Dispatchers.IO.invoke {
+                                    val originIata = preferencesRepository.getCurrentAirport() ?: "STR"
+                                    val origin = databaseHelper.getAirportByIata(originIata)
+                                    val dest = databaseHelper.getAirportByIata(destIata)
+                                    
+                                    if (origin != null && dest != null) {
+                                        com.example.focusflight.engine.CesiumBridge.nativeSetPendingFlight(
+                                            origin.lon, origin.lat, dest.lon, dest.lat, (durationMin * 60 * 1000).toLong()
+                                        )
+                                    }
+
+                                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                        val intent = android.content.Intent(context, CesiumGameActivity::class.java).apply {
+                                            putExtra("flightNo", flightNo)
+                                            putExtra("destIata", destIata)
+                                            putExtra("durationMin", durationMin)
+                                        }
+                                        launcher.launch(intent)
+                                    }
+                                }
+                            }
                         }
 
                         composable(
