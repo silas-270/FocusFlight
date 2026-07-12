@@ -204,8 +204,9 @@ fun FlightSearchScreen(
                 // Empty state for current interval
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth(0.8f)
-                        .aspectRatio(1.2f)
+                        .padding(horizontal = 80.dp)
+                        .fillMaxWidth()
+                        .aspectRatio(0.85f)
                         .background(Midnight.copy(alpha = 0.9f), RoundedCornerShape(32.dp))
                         .border(1.dp, Border, RoundedCornerShape(32.dp))
                         .padding(24.dp),
@@ -237,7 +238,7 @@ fun FlightSearchScreen(
                         )
                     }
                 }
-                Spacer(modifier = Modifier.height(88.dp)) // Spacer to keep layout heights balanced
+                Spacer(modifier = Modifier.height(112.dp)) // Spacer to keep layout heights balanced
             }
         }
     }
@@ -258,8 +259,10 @@ fun TimelineSlider(
             .padding(top = 12.dp, bottom = 16.dp)
     ) {
         val containerWidth = maxWidth
+        val sidePadding = 16.dp
+        val availableWidth = containerWidth - (sidePadding * 2)
         // 1 hour visible width difference = 60 minutes = 6 columns (each of 10m)
-        val itemWidth = containerWidth / 6
+        val itemWidth = availableWidth / 6
 
         val listState = rememberLazyListState()
         val coroutineScope = rememberCoroutineScope()
@@ -313,18 +316,18 @@ fun TimelineSlider(
         LazyRow(
             state = listState,
             flingBehavior = rememberInertiaSnapFlingBehavior(lazyListState = listState),
-            contentPadding = PaddingValues(horizontal = containerWidth / 2 - itemWidth / 2),
+            contentPadding = PaddingValues(horizontal = availableWidth / 2 - itemWidth / 2),
             verticalAlignment = Alignment.Top,
             modifier = Modifier
                 .fillMaxSize()
-                .padding(top = 28.dp)
+                .padding(top = 28.dp, start = sidePadding, end = sidePadding)
         ) {
             itemsIndexed(intervals) { index, interval ->
                 val isCenter = interval == selectedInterval
                 val isPast = interval < selectedInterval
                 val isFuture = interval > selectedInterval
 
-                val color = if (isFuture) Haze else OffWhite
+                val color = if (isCenter) OffWhite else Haze
                 val textStyle = if (isCenter) {
                     MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold, fontSize = 18.sp)
                 } else {
