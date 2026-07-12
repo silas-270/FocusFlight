@@ -301,20 +301,24 @@ fun ArrivalCelebrationScreen(
                     .fillMaxWidth()
                     .background(DeepNavy.copy(alpha = 0.8f), RoundedCornerShape(16.dp))
                     .border(1.dp, inkColor.copy(alpha = 0.3f), RoundedCornerShape(16.dp))
-                    .padding(20.dp)
-                    .graphicsLayer { alpha = stampAlpha }
+                    .padding(vertical = 28.dp, horizontal = 16.dp)
+                    .graphicsLayer { alpha = stampAlpha },
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
             ) {
-                Text(
-                    text = "FLIGHT TELEMETRY",
-                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = 2.sp),
-                    color = inkColor,
-                    modifier = Modifier.padding(bottom = 16.dp)
-                )
+                val hours = durationMin / 60
+                val mins = durationMin % 60
+                val timeString = "${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}"
                 
-                CelebrationRow("FLIGHT NO.", flightNo)
-                CelebrationRow("DURATION", "$durationMin MINS")
-                CelebrationRow("CREW RANK", rank)
-                CelebrationRow("STATUS", "STAMP SECURED")
+                Text(
+                    text = timeString,
+                    style = MaterialTheme.typography.displayLarge.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        letterSpacing = 2.sp
+                    ),
+                    color = Haze
+                )
             }
 
             Spacer(modifier = Modifier.height(Spacing.Large))
