@@ -6,6 +6,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Flight
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -16,6 +18,8 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontFamily
@@ -25,17 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.focusflight.ui.theme.*
 import kotlinx.coroutines.delay
-
-data class FireworksParticle(
-    var x: Float,
-    var y: Float,
-    var vx: Float,
-    var vy: Float,
-    var size: Float,
-    val color: Color,
-    var alpha: Float,
-    val decay: Float
-)
+import kotlinx.coroutines.launch
 
 @Composable
 fun ArrivalCelebrationScreen(
@@ -47,6 +41,11 @@ fun ArrivalCelebrationScreen(
 ) {
     val context = LocalContext.current
     val textMeasurer = rememberTextMeasurer()
+    val configuration = LocalConfiguration.current
+    val density = LocalDensity.current
+
+    // Screen height in pixels for the airplane animation
+    val screenHeightPx = with(density) { configuration.screenHeightDp.dp.toPx() }
 
     var stampLanded by remember { mutableStateOf(false) }
     val stampScale by animateFloatAsState(
@@ -61,6 +60,10 @@ fun ArrivalCelebrationScreen(
         animationSpec = tween(300)
     )
 
+    // Airplane animation states
+    val planeOffsetY = remember { Animatable(screenHeightPx * 0.8f) }
+    val planeAlpha = remember { Animatable(1f) }
+
     // Compute styling details based on rank
     val inkColor = when (rank) {
         "GLOBETROTTER" -> Amber // Gold/Amber
@@ -74,7 +77,25 @@ fun ArrivalCelebrationScreen(
     }
 
     LaunchedEffect(Unit) {
-        delay(400) // Build anticipation
+        // Launch airplane animation
+        launch {
+            planeOffsetY.animateTo(
+                targetValue = -screenHeightPx * 0.5f,
+                animationSpec = tween(
+                    durationMillis = 1500,
+                    easing = FastOutSlowInEasing // Starts fast, slows down
+                )
+            )
+        }
+        launch {
+            delay(1000)
+            planeAlpha.animateTo(
+                targetValue = 0f,
+                animationSpec = tween(durationMillis = 500)
+            )
+        }
+
+        delay(400) // Build anticipation for the stamp
         stampLanded = true
         // Massive Haptic touchdown feedback
         try {
@@ -87,69 +108,26 @@ fun ArrivalCelebrationScreen(
         }
     }
 
-    // Particle sweep simulator
-    val particles = remember { mutableStateListOf<FireworksParticle>() }
-    val maxParticles = when (rank) {
-        "GLOBETROTTER" -> 200
-        "COMMANDER" -> 120
-        "CAPTAIN" -> 80
-        else -> 40
-    }
-
-    LaunchedEffect(Unit) {
-        val random = java.util.Random()
-        while (true) {
-            withFrameMillis {
-                val iterator = particles.iterator()
-                while (iterator.hasNext()) {
-                    val p = iterator.next()
-                    p.x += p.vx
-                    p.y += p.vy
-                    p.alpha -= p.decay
-                    // gravity effect for realism
-                    p.vy += 0.05f 
-                    if (p.alpha <= 0f) {
-                        iterator.remove()
-                    }
-                }
-
-                if (stampLanded && particles.size < maxParticles) {
-                    val angle = random.nextDouble() * 2.0 * Math.PI
-                    val speed = 2f + random.nextFloat() * 8f
-                    particles.add(
-                        FireworksParticle(
-                            x = 0f,
-                            y = 0f,
-                            vx = (kotlin.math.cos(angle) * speed).toFloat(),
-                            vy = (kotlin.math.sin(angle) * speed).toFloat() - 2f, // upward bias
-                            size = 4f + random.nextFloat() * 8f,
-                            color = inkColor,
-                            alpha = 1f,
-                            decay = 0.005f + random.nextFloat() * 0.01f
-                        )
-                    )
-                }
-            }
-        }
-    }
-
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Midnight),
         contentAlignment = Alignment.Center
     ) {
-        // Background Dynamic Canvas Particle VFX
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val centerOffset = Offset(size.width / 2f, size.height / 3f)
-            particles.forEach { p ->
-                drawCircle(
-                    color = p.color.copy(alpha = p.alpha),
-                    radius = p.size,
-                    center = Offset(centerOffset.x + p.x, centerOffset.y + p.y)
-                )
-            }
-        }
+        // Massive Airplane Flyover
+        Icon(
+            imageVector = Icons.Default.Flight,
+            contentDescription = null,
+            tint = inkColor.copy(alpha = 0.2f), // Semi-transparent so it doesn't overpower text
+            modifier = Modifier
+                .fillMaxWidth(0.75f)
+                .aspectRatio(1f)
+                .graphicsLayer {
+                    translationY = planeOffsetY.value
+                    alpha = planeAlpha.value
+                    rotationZ = -45f // Make it point straight up
+                }
+        )
 
         Column(
             modifier = Modifier
@@ -158,9 +136,10 @@ fun ArrivalCelebrationScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
+            // Shrunk font size from displayMedium to headlineLarge so it doesn't wrap
             Text(
                 text = "TOUCHDOWN",
-                style = MaterialTheme.typography.displayMedium.copy(
+                style = MaterialTheme.typography.headlineLarge.copy(
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 4.sp
                 ),
@@ -169,13 +148,13 @@ fun ArrivalCelebrationScreen(
             )
             
             Text(
-                text = "Welcome to ${destIata}",
-                style = MaterialTheme.typography.titleLarge,
+                text = "Welcome to $destIata",
+                style = MaterialTheme.typography.titleMedium,
                 color = inkColor.copy(alpha = 0.8f),
                 modifier = Modifier.padding(top = 8.dp).graphicsLayer { alpha = stampAlpha }
             )
 
-            Spacer(modifier = Modifier.height(60.dp))
+            Spacer(modifier = Modifier.height(40.dp)) // Reduced spacing
 
             // Massive Vintage Passport Stamp Canvas
             Box(
@@ -287,9 +266,10 @@ fun ArrivalCelebrationScreen(
                     )
                     drawText(
                         textLayoutResult = iataResult,
+                        // Lowered the Airport Code by adding an 8.dp offset downwards
                         topLeft = Offset(
                             center.x - iataResult.size.width / 2f,
-                            center.y - iataResult.size.height / 2f - 16.dp.toPx()
+                            center.y - iataResult.size.height / 2f + 8.dp.toPx()
                         )
                     )
 
@@ -305,9 +285,10 @@ fun ArrivalCelebrationScreen(
                     )
                     drawText(
                         textLayoutResult = dateResult,
+                        // Shifted slightly down to match
                         topLeft = Offset(
                             center.x - dateResult.size.width / 2f,
-                            center.y - 48.dp.toPx()
+                            center.y - 36.dp.toPx()
                         )
                     )
 
@@ -324,15 +305,16 @@ fun ArrivalCelebrationScreen(
                     )
                     drawText(
                         textLayoutResult = rankResult,
+                        // Shifted slightly down to match
                         topLeft = Offset(
                             center.x - rankResult.size.width / 2f,
-                            center.y + 24.dp.toPx()
+                            center.y + 40.dp.toPx()
                         )
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(60.dp))
+            Spacer(modifier = Modifier.height(40.dp))
 
             // Monospaced Flight Telemetry Receipt Card
             Column(
