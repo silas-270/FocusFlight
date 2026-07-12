@@ -36,14 +36,14 @@ To minimize refactoring, we build from the core data layer upward to the present
 
 ---
 
-## 🏁 Phase 1: Data Infrastructure & Core Navigation
+## 🏁 Phase 1: Data Infrastructure & Core Navigation — ✅ Completed
 
-### Task 1.1: Database Asset Copy Helper
+### Task 1.1: Database Asset Copy Helper — ✅ Completed
 *   **Description**: Write a utility to copy `flights.db` from assets to internal database storage on first run.
 *   **Details**: Read SQLite file dynamically, check existence, and ensure it isn't copied on subsequent launches.
 *   **Verification**: Check that the database file exists in `/data/data/com.example.focusflight/databases/` using standard checks.
 
-### Task 1.2: Room/SQLite Data Models & DAOs
+### Task 1.2: Room/SQLite Data Models & DAOs — ✅ Completed
 *   **Description**: Create Room entity representations or SQL queries to read tables.
 *   **References**: [CONSTRUCTION_PLAN.md - Section 1 (flights.db)](file:///c:/Users/kamme/AndroidStudioProjects/FocusFlight/CONSTRUCTION_PLAN.md#1-project-inventory)
 *   **Files**:
@@ -55,7 +55,7 @@ To minimize refactoring, we build from the core data layer upward to the present
     *   `searchAirports(query: String)` (Matches IATA, city name, or airport name)
     *   `getOutboundRoutes(originIata: String)`
 
-### Task 1.3: Navigation Setup & State Management
+### Task 1.3: Navigation Setup & State Management — ✅ Completed
 *   **Description**: Define the Navigation routes enum and set up `NavHost` in `CesiumActivity`.
 *   **References**: [CONSTRUCTION_PLAN.md - Section 4 (Screen Flow)](file:///c:/Users/kamme/AndroidStudioProjects/FocusFlight/CONSTRUCTION_PLAN.md#4-screen-flow)
 *   **Routes**:
@@ -69,22 +69,22 @@ To minimize refactoring, we build from the core data layer upward to the present
 
 ---
 
-## 🛫 Phase 2: Onboarding & First-Launch Experience
+## 🛫 Phase 2: Onboarding & First-Launch Experience — ✅ Completed
 
-### Task 2.1: Local Preferences Storage
+### Task 2.1: Local Preferences Storage — ✅ Completed
 *   **Description**: Implement a repository to store user preferences (home airport IATA, onboarding complete flag, current base airport).
 *   **Files**: `data/repository/PreferencesRepository.kt`
 
-### Task 2.2: Onboarding Screen
+### Task 2.2: Onboarding Screen — ✅ Completed
 *   **Description**: Implement the search and selection of the home base airport.
 *   **References**: [CONSTRUCTION_PLAN.md - Screen 1 · Onboarding](file:///c:/Users/kamme/AndroidStudioProjects/FocusFlight/CONSTRUCTION_PLAN.md#screen-1--onboarding-first-launch-only)
 *   **UX Flow**: Type in search bar -> query database -> select airport -> save to preferences -> navigate to Hub.
 
 ---
 
-## 🏠 Phase 3: Airport Hub (The Main Base)
+## 🏠 Phase 3: Airport Hub (The Main Base) — ✅ Completed
 
-### Task 3.1: Hub Screen Layout
+### Task 3.1: Hub Screen Layout — ✅ Completed
 *   **Description**: Build the Main Hub Screen interface.
 *   **References**: [CONSTRUCTION_PLAN.md - Screen 2 · Airport Hub](file:///c:/Users/kamme/AndroidStudioProjects/FocusFlight/CONSTRUCTION_PLAN.md#screen-2--airport-hub-home-screen)
 *   **UI Specs**:
@@ -94,16 +94,16 @@ To minimize refactoring, we build from the core data layer upward to the present
 
 ---
 
-## 🔍 Phase 4: Route Selection & Boarding Pass
+## 🔍 Phase 4: Route Selection & Boarding Pass — ✅ Completed
 
-### Task 4.1: Flight Search Screen
+### Task 4.1: Flight Search Screen — ✅ Completed
 *   **Description**: Browse and search outbound connections from the user's current base airport.
 *   **References**: [CONSTRUCTION_PLAN.md - Screen 3 · Flight Search](file:///c:/Users/kamme/AndroidStudioProjects/FocusFlight/CONSTRUCTION_PLAN.md#screen-3--flight-search)
 *   **UI Specs**:
     *   Outbound connections queried directly from `routes` table where `origin_iata` matches current base.
     *   Filters: Shortest flight time, longest flight time, popular (most carriers).
 
-### Task 4.2: Check-In & Boarding Pass Card
+### Task 4.2: Check-In & Boarding Pass Card — ✅ Completed
 *   **Description**: Display the summary ticket before flying.
 *   **References**: [CONSTRUCTION_PLAN.md - Screen 4 · Check-In](file:///c:/Users/kamme/AndroidStudioProjects/FocusFlight/CONSTRUCTION_PLAN.md#screen-4--check-in--boarding-pass)
 *   **UI Specs**:
