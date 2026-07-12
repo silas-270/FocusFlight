@@ -96,6 +96,7 @@ class InFlightViewModel(
                         timerJob = null
                         preferencesRepository.setCurrentAirport(destIata)
                         preRenderDestinationMap()
+                        saveFlightLogToPrefs()
                         state.copy(
                             timeRemainingSeconds = 0,
                             timeElapsedSeconds = state.totalDurationSeconds,
@@ -150,6 +151,7 @@ class InFlightViewModel(
         timerJob = null
         preferencesRepository.setCurrentAirport(destIata)
         preRenderDestinationMap()
+        saveFlightLogToPrefs()
         _uiState.update { state ->
             state.copy(
                 timeRemainingSeconds = 0,
@@ -192,6 +194,21 @@ class InFlightViewModel(
                 android.util.Log.e("InFlightViewModel", "Error in pre-rendering destination map", e)
             }
         }
+    }
+
+    private fun saveFlightLogToPrefs() {
+        val origin = _originAirport.value?.iataCode ?: "STR"
+        val dest = destIata
+        val duration = durationMin
+        val hrs = duration / 60.0
+        val rank = when {
+            hrs >= 8.0 -> "GLOBETROTTER"
+            hrs >= 4.0 -> "COMMANDER"
+            hrs >= 2.0 -> "CAPTAIN"
+            else -> "CO-PILOT"
+        }
+        val dateStr = java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.US).format(java.util.Date()).uppercase()
+        preferencesRepository.saveFlightLog(origin, dest, duration, flightNumber, rank, dateStr)
     }
 
     override fun onCleared() {

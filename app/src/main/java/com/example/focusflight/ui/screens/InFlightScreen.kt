@@ -33,8 +33,15 @@ import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.example.focusflight.data.model.Airport
+import kotlinx.coroutines.delay
 import com.example.focusflight.ui.theme.*
 import com.example.focusflight.ui.viewmodel.InFlightViewModel
+import androidx.compose.animation.core.*
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextOverflow
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioTrack
@@ -345,54 +352,319 @@ fun InFlightScreen(
 
         // --- Flight Completed Overlay ---
         if (uiState.isCompleted) {
+            val textMeasurer = rememberTextMeasurer()
+            var stampLanded by remember { mutableStateOf(false) }
+            val stampScale by animateFloatAsState(
+                targetValue = if (stampLanded) 1f else 3f,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessLow
+                )
+            )
+            val stampAlpha by animateFloatAsState(
+                targetValue = if (stampLanded) 1f else 0f,
+                animationSpec = tween(300)
+            )
+
+            // Compute rank and styling details based on focus duration
+            val durationHours = viewModel.durationMin / 60.0
+            val (rank, inkColor) = when {
+                durationHours >= 8.0 -> Pair("GLOBETROTTER", Amber) // Gold/Amber
+                durationHours >= 4.0 -> Pair("COMMANDER", Color(0xFF2563EB)) // Cobalt Blue
+                durationHours >= 2.0 -> Pair("CAPTAIN", Color(0xFF10B981)) // Emerald Green
+                else -> Pair("CO-PILOT", Color(0xFF94A3B8)) // Slate Grey
+            }
+
+            val currentDateStr = remember {
+                java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.US).format(java.util.Date()).uppercase()
+            }
+
+            LaunchedEffect(Unit) {
+                delay(300)
+                stampLanded = true
+                // Haptic touchdown feedback
+                try {
+                    val view = context as? android.app.Activity
+                    view?.window?.decorView?.performHapticFeedback(
+                        android.view.HapticFeedbackConstants.LONG_PRESS
+                    )
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+
+            // Particle sweep simulator
+            val particles = remember { mutableStateListOf<CelebrationParticle>() }
+            val maxParticles = when (rank) {
+                "GLOBETROTTER" -> 100
+                "COMMANDER" -> 60
+                "CAPTAIN" -> 30
+                else -> 12
+            }
+
+            LaunchedEffect(Unit) {
+                val random = java.util.Random()
+                while (true) {
+                    withFrameMillis {
+                        val iterator = particles.iterator()
+                        while (iterator.hasNext()) {
+                            val p = iterator.next()
+                            p.x += p.vx
+                            p.y += p.vy
+                            p.alpha -= p.decay
+                            if (p.alpha <= 0f) {
+                                iterator.remove()
+                            }
+                        }
+
+                        if (particles.size < maxParticles) {
+                            val angle = random.nextDouble() * 2.0 * Math.PI
+                            val speed = 1f + random.nextFloat() * 3f
+                            particles.add(
+                                CelebrationParticle(
+                                    x = 0f,
+                                    y = 0f,
+                                    vx = (kotlin.math.cos(angle) * speed).toFloat(),
+                                    vy = (kotlin.math.sin(angle) * speed).toFloat(),
+                                    size = 3f + random.nextFloat() * 6f,
+                                    color = inkColor,
+                                    alpha = 1f,
+                                    decay = 0.006f + random.nextFloat() * 0.008f
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Midnight.copy(alpha = 0.85f)),
+                    .background(Midnight.copy(alpha = 0.9f)),
                 contentAlignment = Alignment.Center
             ) {
+                // Background Dynamic Canvas Particle VFX
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    val centerOffset = Offset(size.width / 2f, size.height / 2.3f)
+                    particles.forEach { p ->
+                        drawCircle(
+                            color = p.color.copy(alpha = p.alpha),
+                            radius = p.size,
+                            center = Offset(centerOffset.x + p.x, centerOffset.y + p.y)
+                        )
+                    }
+                }
+
+                // Celebration Card Container
                 Column(
                     modifier = Modifier
-                        .fillMaxWidth(0.85f)
+                        .fillMaxWidth(0.88f)
                         .background(DeepNavy, RoundedCornerShape(20.dp))
                         .border(1.dp, Border, RoundedCornerShape(20.dp))
                         .padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        text = "🛬  LANDED",
-                        style = MaterialTheme.typography.titleLarge.copy(
+                        text = "FLIGHT CONCLUDED",
+                        style = MaterialTheme.typography.labelSmall.copy(
                             fontWeight = FontWeight.Bold,
-                            letterSpacing = 2.sp
+                            letterSpacing = 1.5.sp
                         ),
-                        color = Amber
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = "Welcome to ${destAirport?.municipality ?: viewModel.destIata} (${destAirport?.iataCode})!",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = OffWhite,
-                        textAlign = TextAlign.Center
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Total Focus Session duration completed.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Haze,
-                        textAlign = TextAlign.Center
+                        color = Haze
                     )
 
-                    Spacer(modifier = Modifier.height(30.dp))
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    // 1. Vintage Passport Stamp Canvas
+                    Box(
+                        modifier = Modifier
+                            .size(150.dp)
+                            .padding(8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Canvas(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .graphicsLayer(
+                                    scaleX = stampScale,
+                                    scaleY = stampScale,
+                                    alpha = stampAlpha
+                                )
+                        ) {
+                            val strokeWidth = 3.dp.toPx()
+                            val w = size.width
+                            val h = size.height
+                            val center = Offset(w / 2f, h / 2f)
+
+                            // Draw Stamp Boundary
+                            when (rank) {
+                                "CO-PILOT" -> {
+                                    drawCircle(
+                                        color = inkColor.copy(alpha = 0.8f),
+                                        radius = w * 0.46f,
+                                        style = Stroke(width = strokeWidth)
+                                    )
+                                    drawCircle(
+                                        color = inkColor.copy(alpha = 0.8f),
+                                        radius = w * 0.41f,
+                                        style = Stroke(width = 1.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f), 0f))
+                                    )
+                                }
+                                "CAPTAIN" -> {
+                                    val path = androidx.compose.ui.graphics.Path().apply {
+                                        val r = w * 0.46f
+                                        val angles = listOf(0, 45, 90, 135, 180, 225, 270, 315)
+                                        angles.forEachIndexed { idx, a ->
+                                            val rad = Math.toRadians(a.toDouble())
+                                            val x = center.x + r * kotlin.math.cos(rad).toFloat()
+                                            val y = center.y + r * kotlin.math.sin(rad).toFloat()
+                                            if (idx == 0) moveTo(x, y) else lineTo(x, y)
+                                        }
+                                        close()
+                                    }
+                                    drawPath(
+                                        path = path,
+                                        color = inkColor.copy(alpha = 0.8f),
+                                        style = Stroke(width = strokeWidth)
+                                    )
+                                }
+                                "COMMANDER" -> {
+                                    val path = androidx.compose.ui.graphics.Path().apply {
+                                        moveTo(w * 0.5f, h * 0.06f)
+                                        lineTo(w * 0.92f, h * 0.06f)
+                                        lineTo(w * 0.92f, h * 0.52f)
+                                        cubicTo(w * 0.92f, h * 0.78f, w * 0.5f, h * 0.94f, w * 0.5f, h * 0.94f)
+                                        cubicTo(w * 0.5f, h * 0.94f, w * 0.08f, h * 0.78f, w * 0.08f, h * 0.52f)
+                                        lineTo(w * 0.08f, h * 0.06f)
+                                        close()
+                                    }
+                                    drawPath(
+                                        path = path,
+                                        color = inkColor.copy(alpha = 0.8f),
+                                        style = Stroke(width = strokeWidth)
+                                    )
+                                }
+                                else -> { // GLOBETROTTER (Foil Golden Double Ring)
+                                    drawCircle(
+                                        color = inkColor.copy(alpha = 0.9f),
+                                        radius = w * 0.48f,
+                                        style = Stroke(width = strokeWidth)
+                                    )
+                                    drawCircle(
+                                        color = inkColor.copy(alpha = 0.9f),
+                                        radius = w * 0.43f,
+                                        style = Stroke(width = 1.dp.toPx())
+                                    )
+                                    // Surrounding dots
+                                    val count = 16
+                                    for (i in 0 until count) {
+                                        val rad = Math.toRadians((i * (360.0 / count)))
+                                        val dotPt = Offset(
+                                            center.x + (w * 0.38f) * kotlin.math.cos(rad).toFloat(),
+                                            center.y + (w * 0.38f) * kotlin.math.sin(rad).toFloat()
+                                        )
+                                        drawCircle(
+                                            color = inkColor.copy(alpha = 0.8f),
+                                            radius = 2.dp.toPx(),
+                                            center = dotPt
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Draw Large Destination IATA in Center
+                            val iataResult = textMeasurer.measure(
+                                text = viewModel.destIata,
+                                style = TextStyle(
+                                    color = inkColor.copy(alpha = 0.9f),
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 28.sp,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            )
+                            drawText(
+                                textLayoutResult = iataResult,
+                                topLeft = Offset(
+                                    center.x - iataResult.size.width / 2f,
+                                    center.y - iataResult.size.height / 2f - 10.dp.toPx()
+                                )
+                            )
+
+                            // Draw Stamp Date above IATA
+                            val dateResult = textMeasurer.measure(
+                                text = currentDateStr,
+                                style = TextStyle(
+                                    color = inkColor.copy(alpha = 0.6f),
+                                    fontSize = 8.sp,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            )
+                            drawText(
+                                textLayoutResult = dateResult,
+                                topLeft = Offset(
+                                    center.x - dateResult.size.width / 2f,
+                                    center.y - 28.dp.toPx()
+                                )
+                            )
+
+                            // Draw Earned Rank below IATA
+                            val rankResult = textMeasurer.measure(
+                                text = rank,
+                                style = TextStyle(
+                                    color = inkColor.copy(alpha = 0.8f),
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 9.sp,
+                                    fontFamily = FontFamily.SansSerif
+                                )
+                            )
+                            drawText(
+                                textLayoutResult = rankResult,
+                                topLeft = Offset(
+                                    center.x - rankResult.size.width / 2f,
+                                    center.y + 16.dp.toPx()
+                                )
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    // 2. Monospaced Flight Telemetry Receipt Card
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Midnight.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                            .border(1.dp, Border.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+                            .padding(16.dp)
+                    ) {
+                        Text(
+                            text = "OFFICIAL FLIGHT LOG",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = Haze,
+                            modifier = Modifier.padding(bottom = 12.dp)
+                        )
+                        
+                        TelemetryRow("FLIGHT NO.", viewModel.flightNumber)
+                        TelemetryRow("ORIGIN", "${originAirport?.municipality ?: "DEP"} (${originAirport?.iataCode ?: "---"})")
+                        TelemetryRow("DESTINATION", "${destAirport?.municipality ?: "ARR"} (${viewModel.destIata})")
+                        TelemetryRow("FOCUS MINUTES", "${viewModel.durationMin} MINS")
+                        TelemetryRow("CREW RANK", rank)
+                        TelemetryRow("STATUS", "ARRIVED / STAMP SECURED")
+                    }
+
+                    Spacer(modifier = Modifier.height(28.dp))
+
+                    // Complete Flight Action Button
                     Button(
                         onClick = { onLandingCompleted(viewModel.destIata) },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(54.dp),
                         shape = RoundedCornerShape(14.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Midnight)
+                        colors = ButtonDefaults.buttonColors(containerColor = inkColor, contentColor = Midnight)
                     ) {
                         Text(
-                            text = "COMPLETE FLIGHT",
+                            text = "CONFIRM ARRIVAL",
                             style = MaterialTheme.typography.labelLarge.copy(
                                 fontWeight = FontWeight.Bold,
                                 letterSpacing = 1.sp
@@ -746,3 +1018,44 @@ private fun formatRemainingTime(seconds: Long): String {
     val s = seconds % 60
     return "%02d:%02d:%02d".format(h, m, s)
 }
+
+@Composable
+private fun TelemetryRow(label: String, value: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall.copy(
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Medium
+            ),
+            color = Haze
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodySmall.copy(
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold
+            ),
+            color = OffWhite,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+private data class CelebrationParticle(
+    var x: Float,
+    var y: Float,
+    val vx: Float,
+    val vy: Float,
+    val size: Float,
+    val color: Color,
+    var alpha: Float,
+    val decay: Float
+)
