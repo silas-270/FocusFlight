@@ -60,8 +60,8 @@ fun ArrivalCelebrationScreen(
         animationSpec = tween(300)
     )
 
-    // Airplane animation states
-    val planeOffsetY = remember { Animatable(screenHeightPx) }
+    // Airplane animation states: start just off-screen bottom
+    val planeOffsetY = remember { Animatable(screenHeightPx * 0.7f) }
 
     // Compute styling details based on rank
     val inkColor = when (rank) {
@@ -76,13 +76,13 @@ fun ArrivalCelebrationScreen(
     }
 
     LaunchedEffect(Unit) {
-        // Launch airplane animation: from screenHeightPx (off-screen bottom) to -screenHeightPx (off-screen top)
+        // Launch airplane animation: from off-screen bottom to off-screen top
         launch {
             planeOffsetY.animateTo(
-                targetValue = -screenHeightPx,
+                targetValue = -screenHeightPx * 0.7f,
                 animationSpec = tween(
                     durationMillis = 5000,
-                    easing = EaseOutCubic // Starts very fast, gets slower towards top
+                    easing = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1.0f) // Shoots up 70% instantly, then slowly drifts
                 )
             )
         }
