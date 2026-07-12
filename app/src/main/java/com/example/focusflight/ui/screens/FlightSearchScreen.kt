@@ -676,15 +676,15 @@ fun RouteMap(
                         val dotY = pos[1]
 
                         drawCircle(
-                            color = Amber,
-                            radius = 5.dp.toPx(),
+                            color = Amber.copy(alpha = 0.8f),
+                            radius = 3.dp.toPx(),
                             center = Offset(dotX, dotY)
                         )
                         drawCircle(
-                            color = Amber.copy(alpha = 0.4f),
-                            radius = 5.dp.toPx() + 8.dp.toPx() * (1f - animationProgress),
+                            color = Amber.copy(alpha = 0.2f),
+                            radius = 3.dp.toPx() + 5.dp.toPx() * (1f - animationProgress),
                             center = Offset(dotX, dotY),
-                            style = Stroke(width = 1.5f.dp.toPx())
+                            style = Stroke(width = 1f.dp.toPx())
                         )
                     }
                 } catch (e: Exception) {
