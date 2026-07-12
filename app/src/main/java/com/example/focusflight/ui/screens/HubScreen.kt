@@ -80,8 +80,7 @@ fun HubScreen(
                     model = routeMapPath,
                     contentDescription = "Decorative globe routes",
                     modifier = Modifier
-                        .fillMaxSize()
-                        .alpha(0.35f),
+                        .fillMaxSize(),
                     contentScale = ContentScale.Crop,
                     alignment = Alignment.Center
                 )
