@@ -862,19 +862,23 @@ fun AirportSearchPanel(
                         ) {
                             Box(modifier = Modifier.weight(1f)) {
                                 val r = suggestions[0]
+                                val isSelected = selectedRoute?.id == r.id
                                 SuggestionTile(
                                     code = r.destIata,
                                     city = r.destMunicipality,
                                     name = r.destName,
+                                    isSelected = isSelected,
                                     onClick = { onRouteSelect(r) }
                                 )
                             }
                             Box(modifier = Modifier.weight(1f)) {
                                 val r = suggestions[1]
+                                val isSelected = selectedRoute?.id == r.id
                                 SuggestionTile(
                                     code = r.destIata,
                                     city = r.destMunicipality,
                                     name = r.destName,
+                                    isSelected = isSelected,
                                     onClick = { onRouteSelect(r) }
                                 )
                             }
@@ -882,10 +886,12 @@ fun AirportSearchPanel(
                     } else if (suggestions.size == 1) {
                         Box(modifier = Modifier.fillMaxWidth(0.5f)) {
                             val r = suggestions[0]
+                            val isSelected = selectedRoute?.id == r.id
                             SuggestionTile(
                                 code = r.destIata,
                                 city = r.destMunicipality,
                                 name = r.destName,
+                                isSelected = isSelected,
                                 onClick = { onRouteSelect(r) }
                             )
                         }
@@ -898,19 +904,23 @@ fun AirportSearchPanel(
                         ) {
                             Box(modifier = Modifier.weight(1f)) {
                                 val r = suggestions[2]
+                                val isSelected = selectedRoute?.id == r.id
                                 SuggestionTile(
                                     code = r.destIata,
                                     city = r.destMunicipality,
                                     name = r.destName,
+                                    isSelected = isSelected,
                                     onClick = { onRouteSelect(r) }
                                 )
                             }
                             Box(modifier = Modifier.weight(1f)) {
                                 val r = suggestions[3]
+                                val isSelected = selectedRoute?.id == r.id
                                 SuggestionTile(
                                     code = r.destIata,
                                     city = r.destMunicipality,
                                     name = r.destName,
+                                    isSelected = isSelected,
                                     onClick = { onRouteSelect(r) }
                                 )
                             }
@@ -922,10 +932,12 @@ fun AirportSearchPanel(
                         ) {
                             Box(modifier = Modifier.weight(1f)) {
                                 val r = suggestions[2]
+                                val isSelected = selectedRoute?.id == r.id
                                 SuggestionTile(
                                     code = r.destIata,
                                     city = r.destMunicipality,
                                     name = r.destName,
+                                    isSelected = isSelected,
                                     onClick = { onRouteSelect(r) }
                                 )
                             }
@@ -1012,6 +1024,7 @@ private fun SuggestionTile(
     code: String,
     city: String,
     name: String,
+    isSelected: Boolean,
     onClick: () -> Unit
 ) {
     Column(
@@ -1019,10 +1032,9 @@ private fun SuggestionTile(
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .background(Midnight.copy(alpha = 0.6f))
-            .border(
-                width = 1.dp,
-                color = Color.White.copy(alpha = 0.08f),
-                shape = RoundedCornerShape(16.dp)
+            .then(
+                if (isSelected) Modifier.border(1.5.dp, Amber, RoundedCornerShape(16.dp))
+                else Modifier.border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(16.dp))
             )
             .clickable(onClick = onClick)
             .padding(Spacing.Medium),
