@@ -61,8 +61,7 @@ fun ArrivalCelebrationScreen(
     )
 
     // Airplane animation states
-    val planeOffsetY = remember { Animatable(screenHeightPx * 0.8f) }
-    val planeAlpha = remember { Animatable(1f) }
+    val planeOffsetY = remember { Animatable(screenHeightPx) }
 
     // Compute styling details based on rank
     val inkColor = when (rank) {
@@ -77,21 +76,14 @@ fun ArrivalCelebrationScreen(
     }
 
     LaunchedEffect(Unit) {
-        // Launch airplane animation
+        // Launch airplane animation: from screenHeightPx (off-screen bottom) to -screenHeightPx (off-screen top)
         launch {
             planeOffsetY.animateTo(
-                targetValue = -screenHeightPx * 0.5f,
+                targetValue = -screenHeightPx,
                 animationSpec = tween(
                     durationMillis = 1500,
-                    easing = FastOutSlowInEasing // Starts fast, slows down
+                    easing = EaseOutCubic // Starts very fast, gets slower towards top
                 )
-            )
-        }
-        launch {
-            delay(1000)
-            planeAlpha.animateTo(
-                targetValue = 0f,
-                animationSpec = tween(durationMillis = 500)
             )
         }
 
@@ -114,20 +106,6 @@ fun ArrivalCelebrationScreen(
             .background(Midnight),
         contentAlignment = Alignment.Center
     ) {
-        // Massive Airplane Flyover
-        Icon(
-            imageVector = Icons.Default.Flight,
-            contentDescription = null,
-            tint = inkColor.copy(alpha = 0.2f), // Semi-transparent so it doesn't overpower text
-            modifier = Modifier
-                .fillMaxWidth(0.75f)
-                .aspectRatio(1f)
-                .graphicsLayer {
-                    translationY = planeOffsetY.value
-                    alpha = planeAlpha.value
-                    rotationZ = -45f // Make it point straight up
-                }
-        )
 
         Column(
             modifier = Modifier
@@ -359,6 +337,20 @@ fun ArrivalCelebrationScreen(
                 )
             }
         }
+
+        // Massive Airplane Flyover - drawn above everything
+        Icon(
+            imageVector = Icons.Default.Flight,
+            contentDescription = null,
+            tint = inkColor.copy(alpha = 0.95f),
+            modifier = Modifier
+                .fillMaxWidth(0.75f)
+                .aspectRatio(1f)
+                .graphicsLayer {
+                    translationY = planeOffsetY.value
+                    rotationZ = -45f // Make it point straight up
+                }
+        )
     }
 }
 
