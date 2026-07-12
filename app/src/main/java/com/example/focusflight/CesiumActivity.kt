@@ -24,6 +24,7 @@ import com.example.focusflight.ui.screens.OnboardingScreen
 import com.example.focusflight.ui.screens.FlightSearchScreen
 import com.example.focusflight.ui.screens.CheckInScreen
 import com.example.focusflight.ui.screens.InFlightScreen
+import com.example.focusflight.ui.screens.ArrivalCelebrationScreen
 import com.example.focusflight.ui.theme.FocusFlightTheme
 import com.example.focusflight.ui.viewmodel.OnboardingViewModel
 import com.example.focusflight.ui.viewmodel.OnboardingViewModelFactory
@@ -175,14 +176,41 @@ class CesiumActivity : ComponentActivity() {
 
                             InFlightScreen(
                                 viewModel = viewModel,
-                                onLandingCompleted = { destination ->
-                                    preferencesRepository.setCurrentAirport(destination)
-                                    navController.navigate(Screen.Hub.route) {
-                                        popUpTo(Screen.Hub.route) { inclusive = true }
+                                onLandingCelebration = { rank ->
+                                    preferencesRepository.setCurrentAirport(destIata)
+                                    navController.navigate(Screen.ArrivalCelebration.createRoute(flightNo, destIata, durationMin, rank)) {
+                                        popUpTo(Screen.Hub.route) { inclusive = false }
                                     }
                                 },
                                 onExitFlight = {
                                     navController.popBackStack()
+                                }
+                            )
+                        }
+
+                        composable(
+                            route = Screen.ArrivalCelebration.route,
+                            arguments = listOf(
+                                androidx.navigation.navArgument("flightNo") { type = androidx.navigation.NavType.StringType },
+                                androidx.navigation.navArgument("destIata") { type = androidx.navigation.NavType.StringType },
+                                androidx.navigation.navArgument("durationMin") { type = androidx.navigation.NavType.IntType },
+                                androidx.navigation.navArgument("rank") { type = androidx.navigation.NavType.StringType }
+                            )
+                        ) { backStackEntry ->
+                            val flightNo = backStackEntry.arguments?.getString("flightNo") ?: ""
+                            val destIata = backStackEntry.arguments?.getString("destIata") ?: ""
+                            val durationMin = backStackEntry.arguments?.getInt("durationMin") ?: 0
+                            val rank = backStackEntry.arguments?.getString("rank") ?: ""
+
+                            ArrivalCelebrationScreen(
+                                flightNo = flightNo,
+                                destIata = destIata,
+                                durationMin = durationMin,
+                                rank = rank,
+                                onContinue = {
+                                    navController.navigate(Screen.Hub.route) {
+                                        popUpTo(Screen.Hub.route) { inclusive = true }
+                                    }
                                 }
                             )
                         }
