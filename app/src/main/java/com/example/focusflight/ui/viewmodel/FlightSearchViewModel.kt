@@ -115,6 +115,17 @@ class FlightSearchViewModel(
         }
     }
 
+    fun resetState() {
+        _searchMode.value = SearchMode.TIME
+        _airportSearchQuery.value = ""
+        _airportSearchResults.value = emptyList()
+        if (_intervals.value.isNotEmpty()) {
+            selectInterval(_intervals.value.first())
+        } else {
+            selectRoute(null)
+        }
+    }
+
     private fun fetchRoutes() {
         val origin = _originAirport.value ?: return
         viewModelScope.launch(Dispatchers.IO) {
