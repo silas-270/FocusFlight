@@ -94,6 +94,7 @@ class InFlightViewModel(
                     if (state.timeRemainingSeconds <= 1) {
                         timerJob?.cancel()
                         timerJob = null
+                        preferencesRepository.setCurrentAirport(destIata)
                         preRenderDestinationMap()
                         state.copy(
                             timeRemainingSeconds = 0,
@@ -147,6 +148,7 @@ class InFlightViewModel(
     fun skipFlight() {
         timerJob?.cancel()
         timerJob = null
+        preferencesRepository.setCurrentAirport(destIata)
         preRenderDestinationMap()
         _uiState.update { state ->
             state.copy(
