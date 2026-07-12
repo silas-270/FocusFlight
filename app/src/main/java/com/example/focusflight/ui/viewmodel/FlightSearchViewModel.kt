@@ -101,10 +101,13 @@ class FlightSearchViewModel(
     fun onAirportSearchQueryChanged(query: String) {
         _airportSearchQuery.value = query
         if (query.trim().isNotEmpty()) {
+            val originIata = _originAirport.value?.iataCode
             val filtered = _allRoutes.value.filter { route ->
-                route.destIata.contains(query, ignoreCase = true) ||
-                route.destName.contains(query, ignoreCase = true) ||
-                route.destMunicipality.contains(query, ignoreCase = true)
+                route.destIata != originIata && (
+                    route.destIata.contains(query, ignoreCase = true) ||
+                    route.destName.contains(query, ignoreCase = true) ||
+                    route.destMunicipality.contains(query, ignoreCase = true)
+                )
             }
             _airportSearchResults.value = filtered
         } else {
