@@ -122,6 +122,10 @@ fun FlightSearchScreen(
     val airportSearchQuery by viewModel.airportSearchQuery.collectAsState()
     val airportSearchResults by viewModel.airportSearchResults.collectAsState()
 
+    LaunchedEffect(Unit) {
+        viewModel.resetState()
+    }
+
     Box(modifier = Modifier.fillMaxSize().background(DeepNavy)) {
         // Main Screen Column
         Column(
@@ -224,10 +228,21 @@ fun FlightSearchScreen(
                                 pagerState.scrollToPage(0)
                             }
 
-                            // Sync current pager selection with active selected route in ViewModel
-                            LaunchedEffect(pagerState.currentPage, filteredRoutes) {
+                            // Sync VM selectedRoute -> UI pagerState page (bidirectional)
+                            LaunchedEffect(selectedRoute, filteredRoutes) {
+                                val index = filteredRoutes.indexOfFirst { it.id == selectedRoute?.id }
+                                if (index >= 0 && index != pagerState.currentPage) {
+                                    pagerState.scrollToPage(index)
+                                }
+                            }
+
+                            // Sync UI pagerState page -> VM selectedRoute (bidirectional)
+                            LaunchedEffect(pagerState.currentPage) {
                                 if (pagerState.currentPage < filteredRoutes.size) {
-                                    viewModel.selectRoute(filteredRoutes[pagerState.currentPage])
+                                    val route = filteredRoutes[pagerState.currentPage]
+                                    if (selectedRoute?.id != route.id) {
+                                        viewModel.selectRoute(route)
+                                    }
                                 }
                             }
 
