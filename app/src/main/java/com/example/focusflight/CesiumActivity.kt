@@ -134,7 +134,12 @@ class CesiumActivity : ComponentActivity() {
                             )
                         }
 
-                        composable(Screen.CheckIn.route) { backStackEntry ->
+                        composable(
+                            route = Screen.CheckIn.route,
+                            arguments = listOf(
+                                androidx.navigation.navArgument("destIata") { type = androidx.navigation.NavType.StringType }
+                            )
+                        ) { backStackEntry ->
                             val destIata = backStackEntry.arguments?.getString("destIata") ?: ""
                             val viewModel: CheckInViewModel by viewModels {
                                 CheckInViewModelFactory(databaseHelper, preferencesRepository, destIata)
