@@ -139,6 +139,7 @@ class FlightSearchViewModel(
                 val fallbackAirport = databaseHelper.getAirportByIata("LHR")
                 if (fallbackAirport != null) {
                     _originAirport.value = fallbackAirport
+                    preferencesRepository.setCurrentAirport("LHR")
                     fetched = databaseHelper.getOutboundRoutes(
                         originIata = "LHR",
                         searchQuery = "",

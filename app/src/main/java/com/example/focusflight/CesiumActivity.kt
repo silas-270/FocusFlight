@@ -3,7 +3,7 @@ package com.example.focusflight
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.viewModels
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
@@ -89,9 +89,9 @@ class CesiumActivity : ComponentActivity() {
                         }
                     ) {
                         composable(Screen.Onboarding.route) {
-                            val viewModel: OnboardingViewModel by viewModels {
-                                OnboardingViewModelFactory(databaseHelper, preferencesRepository, cacheDir)
-                            }
+                            val viewModel: OnboardingViewModel = viewModel(
+                                factory = OnboardingViewModelFactory(databaseHelper, preferencesRepository, cacheDir)
+                            )
                             OnboardingScreen(
                                 viewModel = viewModel,
                                 onOnboardingComplete = {
@@ -103,9 +103,9 @@ class CesiumActivity : ComponentActivity() {
                         }
 
                         composable(Screen.Hub.route) {
-                            val viewModel: com.example.focusflight.ui.viewmodel.HubViewModel by viewModels {
-                                com.example.focusflight.ui.viewmodel.HubViewModelFactory(databaseHelper, preferencesRepository, cacheDir)
-                            }
+                            val viewModel: com.example.focusflight.ui.viewmodel.HubViewModel = viewModel(
+                                factory = com.example.focusflight.ui.viewmodel.HubViewModelFactory(databaseHelper, preferencesRepository, cacheDir)
+                            )
                             com.example.focusflight.ui.screens.HubScreen(
                                 viewModel = viewModel,
                                 onBookFlightClick = {
@@ -121,9 +121,9 @@ class CesiumActivity : ComponentActivity() {
                         }
 
                         composable(Screen.FlightSearch.route) {
-                            val viewModel: FlightSearchViewModel by viewModels {
-                                FlightSearchViewModelFactory(databaseHelper, preferencesRepository)
-                            }
+                            val viewModel: FlightSearchViewModel = viewModel(
+                                factory = FlightSearchViewModelFactory(databaseHelper, preferencesRepository)
+                            )
                             FlightSearchScreen(
                                 viewModel = viewModel,
                                 onBackClick = {
@@ -142,9 +142,9 @@ class CesiumActivity : ComponentActivity() {
                             )
                         ) { backStackEntry ->
                             val destIata = backStackEntry.arguments?.getString("destIata") ?: ""
-                            val viewModel: CheckInViewModel by viewModels {
-                                CheckInViewModelFactory(databaseHelper, preferencesRepository, destIata)
-                            }
+                            val viewModel: CheckInViewModel = viewModel(
+                                factory = CheckInViewModelFactory(databaseHelper, preferencesRepository, destIata)
+                            )
                             CheckInScreen(
                                 viewModel = viewModel,
                                 onBackClick = {
@@ -168,11 +168,11 @@ class CesiumActivity : ComponentActivity() {
                             val destIata = backStackEntry.arguments?.getString("destIata") ?: ""
                             val durationMin = backStackEntry.arguments?.getInt("durationMin") ?: 0
 
-                            val viewModel: InFlightViewModel by viewModels {
-                                InFlightViewModelFactory(
+                            val viewModel: InFlightViewModel = viewModel(
+                                factory = InFlightViewModelFactory(
                                     databaseHelper, preferencesRepository, cacheDir, flightNo, destIata, durationMin
                                 )
-                            }
+                            )
 
                             InFlightScreen(
                                 viewModel = viewModel,
