@@ -89,7 +89,7 @@ class CesiumActivity : ComponentActivity() {
                     ) {
                         composable(Screen.Onboarding.route) {
                             val viewModel: OnboardingViewModel by viewModels {
-                                OnboardingViewModelFactory(databaseHelper, preferencesRepository)
+                                OnboardingViewModelFactory(databaseHelper, preferencesRepository, cacheDir)
                             }
                             OnboardingScreen(
                                 viewModel = viewModel,
