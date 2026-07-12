@@ -40,21 +40,34 @@ android {
 
 tasks.register("cargoNdkBuild") {
     doLast {
-        val absoluteRustPath = "/home/silas270/CesiumRS"
+        val isWindows = System.getProperty("os.name").lowercase().contains("windows")
+        val absoluteRustPath = if (isWindows) {
+            "c:/Users/kamme/Desktop/CesiumRS"
+        } else {
+            "/home/silas270/CesiumRS"
+        }
         val targets = mapOf(
             "aarch64-linux-android" to "arm64-v8a",
             "x86_64-linux-android" to "x86_64"
         )
 
+        val cargoBin = if (isWindows) "cargo" else "/home/silas270/.cargo/bin/cargo"
+        val ndkDir = if (isWindows) {
+            System.getenv("ANDROID_NDK_HOME") ?: "C:/Users/kamme/AppData/Local/Android/Sdk/ndk/30.0.14904198"
+        } else {
+            "/home/silas270/android-sdk/ndk/27.1.12297006"
+        }
+
         targets.forEach { (rustTarget, androidAbi) ->
             println("Building Rust library for target: $rustTarget (ABI: $androidAbi)...")
             
-            val builder = ProcessBuilder("/home/silas270/.cargo/bin/cargo", "ndk", "--target", rustTarget, "build", "--lib", "--release")
+            val builder = ProcessBuilder(cargoBin, "ndk", "--target", rustTarget, "build", "--lib", "--release")
             builder.directory(File(absoluteRustPath))
             
-            val ndkDir = "/home/silas270/android-sdk/ndk/27.1.12297006"
             builder.environment()["ANDROID_NDK_HOME"] = ndkDir
-            builder.environment()["PATH"] = "/home/silas270/.cargo/bin:" + System.getenv("PATH")
+            if (!isWindows) {
+                builder.environment()["PATH"] = "/home/silas270/.cargo/bin:" + System.getenv("PATH")
+            }
             
             val logFile = File(absoluteRustPath, "cargo_build.log")
             builder.redirectOutput(ProcessBuilder.Redirect.appendTo(logFile))
