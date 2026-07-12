@@ -398,8 +398,8 @@ fun CheckInScreen(
                 enabled = routeDetails != null,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp),
-                shape = RoundedCornerShape(16.dp),
+                    .height(54.dp),
+                shape = RoundedCornerShape(14.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Amber,
                     contentColor = Midnight,
