@@ -164,7 +164,7 @@ class CesiumActivity : ComponentActivity() {
 
                             val viewModel: InFlightViewModel by viewModels {
                                 InFlightViewModelFactory(
-                                    databaseHelper, preferencesRepository, flightNo, destIata, durationMin
+                                    databaseHelper, preferencesRepository, cacheDir, flightNo, destIata, durationMin
                                 )
                             }
 

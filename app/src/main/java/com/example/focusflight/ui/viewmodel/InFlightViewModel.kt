@@ -32,6 +32,7 @@ data class InFlightState(
 class InFlightViewModel(
     private val databaseHelper: FlightDatabaseHelper,
     private val preferencesRepository: PreferencesRepository,
+    private val cacheDir: java.io.File,
     val flightNumber: String,
     val destIata: String,
     val durationMin: Int
@@ -93,6 +94,7 @@ class InFlightViewModel(
                     if (state.timeRemainingSeconds <= 1) {
                         timerJob?.cancel()
                         timerJob = null
+                        preRenderDestinationMap()
                         state.copy(
                             timeRemainingSeconds = 0,
                             timeElapsedSeconds = state.totalDurationSeconds,
@@ -145,6 +147,7 @@ class InFlightViewModel(
     fun skipFlight() {
         timerJob?.cancel()
         timerJob = null
+        preRenderDestinationMap()
         _uiState.update { state ->
             state.copy(
                 timeRemainingSeconds = 0,
@@ -153,6 +156,38 @@ class InFlightViewModel(
                 isRunning = false,
                 isCompleted = true
             )
+        }
+    }
+
+    private fun preRenderDestinationMap() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val dest = databaseHelper.getAirportByIata(destIata) ?: return@launch
+                val destinations = databaseHelper.getRandomAirports(12, dest.iataCode)
+                val routesData = destinations.map { d ->
+                    Pair(Pair(dest.lat, dest.lon), Pair(d.lat, d.lon))
+                }
+
+                val outFile = java.io.File(cacheDir, "hub_route_map_${dest.iataCode}.png")
+                if (outFile.exists()) {
+                    outFile.delete()
+                }
+
+                android.util.Log.d("InFlightViewModel", "Pre-rendering map for destination ${dest.iataCode}...")
+                val success = com.example.focusflight.data.repository.CesiumRSLibrary.renderRoutes(
+                    width = 1080,
+                    height = 1320,
+                    routesData = routesData,
+                    outPath = outFile.absolutePath
+                )
+                if (success && outFile.exists()) {
+                    android.util.Log.d("InFlightViewModel", "Pre-rendering succeeded: ${outFile.absolutePath}")
+                } else {
+                    android.util.Log.e("InFlightViewModel", "Pre-rendering failed.")
+                }
+            } catch (e: java.lang.Exception) {
+                android.util.Log.e("InFlightViewModel", "Error in pre-rendering destination map", e)
+            }
         }
     }
 
@@ -165,6 +200,7 @@ class InFlightViewModel(
 class InFlightViewModelFactory(
     private val databaseHelper: FlightDatabaseHelper,
     private val preferencesRepository: PreferencesRepository,
+    private val cacheDir: java.io.File,
     private val flightNumber: String,
     private val destIata: String,
     private val durationMin: Int
@@ -172,7 +208,7 @@ class InFlightViewModelFactory(
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(InFlightViewModel::class.java)) {
-            return InFlightViewModel(databaseHelper, preferencesRepository, flightNumber, destIata, durationMin) as T
+            return InFlightViewModel(databaseHelper, preferencesRepository, cacheDir, flightNumber, destIata, durationMin) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }
