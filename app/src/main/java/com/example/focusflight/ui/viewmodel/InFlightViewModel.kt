@@ -142,6 +142,20 @@ class InFlightViewModel(
         _uiState.update { it.copy(isRunning = false) }
     }
 
+    fun skipFlight() {
+        timerJob?.cancel()
+        timerJob = null
+        _uiState.update { state ->
+            state.copy(
+                timeRemainingSeconds = 0,
+                timeElapsedSeconds = state.totalDurationSeconds,
+                progress = 1.0f,
+                isRunning = false,
+                isCompleted = true
+            )
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
         timerJob?.cancel()

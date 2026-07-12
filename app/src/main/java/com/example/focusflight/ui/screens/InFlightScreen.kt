@@ -282,40 +282,64 @@ fun InFlightScreen(
                 )
             }
 
-            // Pause / Resume Focus Button
-            IconButton(
-                onClick = {
-                    if (uiState.isRunning) {
-                        viewModel.pauseTimer()
-                    } else {
-                        viewModel.startTimer()
-                    }
-                },
-                modifier = Modifier
-                    .size(40.dp)
-                    .background(Midnight.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
-                    .border(1.dp, Border, RoundedCornerShape(12.dp))
+            // Right-side controls row
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = if (uiState.isRunning) Icons.Outlined.Pause else Icons.Outlined.PlayArrow,
-                    contentDescription = "Pause / Resume Flight",
-                    tint = if (uiState.isRunning) OffWhite else Amber
-                )
-            }
+                // Skip Flight Button (for debugging)
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .background(Midnight.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+                        .border(1.dp, Border, RoundedCornerShape(12.dp))
+                        .clickable { viewModel.skipFlight() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = ">>",
+                        color = Amber,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
 
-            // Settings gear button
-            IconButton(
-                onClick = { showSettings = true },
-                modifier = Modifier
-                    .size(40.dp)
-                    .background(Midnight.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
-                    .border(1.dp, Border, RoundedCornerShape(12.dp))
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.Settings,
-                    contentDescription = "Flight Instruments",
-                    tint = OffWhite
-                )
+                // Pause / Resume Focus Button
+                IconButton(
+                    onClick = {
+                        if (uiState.isRunning) {
+                            viewModel.pauseTimer()
+                        } else {
+                            viewModel.startTimer()
+                        }
+                    },
+                    modifier = Modifier
+                        .size(40.dp)
+                        .background(Midnight.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+                        .border(1.dp, Border, RoundedCornerShape(12.dp))
+                ) {
+                    Icon(
+                        imageVector = if (uiState.isRunning) Icons.Outlined.Pause else Icons.Outlined.PlayArrow,
+                        contentDescription = "Pause / Resume Flight",
+                        tint = if (uiState.isRunning) OffWhite else Amber
+                    )
+                }
+
+                // Settings gear button
+                IconButton(
+                    onClick = { showSettings = true },
+                    modifier = Modifier
+                        .size(40.dp)
+                        .background(Midnight.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+                        .border(1.dp, Border, RoundedCornerShape(12.dp))
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Settings,
+                        contentDescription = "Flight Instruments",
+                        tint = OffWhite
+                    )
+                }
             }
         }
 
