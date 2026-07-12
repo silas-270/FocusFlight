@@ -17,7 +17,8 @@ import kotlinx.coroutines.launch
 @OptIn(FlowPreview::class)
 class OnboardingViewModel(
     private val databaseHelper: FlightDatabaseHelper,
-    private val preferencesRepository: PreferencesRepository
+    private val preferencesRepository: PreferencesRepository,
+    private val cacheDir: java.io.File
 ) : ViewModel() {
 
     private val _searchQuery = MutableStateFlow("")
@@ -60,6 +61,7 @@ class OnboardingViewModel(
         _selectedAirport.value = airport
         _searchQuery.value = "${airport.municipality} (${airport.iataCode})"
         _searchResults.value = emptyList()
+        preRenderMap(airport)
     }
 
     fun selectAirportByIata(iataCode: String) {
@@ -69,6 +71,7 @@ class OnboardingViewModel(
                 _selectedAirport.value = airport
                 _searchQuery.value = "${airport.municipality} (${airport.iataCode})"
                 _searchResults.value = emptyList()
+                preRenderMap(airport)
             }
         }
     }
@@ -85,16 +88,45 @@ class OnboardingViewModel(
         preferencesRepository.setOnboardingCompleted(true)
         return true
     }
+
+    private fun preRenderMap(airport: Airport) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val destinations = databaseHelper.getRandomAirports(12, airport.iataCode)
+                val routesData = destinations.map { dest ->
+                    Pair(Pair(airport.lat, airport.lon), Pair(dest.lat, dest.lon))
+                }
+
+                val outFile = java.io.File(cacheDir, "hub_route_map_${airport.iataCode}.png")
+                if (outFile.exists()) {
+                    outFile.delete()
+                }
+
+                val success = com.example.focusflight.data.repository.CesiumRSLibrary.renderRoutes(
+                    width = 1080,
+                    height = 1320,
+                    routesData = routesData,
+                    outPath = outFile.absolutePath
+                )
+                if (success && outFile.exists()) {
+                    android.util.Log.d("OnboardingViewModel", "Pre-rendered onboarding map for ${airport.iataCode} to ${outFile.absolutePath}")
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("OnboardingViewModel", "Error pre-rendering onboarding map", e)
+            }
+        }
+    }
 }
 
 class OnboardingViewModelFactory(
     private val databaseHelper: FlightDatabaseHelper,
-    private val preferencesRepository: PreferencesRepository
+    private val preferencesRepository: PreferencesRepository,
+    private val cacheDir: java.io.File
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(OnboardingViewModel::class.java)) {
-            return OnboardingViewModel(databaseHelper, preferencesRepository) as T
+            return OnboardingViewModel(databaseHelper, preferencesRepository, cacheDir) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }
