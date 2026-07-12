@@ -116,38 +116,74 @@ fun FlightSearchScreen(
     val originAirport by viewModel.originAirport.collectAsState()
 
     Box(modifier = Modifier.fillMaxSize().background(DeepNavy)) {
-        // ── Foreground UI Stack ──
+        // Main Screen Column
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .windowInsetsPadding(WindowInsets.statusBars)
                 .padding(bottom = Spacing.Large),
-            verticalArrangement = Arrangement.Bottom,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Tactical 2D route map at the top
+            // 1. Top Header Bar (incorporating the return button minimalist-style)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Spacing.Large, vertical = Spacing.Medium),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(
+                    onClick = onBackClick,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .background(Midnight.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+                        .border(1.dp, Border, RoundedCornerShape(12.dp))
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
+                        contentDescription = "Back",
+                        tint = OffWhite
+                    )
+                }
+                Spacer(modifier = Modifier.width(Spacing.Medium))
+                Text(
+                    text = "SELECT ROUTE",
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 2.sp,
+                        color = OffWhite,
+                        fontFamily = FontFamily.SansSerif
+                    )
+                )
+            }
+
+            // 2. Tactical 2D Route Map (expands to take available vertical space, no border, consistent padding)
             RouteMap(
                 originAirport = originAirport,
                 routes = filteredRoutes,
                 selectedRoute = selectedRoute,
                 modifier = Modifier
                     .weight(1f)
-                    .fillMaxWidth(0.9f)
-                    .padding(vertical = Spacing.Medium)
+                    .fillMaxWidth()
+                    .padding(horizontal = Spacing.Large, vertical = Spacing.Small)
             )
 
-            // 1. Timeline Slider Container (with 1 hour visible bounds)
+            Spacer(modifier = Modifier.height(Spacing.Medium))
+
+            // 3. Timeline Slider Container (aligned to grid margin)
             if (intervals.isNotEmpty()) {
                 TimelineSlider(
                     intervals = intervals,
                     selectedInterval = selectedInterval,
-                    onIntervalSelected = { viewModel.selectInterval(it) }
+                    onIntervalSelected = { viewModel.selectInterval(it) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = Spacing.Large)
                 )
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(Spacing.Large))
 
-            // 2. Selection Cards (Carousel / Empty State)
+            // 4. Carousel / Cards (or Empty State)
             if (filteredRoutes.isNotEmpty()) {
                 val pagerState = rememberPagerState(pageCount = { filteredRoutes.size })
 
@@ -161,7 +197,7 @@ fun FlightSearchScreen(
                 HorizontalPager(
                     state = pagerState,
                     modifier = Modifier.fillMaxWidth(),
-                    contentPadding = PaddingValues(horizontal = 80.dp),
+                    contentPadding = PaddingValues(horizontal = 64.dp),
                     pageSpacing = 16.dp
                 ) { page ->
                     val route = filteredRoutes[page]
@@ -175,9 +211,9 @@ fun FlightSearchScreen(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(Spacing.Medium))
 
-                // 3. Pagination Indicator
+                // 5. Pagination Indicator
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -187,45 +223,49 @@ fun FlightSearchScreen(
                         if (isActive) {
                             Box(
                                 modifier = Modifier
-                                    .width(32.dp)
-                                    .height(8.dp)
+                                    .width(24.dp)
+                                    .height(6.dp)
                                     .background(Slate, RoundedCornerShape(50))
                             )
                         } else {
                             Box(
                                 modifier = Modifier
-                                    .size(8.dp)
-                                    .background(OffWhite, CircleShape)
+                                    .size(6.dp)
+                                    .background(OffWhite.copy(alpha = 0.4f), CircleShape)
                             )
                         }
                     }
                 }
                 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(Spacing.Large))
                 
-                // Confirm Selection Button
+                // 6. Confirm Selection Button (aligned to margin)
                 Button(
                     onClick = { selectedRoute?.let { onRouteConfirm(it) } },
                     modifier = Modifier
-                        .fillMaxWidth(0.8f)
-                        .height(56.dp),
-                    shape = RoundedCornerShape(16.dp),
+                        .fillMaxWidth()
+                        .padding(horizontal = Spacing.Large)
+                        .height(54.dp),
+                    shape = RoundedCornerShape(14.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Midnight)
                 ) {
                     Text(
                         text = "CONFIRM SELECTION",
-                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+                        style = MaterialTheme.typography.labelLarge.copy(
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.5.sp
+                        )
                     )
                 }
             } else {
-                // Empty state for current interval
+                // Empty state for current interval (matching card aspect ratio and padding)
                 Box(
                     modifier = Modifier
-                        .padding(horizontal = 80.dp)
+                        .padding(horizontal = 64.dp)
                         .fillMaxWidth()
-                        .aspectRatio(0.85f)
-                        .background(Midnight.copy(alpha = 0.9f), RoundedCornerShape(32.dp))
-                        .border(1.dp, Border, RoundedCornerShape(32.dp))
+                        .aspectRatio(1.0f)
+                        .background(Midnight.copy(alpha = 0.35f), RoundedCornerShape(20.dp))
+                        .border(1.dp, Border, RoundedCornerShape(20.dp))
                         .padding(24.dp),
                     contentAlignment = Alignment.Center
                 ) {
@@ -255,22 +295,8 @@ fun FlightSearchScreen(
                         )
                     }
                 }
-                Spacer(modifier = Modifier.height(112.dp)) // Spacer to keep layout heights balanced
+                Spacer(modifier = Modifier.height(100.dp)) // Balanced height
             }
-        }
-
-        // Back Button (placed on top of the Column)
-        IconButton(
-            onClick = onBackClick,
-            modifier = Modifier
-                .windowInsetsPadding(WindowInsets.statusBars)
-                .padding(Spacing.Medium)
-                .size(40.dp)
-                .background(Midnight.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
-                .border(1.dp, Border, RoundedCornerShape(8.dp))
-                .align(Alignment.TopStart)
-        ) {
-            Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back", tint = OffWhite)
         }
     }
 }
@@ -284,10 +310,10 @@ fun TimelineSlider(
 ) {
     BoxWithConstraints(
         modifier = modifier
-            .fillMaxWidth(0.95f)
-            .height(110.dp)
-            .background(Midnight.copy(alpha = 0.9f), MaterialTheme.shapes.extraLarge)
-            .padding(top = 12.dp, bottom = 16.dp)
+            .fillMaxWidth()
+            .height(96.dp)
+            .background(Midnight.copy(alpha = 0.35f), RoundedCornerShape(20.dp))
+            .padding(top = 8.dp, bottom = 12.dp)
     ) {
         val containerWidth = maxWidth
         val sidePadding = 16.dp
@@ -351,7 +377,7 @@ fun TimelineSlider(
             verticalAlignment = Alignment.Top,
             modifier = Modifier
                 .fillMaxSize()
-                .padding(top = 28.dp, start = sidePadding, end = sidePadding)
+                .padding(top = 24.dp, start = sidePadding, end = sidePadding)
         ) {
             itemsIndexed(intervals) { index, interval ->
                 val isCenter = interval == selectedInterval
@@ -413,14 +439,14 @@ fun SelectionCard(route: FlightRoute, isSelected: Boolean, onClick: () -> Unit) 
                 this.alpha = alpha
             }
             .fillMaxWidth()
-            .aspectRatio(0.85f)
-            .background(Midnight.copy(alpha = 0.95f), RoundedCornerShape(32.dp))
+            .aspectRatio(1.0f) // Square aspect ratio
+            .background(Midnight.copy(alpha = 0.35f), RoundedCornerShape(20.dp))
             .then(
-                if (isSelected) Modifier.border(4.dp, OffWhite, RoundedCornerShape(32.dp))
-                else Modifier
+                if (isSelected) Modifier.border(1.5.dp, OffWhite, RoundedCornerShape(20.dp))
+                else Modifier.border(1.dp, Border, RoundedCornerShape(20.dp))
             )
             .clickable { onClick() }
-            .padding(if (isSelected) 24.dp else 16.dp),
+            .padding(20.dp),
         contentAlignment = Alignment.Center
     ) {
         Column(
