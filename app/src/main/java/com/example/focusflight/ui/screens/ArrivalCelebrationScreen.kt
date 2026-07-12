@@ -110,11 +110,11 @@ fun ArrivalCelebrationScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+                .padding(vertical = Spacing.Large, horizontal = Spacing.Large),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(112.dp))
+            Spacer(modifier = Modifier.weight(1f))
+
             // Shrunk font size from displayMedium to headlineLarge so it doesn't wrap
             Text(
                 text = "TOUCHDOWN",
@@ -133,7 +133,7 @@ fun ArrivalCelebrationScreen(
                 modifier = Modifier.padding(top = 8.dp).graphicsLayer { alpha = stampAlpha }
             )
 
-            Spacer(modifier = Modifier.height(40.dp)) // Reduced spacing
+            Spacer(modifier = Modifier.height(32.dp))
 
             // Massive Vintage Passport Stamp Canvas
             Box(
@@ -317,23 +317,23 @@ fun ArrivalCelebrationScreen(
                 CelebrationRow("STATUS", "STAMP SECURED")
             }
 
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.height(Spacing.Large))
 
             // Exit / Continue Button
             Button(
                 onClick = onContinue,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp)
+                    .height(54.dp)
                     .graphicsLayer { alpha = stampAlpha },
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(14.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = inkColor, contentColor = Midnight)
             ) {
                 Text(
                     text = "ENTER HUB",
-                    style = MaterialTheme.typography.titleMedium.copy(
+                    style = MaterialTheme.typography.labelLarge.copy(
                         fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.sp
+                        letterSpacing = 1.5.sp
                     )
                 )
             }
