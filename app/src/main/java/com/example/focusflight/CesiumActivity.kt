@@ -23,6 +23,7 @@ import com.example.focusflight.ui.Screen
 import com.example.focusflight.ui.screens.OnboardingScreen
 import com.example.focusflight.ui.screens.FlightSearchScreen
 import com.example.focusflight.ui.screens.CheckInScreen
+import com.example.focusflight.ui.screens.InFlightScreen
 import com.example.focusflight.ui.theme.FocusFlightTheme
 import com.example.focusflight.ui.viewmodel.OnboardingViewModel
 import com.example.focusflight.ui.viewmodel.OnboardingViewModelFactory
@@ -30,6 +31,8 @@ import com.example.focusflight.ui.viewmodel.FlightSearchViewModel
 import com.example.focusflight.ui.viewmodel.FlightSearchViewModelFactory
 import com.example.focusflight.ui.viewmodel.CheckInViewModel
 import com.example.focusflight.ui.viewmodel.CheckInViewModelFactory
+import com.example.focusflight.ui.viewmodel.InFlightViewModel
+import com.example.focusflight.ui.viewmodel.InFlightViewModelFactory
 
 class CesiumActivity : ComponentActivity() {
 
@@ -142,11 +145,39 @@ class CesiumActivity : ComponentActivity() {
                                     navController.popBackStack()
                                 },
                                 onStartFlight = { flightNumber, destination, duration ->
-                                    // Set destination as new base airport to simulate successful landing
+                                    navController.navigate(Screen.InFlight.createRoute(flightNumber, destination, duration))
+                                }
+                            )
+                        }
+
+                        composable(
+                            route = Screen.InFlight.route,
+                            arguments = listOf(
+                                androidx.navigation.navArgument("flightNo") { type = androidx.navigation.NavType.StringType },
+                                androidx.navigation.navArgument("destIata") { type = androidx.navigation.NavType.StringType },
+                                androidx.navigation.navArgument("durationMin") { type = androidx.navigation.NavType.IntType }
+                            )
+                        ) { backStackEntry ->
+                            val flightNo = backStackEntry.arguments?.getString("flightNo") ?: ""
+                            val destIata = backStackEntry.arguments?.getString("destIata") ?: ""
+                            val durationMin = backStackEntry.arguments?.getInt("durationMin") ?: 0
+
+                            val viewModel: InFlightViewModel by viewModels {
+                                InFlightViewModelFactory(
+                                    databaseHelper, preferencesRepository, flightNo, destIata, durationMin
+                                )
+                            }
+
+                            InFlightScreen(
+                                viewModel = viewModel,
+                                onLandingCompleted = { destination ->
                                     preferencesRepository.setCurrentAirport(destination)
                                     navController.navigate(Screen.Hub.route) {
                                         popUpTo(Screen.Hub.route) { inclusive = true }
                                     }
+                                },
+                                onExitFlight = {
+                                    navController.popBackStack()
                                 }
                             )
                         }
