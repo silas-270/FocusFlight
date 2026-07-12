@@ -86,7 +86,7 @@ fun CheckInScreen(
                     onClick = onBackClick,
                     modifier = Modifier
                         .size(40.dp)
-                        .background(Midnight.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+                        .background(DeepNavy.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
                         .border(1.dp, Border, RoundedCornerShape(12.dp))
                 ) {
                     Icon(

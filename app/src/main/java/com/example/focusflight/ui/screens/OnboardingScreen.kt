@@ -604,7 +604,7 @@ private fun SuggestionTile(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(Midnight.copy(alpha = 0.6f))
+            .background(DeepNavy)
             .border(
                 width = 1.dp,
                 color = Border,
