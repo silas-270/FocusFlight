@@ -187,6 +187,11 @@ fun FlightSearchScreen(
             if (filteredRoutes.isNotEmpty()) {
                 val pagerState = rememberPagerState(pageCount = { filteredRoutes.size })
 
+                // Reset pager selection back to the first option when the filtered list changes
+                LaunchedEffect(filteredRoutes) {
+                    pagerState.scrollToPage(0)
+                }
+
                 // Sync current pager selection with active selected route in ViewModel
                 LaunchedEffect(pagerState.currentPage, filteredRoutes) {
                     if (pagerState.currentPage < filteredRoutes.size) {
