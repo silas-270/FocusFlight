@@ -4,6 +4,7 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.util.Log
 import com.example.focusflight.data.model.Airport
+import com.example.focusflight.data.model.FlightRoute
 import java.io.FileOutputStream
 import java.io.IOException
 
@@ -196,5 +197,84 @@ class FlightDatabaseHelper(private val context: Context) {
             db.close()
         }
         return airportsList
+    }
+
+    fun getOutboundRoutes(
+        originIata: String,
+        searchQuery: String = "",
+        sortBy: String = ""
+    ): List<FlightRoute> {
+        val routesList = mutableListOf<FlightRoute>()
+        val db = getReadableDatabase()
+
+        var sql = """
+            SELECT r.id, r.origin_iata, r.dest_iata, r.distance_km, r.flight_time_min, r.carriers,
+                   a.name AS dest_name, a.municipality AS dest_municipality, a.iso_country AS dest_country,
+                   a.lat AS dest_lat, a.lon AS dest_lon
+            FROM routes r
+            INNER JOIN airports a ON r.dest_iata = a.iata_code
+            WHERE r.origin_iata = ?
+        """.trimIndent()
+
+        val selectionArgs = mutableListOf<String>()
+        selectionArgs.add(originIata)
+
+        if (searchQuery.isNotBlank()) {
+            sql += " AND (r.dest_iata LIKE ? OR a.municipality LIKE ? OR a.name LIKE ?)"
+            val cleanQuery = "%${searchQuery.trim()}%"
+            selectionArgs.add(cleanQuery)
+            selectionArgs.add(cleanQuery)
+            selectionArgs.add(cleanQuery)
+        }
+
+        sql += when (sortBy) {
+            "Shortest" -> " ORDER BY r.flight_time_min ASC"
+            "Longest" -> " ORDER BY r.flight_time_min DESC"
+            "Popular" -> " ORDER BY (LENGTH(r.carriers) - LENGTH(REPLACE(r.carriers, ',', '')) + 1) DESC, r.flight_time_min ASC"
+            else -> " ORDER BY r.dest_iata ASC"
+        }
+
+        sql += " LIMIT 30"
+
+        try {
+            db.rawQuery(sql, selectionArgs.toTypedArray()).use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val idCol = cursor.getColumnIndexOrThrow("id")
+                    val originCol = cursor.getColumnIndexOrThrow("origin_iata")
+                    val destCol = cursor.getColumnIndexOrThrow("dest_iata")
+                    val distCol = cursor.getColumnIndexOrThrow("distance_km")
+                    val timeCol = cursor.getColumnIndexOrThrow("flight_time_min")
+                    val carriersCol = cursor.getColumnIndexOrThrow("carriers")
+                    val nameCol = cursor.getColumnIndexOrThrow("dest_name")
+                    val munCol = cursor.getColumnIndexOrThrow("dest_municipality")
+                    val countryCol = cursor.getColumnIndexOrThrow("dest_country")
+                    val latCol = cursor.getColumnIndexOrThrow("dest_lat")
+                    val lonCol = cursor.getColumnIndexOrThrow("dest_lon")
+
+                    do {
+                        routesList.add(
+                            FlightRoute(
+                                id = cursor.getInt(idCol),
+                                originIata = cursor.getString(originCol) ?: "",
+                                destIata = cursor.getString(destCol) ?: "",
+                                distanceKm = cursor.getDouble(distCol),
+                                flightTimeMin = cursor.getInt(timeCol),
+                                carriers = cursor.getString(carriersCol) ?: "",
+                                destName = cursor.getString(nameCol) ?: "",
+                                destMunicipality = cursor.getString(munCol) ?: "",
+                                destCountry = cursor.getString(countryCol) ?: "",
+                                destLat = cursor.getDouble(latCol),
+                                destLon = cursor.getDouble(lonCol)
+                            )
+                        )
+                    } while (cursor.moveToNext())
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error querying outbound routes", e)
+        } finally {
+            db.close()
+        }
+        return routesList
     }
 }

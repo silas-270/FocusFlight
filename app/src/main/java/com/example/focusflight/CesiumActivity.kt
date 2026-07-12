@@ -4,6 +4,8 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
@@ -19,9 +21,15 @@ import com.example.focusflight.data.repository.FlightDatabaseHelper
 import com.example.focusflight.data.repository.PreferencesRepository
 import com.example.focusflight.ui.Screen
 import com.example.focusflight.ui.screens.OnboardingScreen
+import com.example.focusflight.ui.screens.FlightSearchScreen
+import com.example.focusflight.ui.screens.CheckInScreen
 import com.example.focusflight.ui.theme.FocusFlightTheme
 import com.example.focusflight.ui.viewmodel.OnboardingViewModel
 import com.example.focusflight.ui.viewmodel.OnboardingViewModelFactory
+import com.example.focusflight.ui.viewmodel.FlightSearchViewModel
+import com.example.focusflight.ui.viewmodel.FlightSearchViewModelFactory
+import com.example.focusflight.ui.viewmodel.CheckInViewModel
+import com.example.focusflight.ui.viewmodel.CheckInViewModelFactory
 
 class CesiumActivity : ComponentActivity() {
 
@@ -50,7 +58,31 @@ class CesiumActivity : ComponentActivity() {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     NavHost(
                         navController = navController,
-                        startDestination = startDestination
+                        startDestination = startDestination,
+                        enterTransition = {
+                            slideIntoContainer(
+                                towards = AnimatedContentTransitionScope.SlideDirection.Start,
+                                animationSpec = tween(300)
+                            )
+                        },
+                        exitTransition = {
+                            slideOutOfContainer(
+                                towards = AnimatedContentTransitionScope.SlideDirection.Start,
+                                animationSpec = tween(300)
+                            )
+                        },
+                        popEnterTransition = {
+                            slideIntoContainer(
+                                towards = AnimatedContentTransitionScope.SlideDirection.End,
+                                animationSpec = tween(300)
+                            )
+                        },
+                        popExitTransition = {
+                            slideOutOfContainer(
+                                towards = AnimatedContentTransitionScope.SlideDirection.End,
+                                animationSpec = tween(300)
+                            )
+                        }
                     ) {
                         composable(Screen.Onboarding.route) {
                             val viewModel: OnboardingViewModel by viewModels {
@@ -73,13 +105,48 @@ class CesiumActivity : ComponentActivity() {
                             com.example.focusflight.ui.screens.HubScreen(
                                 viewModel = viewModel,
                                 onBookFlightClick = {
-                                    // TODO: Navigate to Flight Search
+                                    navController.navigate(Screen.FlightSearch.route)
                                 },
                                 onPassportClick = {
                                     // TODO: Navigate to Passport
                                 },
                                 onSettingsClick = {
                                     // TODO: Navigate to Settings
+                                }
+                            )
+                        }
+
+                        composable(Screen.FlightSearch.route) {
+                            val viewModel: FlightSearchViewModel by viewModels {
+                                FlightSearchViewModelFactory(databaseHelper, preferencesRepository, cacheDir)
+                            }
+                            FlightSearchScreen(
+                                viewModel = viewModel,
+                                onBackClick = {
+                                    navController.popBackStack()
+                                },
+                                onRouteConfirm = { route ->
+                                    navController.navigate(Screen.CheckIn.createRoute(route.destIata))
+                                }
+                            )
+                        }
+
+                        composable(Screen.CheckIn.route) { backStackEntry ->
+                            val destIata = backStackEntry.arguments?.getString("destIata") ?: ""
+                            val viewModel: CheckInViewModel by viewModels {
+                                CheckInViewModelFactory(databaseHelper, preferencesRepository, destIata)
+                            }
+                            CheckInScreen(
+                                viewModel = viewModel,
+                                onBackClick = {
+                                    navController.popBackStack()
+                                },
+                                onStartFlight = { flightNumber, destination, duration ->
+                                    // Set destination as new base airport to simulate successful landing
+                                    preferencesRepository.setCurrentAirport(destination)
+                                    navController.navigate(Screen.Hub.route) {
+                                        popUpTo(Screen.Hub.route) { inclusive = true }
+                                    }
                                 }
                             )
                         }

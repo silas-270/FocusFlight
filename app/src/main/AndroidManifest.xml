@@ -12,7 +12,8 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.FocusFlight">
+        android:theme="@style/Theme.FocusFlight"
+        android:enableOnBackInvokedCallback="true">
         <activity
             android:name=".CesiumActivity"
             android:theme="@style/Theme.CesiumTheme"
