@@ -238,7 +238,7 @@ fun ArrivalCelebrationScreen(
                             }
                         }
 
-                        // Draw Large Destination IATA in Center
+                        // Draw Large Destination IATA in Center (Exactly Centered)
                         val iataResult = textMeasurer.measure(
                             text = destIata,
                             style = TextStyle(
@@ -250,14 +250,13 @@ fun ArrivalCelebrationScreen(
                         )
                         drawText(
                             textLayoutResult = iataResult,
-                            // Lowered the Airport Code by adding an 8.dp offset downwards
                             topLeft = Offset(
                                 center.x - iataResult.size.width / 2f,
-                                center.y - iataResult.size.height / 2f + 8.dp.toPx()
+                                center.y - iataResult.size.height / 2f
                             )
                         )
 
-                        // Draw Stamp Date above IATA
+                        // Draw Stamp Date above IATA (Pushed up for spacing)
                         val dateResult = textMeasurer.measure(
                             text = currentDateStr,
                             style = TextStyle(
@@ -269,14 +268,13 @@ fun ArrivalCelebrationScreen(
                         )
                         drawText(
                             textLayoutResult = dateResult,
-                            // Shifted slightly down to match
                             topLeft = Offset(
                                 center.x - dateResult.size.width / 2f,
-                                center.y - 36.dp.toPx()
+                                center.y - 56.dp.toPx()
                             )
                         )
 
-                        // Draw Earned Rank below IATA
+                        // Draw Earned Rank below IATA (Symmetrically spaced)
                         val rankResult = textMeasurer.measure(
                             text = rank,
                             style = TextStyle(
@@ -289,10 +287,9 @@ fun ArrivalCelebrationScreen(
                         )
                         drawText(
                             textLayoutResult = rankResult,
-                            // Shifted slightly down to match
                             topLeft = Offset(
                                 center.x - rankResult.size.width / 2f,
-                                center.y + 40.dp.toPx()
+                                center.y + 44.dp.toPx()
                             )
                         )
                     }
@@ -313,7 +310,7 @@ fun ArrivalCelebrationScreen(
                 ) {
                     val hours = durationMin / 60
                     val mins = durationMin % 60
-                    val timeString = "${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}"
+                    val timeString = if (hours > 0) "${hours}h ${mins}m" else "${mins}m"
                     
                     Text(
                         text = timeString,
