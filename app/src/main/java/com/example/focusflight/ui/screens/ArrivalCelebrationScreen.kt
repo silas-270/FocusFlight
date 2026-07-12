@@ -81,8 +81,8 @@ fun ArrivalCelebrationScreen(
             planeOffsetY.animateTo(
                 targetValue = -screenHeightPx * 0.7f,
                 animationSpec = tween(
-                    durationMillis = 5000,
-                    easing = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1.0f) // Shoots up 70% instantly, then slowly drifts
+                    durationMillis = 1500,
+                    easing = CubicBezierEasing(0.15f, 0.55f, 0.3f, 1.0f) // Slower starting speed, smoother deceleration
                 )
             )
         }
@@ -342,7 +342,7 @@ fun ArrivalCelebrationScreen(
         Icon(
             imageVector = Icons.Default.Flight,
             contentDescription = null,
-            tint = inkColor.copy(alpha = 0.95f),
+            tint = Amber,
             modifier = Modifier
                 .fillMaxWidth(0.75f)
                 .aspectRatio(1f)
