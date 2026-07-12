@@ -184,7 +184,7 @@ class CesiumActivity : ComponentActivity() {
                             }
 
                             androidx.compose.runtime.LaunchedEffect(Unit) {
-                                kotlinx.coroutines.Dispatchers.IO.invoke {
+                                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                                     val originIata = preferencesRepository.getCurrentAirport() ?: "STR"
                                     val origin = databaseHelper.getAirportByIata(originIata)
                                     val dest = databaseHelper.getAirportByIata(destIata)
