@@ -109,6 +109,8 @@ class InFlightViewModel(
                         val newElapsed = state.timeElapsedSeconds + 1
                         val newProgress = newElapsed.toFloat() / state.totalDurationSeconds.toFloat()
                         
+                        com.example.focusflight.engine.CesiumBridge.nativeSetProgress(newProgress.toDouble())
+
                         // Linear interpolation of coordinates
                         val origin = _originAirport.value
                         val dest = _destAirport.value
