@@ -607,7 +607,7 @@ private fun SuggestionTile(
             .background(Midnight.copy(alpha = 0.6f))
             .border(
                 width = 1.dp,
-                color = Color.White.copy(alpha = 0.08f),
+                color = Border,
                 shape = RoundedCornerShape(16.dp)
             )
             .clickable(onClick = onClick)
@@ -620,7 +620,7 @@ private fun SuggestionTile(
                 .size(width = 46.dp, height = 28.dp)
                 .border(
                     width = 1.dp,
-                    color = Color.White.copy(alpha = 0.15f),
+                    color = Border,
                     shape = RoundedCornerShape(6.dp)
                 )
                 .background(

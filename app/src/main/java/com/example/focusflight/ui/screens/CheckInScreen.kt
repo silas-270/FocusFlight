@@ -69,36 +69,6 @@ fun CheckInScreen(
             .fillMaxSize()
             .background(Midnight)
     ) {
-        // ── Background Layer: Latitude/Longitude Grid Drawing ──
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val strokeColor = Border.copy(alpha = 0.4f)
-            val strokeWidth = 1.dp.toPx()
-            
-            // Draw horizontal lat lines
-            val latSpacing = size.height / 8
-            for (i in 1..7) {
-                val y = latSpacing * i
-                drawLine(
-                    color = strokeColor,
-                    start = Offset(0f, y),
-                    end = Offset(size.width, y),
-                    strokeWidth = strokeWidth
-                )
-            }
-            
-            // Draw vertical lon lines
-            val lonSpacing = size.width / 6
-            for (i in 1..5) {
-                val x = lonSpacing * i
-                drawLine(
-                    color = strokeColor,
-                    start = Offset(x, 0f),
-                    end = Offset(x, size.height),
-                    strokeWidth = strokeWidth
-                )
-            }
-        }
-
         // ── Main Content Column ──
         Column(
             modifier = Modifier
