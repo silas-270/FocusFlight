@@ -7,55 +7,49 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.FlightTakeoff
-import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberBottomSheetScaffoldState
-import androidx.compose.material3.rememberStandardBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil3.compose.AsyncImage
 import com.example.focusflight.ui.theme.Amber
 import com.example.focusflight.ui.theme.Border
 import com.example.focusflight.ui.theme.DeepNavy
-import com.example.focusflight.ui.theme.Dim
 import com.example.focusflight.ui.theme.Haze
 import com.example.focusflight.ui.theme.Midnight
 import com.example.focusflight.ui.theme.OffWhite
 import com.example.focusflight.ui.theme.Slate
 import com.example.focusflight.ui.theme.Spacing
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.ui.layout.ContentScale
-import coil3.compose.AsyncImage
 import com.example.focusflight.ui.viewmodel.HubViewModel
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HubScreen(
     viewModel: HubViewModel,
@@ -68,91 +62,118 @@ fun HubScreen(
     val recentFlights by viewModel.recentFlights.collectAsState()
     val routeMapPath by viewModel.routeMapPath.collectAsState()
 
-    val scaffoldState = rememberBottomSheetScaffoldState(
-        bottomSheetState = rememberStandardBottomSheetState(
-            initialValue = SheetValue.PartiallyExpanded,
-            skipHiddenState = true
-        )
-    )
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(DeepNavy)
+    ) {
+        // Background Globe image
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.775f)
+                .padding(top = 48.dp)
+                .align(Alignment.TopCenter)
+        ) {
+            if (routeMapPath != null) {
+                AsyncImage(
+                    model = routeMapPath,
+                    contentDescription = "Decorative globe routes",
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .alpha(0.35f),
+                    contentScale = ContentScale.Crop,
+                    alignment = Alignment.Center
+                )
+            }
+        }
 
-    BottomSheetScaffold(
-        scaffoldState = scaffoldState,
-        sheetPeekHeight = 280.dp, // Height of the collapsed state
-        sheetShape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-        sheetContainerColor = DeepNavy,
-        sheetContentColor = OffWhite,
-        sheetDragHandle = {
-            // Minimalist drag handle
-            Box(
+        // Foreground Content
+        Column(
+            modifier = Modifier.fillMaxSize()
+        ) {
+            // Header & Navigation (outside solid container so globe is behind)
+            Row(
                 modifier = Modifier
-                    .padding(vertical = Spacing.Medium)
-                    .width(48.dp)
-                    .height(4.dp)
-                    .background(Slate, RoundedCornerShape(2.dp))
-            )
-        },
-        sheetContent = {
+                    .fillMaxWidth()
+                    .windowInsetsPadding(WindowInsets.statusBars)
+                    .padding(horizontal = Spacing.Large, vertical = Spacing.Medium),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Profile Avatar (No background container)
+                Icon(
+                    imageVector = Icons.Outlined.Person,
+                    contentDescription = "Profile",
+                    tint = OffWhite,
+                    modifier = Modifier.size(24.dp)
+                )
+
+                // Settings Gear
+                IconButton(
+                    onClick = onSettingsClick,
+                    modifier = Modifier.size(24.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Settings,
+                        contentDescription = "Settings",
+                        tint = OffWhite,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            // 3. Layout & Typography - Solid bottom card container
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = Spacing.Large)
-                    .padding(bottom = Spacing.Large)
-            ) {
-                // Header: Current Base
-                Text(
-                    text = "YOUR BASE",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = Amber,
-                    letterSpacing = 1.sp
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                if (currentAirport != null) {
-                    Row(verticalAlignment = Alignment.Bottom) {
-                        Text(
-                            text = currentAirport!!.iataCode,
-                            style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Black)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "·",
-                            style = MaterialTheme.typography.headlineMedium,
-                            color = Dim
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = currentAirport!!.name,
-                            style = MaterialTheme.typography.titleMedium,
-                            color = Haze,
-                            modifier = Modifier.padding(bottom = 4.dp),
-                            maxLines = 1,
-                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                        )
-                    }
-                } else {
-                    Text(
-                        text = "Loading base...",
-                        style = MaterialTheme.typography.headlineMedium,
-                        color = Haze
+                    .background(
+                        color = Midnight,
+                        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
                     )
-                }
+                    .padding(Spacing.Large)
+            ) {
+                Text(
+                    text = "Welcome back, Captain",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Amber,
+                    letterSpacing = 0.5.sp
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                
+                Text(
+                    text = currentAirport?.iataCode ?: "---",
+                    style = MaterialTheme.typography.displayLarge.copy(
+                        fontWeight = FontWeight.Black,
+                        fontSize = 44.sp
+                    ),
+                    color = OffWhite
+                )
+                Text(
+                    text = currentAirport?.name ?: "Loading base...",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = Haze
+                )
 
-                Spacer(modifier = Modifier.height(Spacing.Medium))
+                Spacer(modifier = Modifier.height(30.dp))
                 HorizontalDivider(color = Border, thickness = 1.dp)
-                Spacer(modifier = Modifier.height(Spacing.Medium))
+                Spacer(modifier = Modifier.height(30.dp))
 
-                // Stats Row
+                // Static Stats
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    StatItem(value = "${stats.totalFlights}", label = "FLIGHTS")
-                    StatItem(value = String.format(java.util.Locale.US, "%.1fh", stats.totalHours), label = "HOURS")
-                    StatItem(value = "${stats.airportsVisited}", label = "AIRPORTS")
+                    StatItem(value = "0", label = "FLIGHTS")
+                    StatItem(value = "0.0h", label = "HOURS")
+                    StatItem(value = "1", label = "AIRPORTS")
                 }
 
-                Spacer(modifier = Modifier.height(Spacing.Large))
+                Spacer(modifier = Modifier.height(48.dp))
 
-                // CTA Button (Always visible in peek state)
+                // 4. Call to Action
                 Button(
                     onClick = onBookFlightClick,
                     modifier = Modifier
@@ -178,98 +199,6 @@ fun HubScreen(
                         )
                     )
                 }
-
-                Spacer(modifier = Modifier.height(32.dp))
-
-                // --- EXPANDED CONTENT ---
-
-                Text(
-                    text = "Recent Flights",
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    color = OffWhite
-                )
-                Spacer(modifier = Modifier.height(Spacing.Medium))
-
-                if (recentFlights.isEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(120.dp)
-                            .background(Midnight.copy(alpha = 0.5f), RoundedCornerShape(12.dp)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "No flights recorded yet.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Dim
-                        )
-                    }
-                } else {
-                    // Placeholder for when we have recent flights to map
-                    Text("Flight logs will appear here.", color = Dim)
-                }
-
-                Spacer(modifier = Modifier.height(Spacing.Large))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(Spacing.Medium)
-                ) {
-                    OutlinedButton(
-                        onClick = onPassportClick,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(48.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = OffWhite),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Border)
-                    ) {
-                        Icon(Icons.Outlined.History, contentDescription = null, modifier = Modifier.size(20.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Passport")
-                    }
-
-                    OutlinedButton(
-                        onClick = onSettingsClick,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(48.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = OffWhite),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Border)
-                    ) {
-                        Icon(Icons.Outlined.Settings, contentDescription = null, modifier = Modifier.size(20.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Settings")
-                    }
-                }
-                
-                Spacer(modifier = Modifier.height(32.dp))
-            }
-        },
-        containerColor = MaterialTheme.colorScheme.background
-    ) { innerPadding ->
-        // Main Content Area (Background)
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .background(MaterialTheme.colorScheme.background)
-        ) {
-            if (routeMapPath != null) {
-                AsyncImage(
-                    model = routeMapPath,
-                    contentDescription = "Base airport routes map",
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
-            } else {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator(color = Amber)
-                }
             }
         }
     }
@@ -286,7 +215,7 @@ private fun StatItem(value: String, label: String) {
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
-            color = Dim,
+            color = Haze,
             letterSpacing = 1.sp
         )
     }
