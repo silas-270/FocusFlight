@@ -114,6 +114,7 @@ fun ArrivalCelebrationScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
+            Spacer(modifier = Modifier.height(112.dp))
             // Shrunk font size from displayMedium to headlineLarge so it doesn't wrap
             Text(
                 text = "TOUCHDOWN",
@@ -342,7 +343,7 @@ fun ArrivalCelebrationScreen(
         Icon(
             imageVector = Icons.Default.Flight,
             contentDescription = null,
-            tint = Amber.copy(alpha = 0.25f),
+            tint = Amber,
             modifier = Modifier
                 .fillMaxWidth(0.75f)
                 .aspectRatio(1f)
