@@ -113,212 +113,218 @@ fun ArrivalCelebrationScreen(
                 .padding(vertical = Spacing.Large, horizontal = Spacing.Large),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.weight(1f))
-
-            // Shrunk font size from displayMedium to headlineLarge so it doesn't wrap
-            Text(
-                text = "TOUCHDOWN",
-                style = MaterialTheme.typography.headlineLarge.copy(
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 4.sp
-                ),
-                color = Haze,
-                modifier = Modifier.graphicsLayer { alpha = stampAlpha }
-            )
-            
-            Text(
-                text = "Welcome to $destIata",
-                style = MaterialTheme.typography.titleMedium,
-                color = inkColor.copy(alpha = 0.8f),
-                modifier = Modifier.padding(top = 8.dp).graphicsLayer { alpha = stampAlpha }
-            )
-
-            Spacer(modifier = Modifier.height(32.dp))
-
-            // Massive Vintage Passport Stamp Canvas
-            Box(
-                modifier = Modifier
-                    .size(240.dp)
-                    .padding(8.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Canvas(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .graphicsLayer(
-                            scaleX = stampScale,
-                            scaleY = stampScale,
-                            alpha = stampAlpha,
-                            rotationZ = -5f // Slight tilt for organic stamp look
-                        )
-                ) {
-                    val strokeWidth = 5.dp.toPx()
-                    val w = size.width
-                    val h = size.height
-                    val center = Offset(w / 2f, h / 2f)
-
-                    // Draw Stamp Boundary
-                    when (rank) {
-                        "CO-PILOT" -> {
-                            drawCircle(
-                                color = inkColor.copy(alpha = 0.8f),
-                                radius = w * 0.46f,
-                                style = Stroke(width = strokeWidth)
-                            )
-                            drawCircle(
-                                color = inkColor.copy(alpha = 0.8f),
-                                radius = w * 0.41f,
-                                style = Stroke(width = 2.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(12f, 12f), 0f))
-                            )
-                        }
-                        "CAPTAIN" -> {
-                            val path = androidx.compose.ui.graphics.Path().apply {
-                                val r = w * 0.46f
-                                val angles = listOf(0, 45, 90, 135, 180, 225, 270, 315)
-                                angles.forEachIndexed { idx, a ->
-                                    val rad = Math.toRadians(a.toDouble())
-                                    val x = center.x + r * kotlin.math.cos(rad).toFloat()
-                                    val y = center.y + r * kotlin.math.sin(rad).toFloat()
-                                    if (idx == 0) moveTo(x, y) else lineTo(x, y)
-                                }
-                                close()
-                            }
-                            drawPath(
-                                path = path,
-                                color = inkColor.copy(alpha = 0.8f),
-                                style = Stroke(width = strokeWidth)
-                            )
-                        }
-                        "COMMANDER" -> {
-                            val path = androidx.compose.ui.graphics.Path().apply {
-                                moveTo(w * 0.5f, h * 0.06f)
-                                lineTo(w * 0.92f, h * 0.06f)
-                                lineTo(w * 0.92f, h * 0.52f)
-                                cubicTo(w * 0.92f, h * 0.78f, w * 0.5f, h * 0.94f, w * 0.5f, h * 0.94f)
-                                cubicTo(w * 0.5f, h * 0.94f, w * 0.08f, h * 0.78f, w * 0.08f, h * 0.52f)
-                                lineTo(w * 0.08f, h * 0.06f)
-                                close()
-                            }
-                            drawPath(
-                                path = path,
-                                color = inkColor.copy(alpha = 0.8f),
-                                style = Stroke(width = strokeWidth)
-                            )
-                        }
-                        else -> { // GLOBETROTTER (Foil Golden Double Ring)
-                            drawCircle(
-                                color = inkColor.copy(alpha = 0.9f),
-                                radius = w * 0.48f,
-                                style = Stroke(width = strokeWidth)
-                            )
-                            drawCircle(
-                                color = inkColor.copy(alpha = 0.9f),
-                                radius = w * 0.43f,
-                                style = Stroke(width = 2.dp.toPx())
-                            )
-                            // Surrounding dots
-                            val count = 20
-                            for (i in 0 until count) {
-                                val rad = Math.toRadians((i * (360.0 / count)))
-                                val dotPt = Offset(
-                                    center.x + (w * 0.38f) * kotlin.math.cos(rad).toFloat(),
-                                    center.y + (w * 0.38f) * kotlin.math.sin(rad).toFloat()
-                                )
-                                drawCircle(
-                                    color = inkColor.copy(alpha = 0.8f),
-                                    radius = 3.dp.toPx(),
-                                    center = dotPt
-                                )
-                            }
-                        }
-                    }
-
-                    // Draw Large Destination IATA in Center
-                    val iataResult = textMeasurer.measure(
-                        text = destIata,
-                        style = TextStyle(
-                            color = inkColor.copy(alpha = 0.9f),
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 48.sp,
-                            fontFamily = FontFamily.Monospace
-                        )
-                    )
-                    drawText(
-                        textLayoutResult = iataResult,
-                        // Lowered the Airport Code by adding an 8.dp offset downwards
-                        topLeft = Offset(
-                            center.x - iataResult.size.width / 2f,
-                            center.y - iataResult.size.height / 2f + 8.dp.toPx()
-                        )
-                    )
-
-                    // Draw Stamp Date above IATA
-                    val dateResult = textMeasurer.measure(
-                        text = currentDateStr,
-                        style = TextStyle(
-                            color = inkColor.copy(alpha = 0.6f),
-                            fontSize = 12.sp,
-                            fontFamily = FontFamily.Monospace,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    )
-                    drawText(
-                        textLayoutResult = dateResult,
-                        // Shifted slightly down to match
-                        topLeft = Offset(
-                            center.x - dateResult.size.width / 2f,
-                            center.y - 36.dp.toPx()
-                        )
-                    )
-
-                    // Draw Earned Rank below IATA
-                    val rankResult = textMeasurer.measure(
-                        text = rank,
-                        style = TextStyle(
-                            color = inkColor.copy(alpha = 0.8f),
-                            fontWeight = FontWeight.Black,
-                            fontSize = 14.sp,
-                            fontFamily = FontFamily.SansSerif,
-                            letterSpacing = 2.sp
-                        )
-                    )
-                    drawText(
-                        textLayoutResult = rankResult,
-                        // Shifted slightly down to match
-                        topLeft = Offset(
-                            center.x - rankResult.size.width / 2f,
-                            center.y + 40.dp.toPx()
-                        )
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(40.dp))
-
-            // Monospaced Flight Telemetry Receipt Card
             Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .background(DeepNavy.copy(alpha = 0.8f), RoundedCornerShape(16.dp))
-                    .border(1.dp, inkColor.copy(alpha = 0.3f), RoundedCornerShape(16.dp))
-                    .padding(vertical = 28.dp, horizontal = 16.dp)
-                    .graphicsLayer { alpha = stampAlpha },
+                    .weight(1f)
+                    .fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                val hours = durationMin / 60
-                val mins = durationMin % 60
-                val timeString = "${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}"
+                // Shrunk font size from displayMedium to headlineLarge so it doesn't wrap
+                Text(
+                    text = "TOUCHDOWN",
+                    style = MaterialTheme.typography.headlineLarge.copy(
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 4.sp
+                    ),
+                    color = Haze,
+                    modifier = Modifier.graphicsLayer { alpha = stampAlpha }
+                )
                 
                 Text(
-                    text = timeString,
-                    style = MaterialTheme.typography.displayLarge.copy(
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace,
-                        letterSpacing = 2.sp
-                    ),
-                    color = Haze
+                    text = "Welcome to $destIata",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = inkColor.copy(alpha = 0.8f),
+                    modifier = Modifier.padding(top = 8.dp).graphicsLayer { alpha = stampAlpha }
                 )
+
+                Spacer(modifier = Modifier.height(32.dp))
+
+                // Massive Vintage Passport Stamp Canvas
+                Box(
+                    modifier = Modifier
+                        .size(240.dp)
+                        .padding(8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Canvas(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer(
+                                scaleX = stampScale,
+                                scaleY = stampScale,
+                                alpha = stampAlpha,
+                                rotationZ = -5f // Slight tilt for organic stamp look
+                            )
+                    ) {
+                        val strokeWidth = 5.dp.toPx()
+                        val w = size.width
+                        val h = size.height
+                        val center = Offset(w / 2f, h / 2f)
+
+                        // Draw Stamp Boundary
+                        when (rank) {
+                            "CO-PILOT" -> {
+                                drawCircle(
+                                    color = inkColor.copy(alpha = 0.8f),
+                                    radius = w * 0.46f,
+                                    style = Stroke(width = strokeWidth)
+                                )
+                                drawCircle(
+                                    color = inkColor.copy(alpha = 0.8f),
+                                    radius = w * 0.41f,
+                                    style = Stroke(width = 2.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(12f, 12f), 0f))
+                                )
+                            }
+                            "CAPTAIN" -> {
+                                val path = androidx.compose.ui.graphics.Path().apply {
+                                    val r = w * 0.46f
+                                    val angles = listOf(0, 45, 90, 135, 180, 225, 270, 315)
+                                    angles.forEachIndexed { idx, a ->
+                                        val rad = Math.toRadians(a.toDouble())
+                                        val x = center.x + r * kotlin.math.cos(rad).toFloat()
+                                        val y = center.y + r * kotlin.math.sin(rad).toFloat()
+                                        if (idx == 0) moveTo(x, y) else lineTo(x, y)
+                                    }
+                                    close()
+                                }
+                                drawPath(
+                                    path = path,
+                                    color = inkColor.copy(alpha = 0.8f),
+                                    style = Stroke(width = strokeWidth)
+                                )
+                            }
+                            "COMMANDER" -> {
+                                val path = androidx.compose.ui.graphics.Path().apply {
+                                    moveTo(w * 0.5f, h * 0.06f)
+                                    lineTo(w * 0.92f, h * 0.06f)
+                                    lineTo(w * 0.92f, h * 0.52f)
+                                    cubicTo(w * 0.92f, h * 0.78f, w * 0.5f, h * 0.94f, w * 0.5f, h * 0.94f)
+                                    cubicTo(w * 0.5f, h * 0.94f, w * 0.08f, h * 0.78f, w * 0.08f, h * 0.52f)
+                                    lineTo(w * 0.08f, h * 0.06f)
+                                    close()
+                                }
+                                drawPath(
+                                    path = path,
+                                    color = inkColor.copy(alpha = 0.8f),
+                                    style = Stroke(width = strokeWidth)
+                                )
+                            }
+                            else -> { // GLOBETROTTER (Foil Golden Double Ring)
+                                drawCircle(
+                                    color = inkColor.copy(alpha = 0.9f),
+                                    radius = w * 0.48f,
+                                    style = Stroke(width = strokeWidth)
+                                )
+                                drawCircle(
+                                    color = inkColor.copy(alpha = 0.9f),
+                                    radius = w * 0.43f,
+                                    style = Stroke(width = 2.dp.toPx())
+                                )
+                                // Surrounding dots
+                                val count = 20
+                                for (i in 0 until count) {
+                                    val rad = Math.toRadians((i * (360.0 / count)))
+                                    val dotPt = Offset(
+                                        center.x + (w * 0.38f) * kotlin.math.cos(rad).toFloat(),
+                                        center.y + (w * 0.38f) * kotlin.math.sin(rad).toFloat()
+                                    )
+                                    drawCircle(
+                                        color = inkColor.copy(alpha = 0.8f),
+                                        radius = 3.dp.toPx(),
+                                        center = dotPt
+                                    )
+                                }
+                            }
+                        }
+
+                        // Draw Large Destination IATA in Center
+                        val iataResult = textMeasurer.measure(
+                            text = destIata,
+                            style = TextStyle(
+                                color = inkColor.copy(alpha = 0.9f),
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 48.sp,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        )
+                        drawText(
+                            textLayoutResult = iataResult,
+                            // Lowered the Airport Code by adding an 8.dp offset downwards
+                            topLeft = Offset(
+                                center.x - iataResult.size.width / 2f,
+                                center.y - iataResult.size.height / 2f + 8.dp.toPx()
+                            )
+                        )
+
+                        // Draw Stamp Date above IATA
+                        val dateResult = textMeasurer.measure(
+                            text = currentDateStr,
+                            style = TextStyle(
+                                color = inkColor.copy(alpha = 0.6f),
+                                fontSize = 12.sp,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        )
+                        drawText(
+                            textLayoutResult = dateResult,
+                            // Shifted slightly down to match
+                            topLeft = Offset(
+                                center.x - dateResult.size.width / 2f,
+                                center.y - 36.dp.toPx()
+                            )
+                        )
+
+                        // Draw Earned Rank below IATA
+                        val rankResult = textMeasurer.measure(
+                            text = rank,
+                            style = TextStyle(
+                                color = inkColor.copy(alpha = 0.8f),
+                                fontWeight = FontWeight.Black,
+                                fontSize = 14.sp,
+                                fontFamily = FontFamily.SansSerif,
+                                letterSpacing = 2.sp
+                            )
+                        )
+                        drawText(
+                            textLayoutResult = rankResult,
+                            // Shifted slightly down to match
+                            topLeft = Offset(
+                                center.x - rankResult.size.width / 2f,
+                                center.y + 40.dp.toPx()
+                            )
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(40.dp))
+
+                // Monospaced Flight Telemetry Receipt Card
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(DeepNavy.copy(alpha = 0.8f), RoundedCornerShape(16.dp))
+                        .border(1.dp, inkColor.copy(alpha = 0.3f), RoundedCornerShape(16.dp))
+                        .padding(vertical = 28.dp, horizontal = 16.dp)
+                        .graphicsLayer { alpha = stampAlpha },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    val hours = durationMin / 60
+                    val mins = durationMin % 60
+                    val timeString = "${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}"
+                    
+                    Text(
+                        text = timeString,
+                        style = MaterialTheme.typography.displayLarge.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            letterSpacing = 2.sp
+                        ),
+                        color = Haze
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(Spacing.Large))
