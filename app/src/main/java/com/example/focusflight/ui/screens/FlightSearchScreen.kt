@@ -867,6 +867,7 @@ fun AirportSearchPanel(
                                     code = r.destIata,
                                     city = r.destMunicipality,
                                     name = r.destName,
+                                    durationMin = r.flightTimeMin,
                                     isSelected = isSelected,
                                     onClick = { onRouteSelect(r) }
                                 )
@@ -878,6 +879,7 @@ fun AirportSearchPanel(
                                     code = r.destIata,
                                     city = r.destMunicipality,
                                     name = r.destName,
+                                    durationMin = r.flightTimeMin,
                                     isSelected = isSelected,
                                     onClick = { onRouteSelect(r) }
                                 )
@@ -891,6 +893,7 @@ fun AirportSearchPanel(
                                 code = r.destIata,
                                 city = r.destMunicipality,
                                 name = r.destName,
+                                durationMin = r.flightTimeMin,
                                 isSelected = isSelected,
                                 onClick = { onRouteSelect(r) }
                             )
@@ -909,6 +912,7 @@ fun AirportSearchPanel(
                                     code = r.destIata,
                                     city = r.destMunicipality,
                                     name = r.destName,
+                                    durationMin = r.flightTimeMin,
                                     isSelected = isSelected,
                                     onClick = { onRouteSelect(r) }
                                 )
@@ -920,6 +924,7 @@ fun AirportSearchPanel(
                                     code = r.destIata,
                                     city = r.destMunicipality,
                                     name = r.destName,
+                                    durationMin = r.flightTimeMin,
                                     isSelected = isSelected,
                                     onClick = { onRouteSelect(r) }
                                 )
@@ -937,6 +942,7 @@ fun AirportSearchPanel(
                                     code = r.destIata,
                                     city = r.destMunicipality,
                                     name = r.destName,
+                                    durationMin = r.flightTimeMin,
                                     isSelected = isSelected,
                                     onClick = { onRouteSelect(r) }
                                 )
@@ -1024,9 +1030,14 @@ private fun SuggestionTile(
     code: String,
     city: String,
     name: String,
+    durationMin: Int,
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
+    val hrs = durationMin / 60
+    val mins = durationMin % 60
+    val timeStr = "%02d:%02d".format(hrs, mins)
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1040,27 +1051,42 @@ private fun SuggestionTile(
             .padding(Spacing.Medium),
         horizontalAlignment = Alignment.Start
     ) {
-        Box(
-            modifier = Modifier
-                .size(width = 46.dp, height = 28.dp)
-                .border(
-                    width = 1.dp,
-                    color = Color.White.copy(alpha = 0.15f),
-                    shape = RoundedCornerShape(6.dp)
-                )
-                .background(
-                    color = Midnight,
-                    shape = RoundedCornerShape(6.dp)
-                ),
-            contentAlignment = Alignment.Center
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
+            Box(
+                modifier = Modifier
+                    .size(width = 46.dp, height = 28.dp)
+                    .border(
+                        width = 1.dp,
+                        color = Color.White.copy(alpha = 0.15f),
+                        shape = RoundedCornerShape(6.dp)
+                    )
+                    .background(
+                        color = Midnight,
+                        shape = RoundedCornerShape(6.dp)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = code,
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontFamily = FontFamily.SansSerif,
+                        fontWeight = FontWeight.Bold
+                    ),
+                    color = OffWhite
+                )
+            }
+
             Text(
-                text = code,
-                style = MaterialTheme.typography.bodyMedium.copy(
-                    fontFamily = FontFamily.SansSerif,
-                    fontWeight = FontWeight.Bold
+                text = timeStr,
+                style = MaterialTheme.typography.bodySmall.copy(
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.SemiBold
                 ),
-                color = OffWhite
+                color = if (isSelected) Amber else OffWhite
             )
         }
 
