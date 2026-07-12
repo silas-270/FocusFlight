@@ -126,7 +126,7 @@ fun FlightSearchScreen(
         viewModel.resetState()
     }
 
-    Box(modifier = Modifier.fillMaxSize().background(DeepNavy)) {
+    Box(modifier = Modifier.fillMaxSize().background(Midnight)) {
         // Main Screen Column
         Column(
             modifier = Modifier
@@ -146,7 +146,7 @@ fun FlightSearchScreen(
                     onClick = onBackClick,
                     modifier = Modifier
                         .size(40.dp)
-                        .background(Midnight.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+                        .background(DeepNavy.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
                         .border(1.dp, Border, RoundedCornerShape(12.dp))
                 ) {
                     Icon(
@@ -170,7 +170,7 @@ fun FlightSearchScreen(
                     onClick = { viewModel.toggleSearchMode() },
                     modifier = Modifier
                         .size(40.dp)
-                        .background(Midnight.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+                        .background(DeepNavy.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
                         .border(1.dp, Border, RoundedCornerShape(12.dp))
                 ) {
                     Icon(
@@ -296,7 +296,7 @@ fun FlightSearchScreen(
                                     .padding(horizontal = 64.dp)
                                     .fillMaxWidth()
                                     .aspectRatio(1.0f)
-                                    .background(Midnight.copy(alpha = 0.35f), RoundedCornerShape(20.dp))
+                                    .background(DeepNavy.copy(alpha = 0.6f), RoundedCornerShape(20.dp))
                                     .border(1.dp, Border, RoundedCornerShape(20.dp))
                                     .padding(24.dp),
                                 contentAlignment = Alignment.Center
@@ -385,7 +385,7 @@ fun TimelineSlider(
         modifier = modifier
             .fillMaxWidth()
             .height(96.dp)
-            .background(Midnight.copy(alpha = 0.35f), RoundedCornerShape(20.dp))
+            .background(DeepNavy.copy(alpha = 0.6f), RoundedCornerShape(20.dp))
             .padding(top = 8.dp, bottom = 12.dp)
     ) {
         val containerWidth = maxWidth
@@ -513,7 +513,7 @@ fun SelectionCard(route: FlightRoute, isSelected: Boolean, onClick: () -> Unit) 
             }
             .fillMaxWidth()
             .aspectRatio(1.0f) // Square aspect ratio
-            .background(Midnight.copy(alpha = 0.35f), RoundedCornerShape(20.dp))
+            .background(DeepNavy.copy(alpha = 0.6f), RoundedCornerShape(20.dp))
             .then(
                 if (isSelected) Modifier.border(1.5.dp, OffWhite, RoundedCornerShape(20.dp))
                 else Modifier.border(1.dp, Border, RoundedCornerShape(20.dp))
@@ -655,7 +655,7 @@ fun RouteMap(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
-            .background(Midnight.copy(alpha = 0.35f))
+            .background(DeepNavy.copy(alpha = 0.6f))
     ) {
         Image(
             painter = painterResource(R.drawable.ic_world_map),
@@ -1000,7 +1000,7 @@ fun AirportSearchPanel(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(if (isSelected) Slate.copy(alpha = 0.4f) else Midnight.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+                            .background(if (isSelected) Slate.copy(alpha = 0.4f) else DeepNavy.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
                             .border(1.dp, if (isSelected) Amber else Border.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
                             .clickable { onRouteSelect(route) }
                             .padding(horizontal = Spacing.Medium, vertical = Spacing.Small),
@@ -1057,7 +1057,7 @@ private fun SuggestionTile(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(Midnight.copy(alpha = 0.6f))
+            .background(DeepNavy)
             .then(
                 if (isSelected) Modifier.border(1.5.dp, Amber, RoundedCornerShape(16.dp))
                 else Modifier.border(1.dp, Border, RoundedCornerShape(16.dp))

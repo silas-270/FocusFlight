@@ -65,7 +65,7 @@ fun HubScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(DeepNavy)
+            .background(Midnight)
     ) {
         // Background Globe image
         Box(
@@ -130,7 +130,7 @@ fun HubScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(
-                        color = Midnight,
+                        color = DeepNavy,
                         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
                     )
                     .padding(Spacing.Large)
