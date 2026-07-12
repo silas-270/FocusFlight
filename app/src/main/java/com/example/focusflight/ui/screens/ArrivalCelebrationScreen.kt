@@ -81,13 +81,13 @@ fun ArrivalCelebrationScreen(
             planeOffsetY.animateTo(
                 targetValue = -screenHeightPx * 0.7f,
                 animationSpec = tween(
-                    durationMillis = 1500,
+                    durationMillis = 750,
                     easing = CubicBezierEasing(0.15f, 0.55f, 0.3f, 1.0f) // Slower starting speed, smoother deceleration
                 )
             )
         }
 
-        delay(1500) // Wait for plane to exit (1.5 seconds)
+        delay(750) // Wait for plane to exit (750ms)
         stampLanded = true
         // Massive Haptic touchdown feedback
         try {
