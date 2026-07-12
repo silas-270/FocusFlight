@@ -110,6 +110,7 @@ class OnboardingViewModel(
                 )
                 if (success && outFile.exists()) {
                     android.util.Log.d("OnboardingViewModel", "Pre-rendered onboarding map for ${airport.iataCode} to ${outFile.absolutePath}")
+                    CacheUtils.pruneMapCache(cacheDir)
                 }
             } catch (e: Exception) {
                 android.util.Log.e("OnboardingViewModel", "Error pre-rendering onboarding map", e)

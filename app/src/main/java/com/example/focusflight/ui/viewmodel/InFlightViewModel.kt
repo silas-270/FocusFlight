@@ -184,6 +184,7 @@ class InFlightViewModel(
                 )
                 if (success && outFile.exists()) {
                     android.util.Log.d("InFlightViewModel", "Pre-rendering succeeded: ${outFile.absolutePath}")
+                    CacheUtils.pruneMapCache(cacheDir)
                 } else {
                     android.util.Log.e("InFlightViewModel", "Pre-rendering failed.")
                 }
