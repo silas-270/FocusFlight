@@ -114,6 +114,7 @@ fun FlightSearchScreen(
 ) {
     val intervals by viewModel.intervals.collectAsState()
     val selectedInterval by viewModel.selectedInterval.collectAsState()
+    val allRoutes by viewModel.allRoutes.collectAsState()
     val filteredRoutes by viewModel.filteredRoutes.collectAsState()
     val selectedRoute by viewModel.selectedRoute.collectAsState()
     val originAirport by viewModel.originAirport.collectAsState()
@@ -318,7 +319,7 @@ fun FlightSearchScreen(
                     AirportSearchPanel(
                         query = airportSearchQuery,
                         onQueryChange = { viewModel.onAirportSearchQueryChanged(it) },
-                        results = airportSearchResults,
+                        results = if (airportSearchQuery.isEmpty()) allRoutes else airportSearchResults,
                         selectedRoute = selectedRoute,
                         onRouteSelect = { viewModel.selectRoute(it) },
                         modifier = Modifier
@@ -829,18 +830,109 @@ fun AirportSearchPanel(
         Spacer(modifier = Modifier.height(Spacing.Medium))
 
         if (query.trim().isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                contentAlignment = Alignment.Center
-            ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
                 Text(
-                    text = "Type destination airport code (IATA) or city name",
-                    color = Haze,
-                    style = MaterialTheme.typography.bodyMedium,
-                    textAlign = TextAlign.Center
+                    text = "SUGGESTED DESTINATIONS",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp
+                    ),
+                    color = Haze
                 )
+                Spacer(modifier = Modifier.height(Spacing.Medium))
+
+                val suggestions = remember(results) {
+                    val popularIatas = listOf("FRA", "LHR", "BER", "MUC", "CDG", "JFK", "DXB", "AMS", "SIN", "HND")
+                    val matching = results.filter { popularIatas.contains(it.destIata) }
+                    if (matching.isNotEmpty()) {
+                        matching.take(4)
+                    } else {
+                        results.take(4)
+                    }
+                }
+
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.Medium)
+                ) {
+                    if (suggestions.size >= 2) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(Spacing.Medium)
+                        ) {
+                            Box(modifier = Modifier.weight(1f)) {
+                                val r = suggestions[0]
+                                SuggestionTile(
+                                    code = r.destIata,
+                                    city = r.destMunicipality,
+                                    name = r.destName,
+                                    onClick = { onRouteSelect(r) }
+                                )
+                            }
+                            Box(modifier = Modifier.weight(1f)) {
+                                val r = suggestions[1]
+                                SuggestionTile(
+                                    code = r.destIata,
+                                    city = r.destMunicipality,
+                                    name = r.destName,
+                                    onClick = { onRouteSelect(r) }
+                                )
+                            }
+                        }
+                    } else if (suggestions.size == 1) {
+                        Box(modifier = Modifier.fillMaxWidth(0.5f)) {
+                            val r = suggestions[0]
+                            SuggestionTile(
+                                code = r.destIata,
+                                city = r.destMunicipality,
+                                name = r.destName,
+                                onClick = { onRouteSelect(r) }
+                            )
+                        }
+                    }
+
+                    if (suggestions.size >= 4) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(Spacing.Medium)
+                        ) {
+                            Box(modifier = Modifier.weight(1f)) {
+                                val r = suggestions[2]
+                                SuggestionTile(
+                                    code = r.destIata,
+                                    city = r.destMunicipality,
+                                    name = r.destName,
+                                    onClick = { onRouteSelect(r) }
+                                )
+                            }
+                            Box(modifier = Modifier.weight(1f)) {
+                                val r = suggestions[3]
+                                SuggestionTile(
+                                    code = r.destIata,
+                                    city = r.destMunicipality,
+                                    name = r.destName,
+                                    onClick = { onRouteSelect(r) }
+                                )
+                            }
+                        }
+                    } else if (suggestions.size == 3) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(Spacing.Medium)
+                        ) {
+                            Box(modifier = Modifier.weight(1f)) {
+                                val r = suggestions[2]
+                                SuggestionTile(
+                                    code = r.destIata,
+                                    city = r.destMunicipality,
+                                    name = r.destName,
+                                    onClick = { onRouteSelect(r) }
+                                )
+                            }
+                            Spacer(modifier = Modifier.weight(1f))
+                        }
+                    }
+                }
             }
         } else if (results.isEmpty()) {
             Box(
@@ -912,5 +1004,69 @@ fun AirportSearchPanel(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun SuggestionTile(
+    code: String,
+    city: String,
+    name: String,
+    onClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(Midnight.copy(alpha = 0.6f))
+            .border(
+                width = 1.dp,
+                color = Color.White.copy(alpha = 0.08f),
+                shape = RoundedCornerShape(16.dp)
+            )
+            .clickable(onClick = onClick)
+            .padding(Spacing.Medium),
+        horizontalAlignment = Alignment.Start
+    ) {
+        Box(
+            modifier = Modifier
+                .size(width = 46.dp, height = 28.dp)
+                .border(
+                    width = 1.dp,
+                    color = Color.White.copy(alpha = 0.15f),
+                    shape = RoundedCornerShape(6.dp)
+                )
+                .background(
+                    color = Midnight,
+                    shape = RoundedCornerShape(6.dp)
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = code,
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontFamily = FontFamily.SansSerif,
+                    fontWeight = FontWeight.Bold
+                ),
+                color = OffWhite
+            )
+        }
+
+        Spacer(modifier = Modifier.height(Spacing.Medium))
+
+        Text(
+            text = city,
+            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+            color = OffWhite,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            text = name,
+            style = MaterialTheme.typography.bodySmall,
+            color = Haze,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
