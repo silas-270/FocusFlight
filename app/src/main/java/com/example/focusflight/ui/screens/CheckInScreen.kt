@@ -116,8 +116,8 @@ fun CheckInScreen(
                     onClick = onBackClick,
                     modifier = Modifier
                         .size(40.dp)
-                        .background(DeepNavy.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
-                        .border(1.dp, Border, RoundedCornerShape(8.dp))
+                        .background(Midnight.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+                        .border(1.dp, Border, RoundedCornerShape(12.dp))
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
@@ -125,17 +125,16 @@ fun CheckInScreen(
                         tint = OffWhite
                     )
                 }
-                
-                Spacer(modifier = Modifier.weight(1f))
-                
+                Spacer(modifier = Modifier.width(Spacing.Medium))
                 Text(
                     text = "CHECK-IN",
-                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                    color = Amber,
-                    letterSpacing = 2.sp
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 2.sp,
+                        color = OffWhite,
+                        fontFamily = FontFamily.SansSerif
+                    )
                 )
-                
-                Spacer(modifier = Modifier.width(40.dp)) // Visual balance for back button
             }
 
             Spacer(modifier = Modifier.height(32.dp))
@@ -423,20 +422,6 @@ fun CheckInScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(Spacing.Medium))
-
-            // Cancel Booking
-            Text(
-                text = "Cancel Booking",
-                style = MaterialTheme.typography.bodyMedium.copy(
-                    fontWeight = FontWeight.Medium,
-                    letterSpacing = 0.5.sp
-                ),
-                color = Haze,
-                modifier = Modifier
-                    .clickable(onClick = onBackClick)
-                    .padding(vertical = Spacing.Small)
-            )
         }
     }
 }
