@@ -6,7 +6,6 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.focusflight.data.model.Airport
 import com.example.focusflight.data.model.FlightRoute
-import com.example.focusflight.data.repository.CesiumRSLibrary
 import com.example.focusflight.data.repository.FlightDatabaseHelper
 import com.example.focusflight.data.repository.PreferencesRepository
 import kotlinx.coroutines.Dispatchers
@@ -14,34 +13,29 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import java.io.File
 
 class FlightSearchViewModel(
     private val databaseHelper: FlightDatabaseHelper,
-    private val preferencesRepository: PreferencesRepository,
-    private val cacheDir: File
+    private val preferencesRepository: PreferencesRepository
 ) : ViewModel() {
 
     private val _originAirport = MutableStateFlow<Airport?>(null)
     val originAirport: StateFlow<Airport?> = _originAirport.asStateFlow()
 
-    private val _searchQuery = MutableStateFlow("")
-    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+    private val _allRoutes = MutableStateFlow<List<FlightRoute>>(emptyList())
+    val allRoutes: StateFlow<List<FlightRoute>> = _allRoutes.asStateFlow()
 
-    private val _selectedSort = MutableStateFlow("Popular") // Default sort
-    val selectedSort: StateFlow<String> = _selectedSort.asStateFlow()
+    private val _intervals = MutableStateFlow<List<Int>>(emptyList())
+    val intervals: StateFlow<List<Int>> = _intervals.asStateFlow()
 
-    private val _routes = MutableStateFlow<List<FlightRoute>>(emptyList())
-    val routes: StateFlow<List<FlightRoute>> = _routes.asStateFlow()
+    private val _selectedInterval = MutableStateFlow<Int>(0)
+    val selectedInterval: StateFlow<Int> = _selectedInterval.asStateFlow()
+
+    private val _filteredRoutes = MutableStateFlow<List<FlightRoute>>(emptyList())
+    val filteredRoutes: StateFlow<List<FlightRoute>> = _filteredRoutes.asStateFlow()
 
     private val _selectedRoute = MutableStateFlow<FlightRoute?>(null)
     val selectedRoute: StateFlow<FlightRoute?> = _selectedRoute.asStateFlow()
-
-    private val _routeMapPath = MutableStateFlow<String?>(null)
-    val routeMapPath: StateFlow<String?> = _routeMapPath.asStateFlow()
-
-    private val _isRendering = MutableStateFlow(false)
-    val isRendering: StateFlow<Boolean> = _isRendering.asStateFlow()
 
     init {
         loadOrigin()
@@ -50,95 +44,74 @@ class FlightSearchViewModel(
     private fun loadOrigin() {
         viewModelScope.launch(Dispatchers.IO) {
             val baseIata = preferencesRepository.getCurrentAirport()
+            Log.d("FlightSearchViewModel", "loadOrigin: baseIata=$baseIata")
             if (baseIata != null) {
                 val airport = databaseHelper.getAirportByIata(baseIata)
+                Log.d("FlightSearchViewModel", "loadOrigin: airport=${airport?.iataCode}")
                 _originAirport.value = airport
                 fetchRoutes()
             }
         }
     }
 
-    fun onSearchQueryChanged(query: String) {
-        _searchQuery.value = query
-        fetchRoutes()
-    }
-
-    fun onSortChanged(sort: String) {
-        _selectedSort.value = sort
-        fetchRoutes()
-    }
-
     fun selectRoute(route: FlightRoute?) {
         _selectedRoute.value = route
-        generateRouteMap(route)
+    }
+
+    fun selectInterval(interval: Int) {
+        _selectedInterval.value = interval
+        val filtered = _allRoutes.value.filter { it.flightTimeMin in interval..(interval + 9) }
+        _filteredRoutes.value = filtered
+        
+        // Auto-select the first route in the new interval if available
+        if (filtered.isNotEmpty()) {
+            selectRoute(filtered.first())
+        } else {
+            selectRoute(null)
+        }
     }
 
     private fun fetchRoutes() {
         val origin = _originAirport.value ?: return
         viewModelScope.launch(Dispatchers.IO) {
-            val fetched = databaseHelper.getOutboundRoutes(
+            var fetched = databaseHelper.getOutboundRoutes(
                 originIata = origin.iataCode,
-                searchQuery = _searchQuery.value,
-                sortBy = _selectedSort.value
+                searchQuery = "",
+                sortBy = "Shortest"
             )
-            _routes.value = fetched
-            // Determine selected route
-            val currentSelected = _selectedRoute.value
-            if (currentSelected == null && fetched.isNotEmpty()) {
-                selectRoute(fetched.first())
-            } else if (fetched.isEmpty()) {
-                selectRoute(null)
-            } else if (currentSelected != null) {
-                val stillExists = fetched.find { it.destIata == currentSelected.destIata }
-                if (stillExists == null) {
-                    selectRoute(fetched.first())
-                } else {
-                    // Update reference in case distance/time/etc changed (unlikely, but clean)
-                    _selectedRoute.value = stillExists
+            if (fetched.isEmpty()) {
+                // Fallback to LHR if user's airport has no routes so the UI isn't empty
+                val fallbackAirport = databaseHelper.getAirportByIata("LHR")
+                if (fallbackAirport != null) {
+                    _originAirport.value = fallbackAirport
+                    fetched = databaseHelper.getOutboundRoutes(
+                        originIata = "LHR",
+                        searchQuery = "",
+                        sortBy = "Shortest"
+                    )
                 }
             }
-        }
-    }
+            Log.d("FlightSearchViewModel", "fetchRoutes: fetched ${fetched.size} routes for origin ${_originAirport.value?.iataCode}")
+            _allRoutes.value = fetched
 
-    private fun generateRouteMap(selected: FlightRoute?) {
-        val origin = _originAirport.value ?: return
-        viewModelScope.launch(Dispatchers.IO) {
-            _isRendering.value = true
-            try {
-                val routesData = if (selected != null) {
-                    listOf(Pair(Pair(origin.lat, origin.lon), Pair(selected.destLat, selected.destLon)))
-                } else {
-                    emptyList()
+            if (fetched.isNotEmpty()) {
+                val shortest = fetched.first().flightTimeMin
+                val longest = fetched.maxOf { it.flightTimeMin }
+                val startInterval = (shortest / 10) * 10
+                val endInterval = (longest / 10) * 10
+                val generatedIntervals = (startInterval..endInterval step 10).filter { interval ->
+                    fetched.any { it.flightTimeMin in interval..(interval + 9) }
                 }
-
-                if (routesData.isEmpty()) {
-                    _routeMapPath.value = null
-                    return@launch
+                _intervals.value = generatedIntervals
+                
+                // Initialize selection with the first available interval (shortest route)
+                if (generatedIntervals.isNotEmpty()) {
+                    selectInterval(generatedIntervals.first())
                 }
-
-                val outFile = File(cacheDir, "search_route_map.png")
-                if (outFile.exists()) {
-                    outFile.delete()
-                }
-
-                Log.d("FlightSearchViewModel", "Triggering route rendering for selected route to ${selected?.destIata}...")
-                val success = CesiumRSLibrary.renderRoutes(
-                    width = 1080,
-                    height = 1320,
-                    routesData = routesData,
-                    outPath = outFile.absolutePath
-                )
-
-                if (success && outFile.exists()) {
-                    _routeMapPath.value = outFile.absolutePath
-                } else {
-                    _routeMapPath.value = null
-                }
-            } catch (t: Throwable) {
-                Log.e("FlightSearchViewModel", "Error in route rendering", t)
-                _routeMapPath.value = null
-            } finally {
-                _isRendering.value = false
+            } else {
+                _intervals.value = emptyList()
+                _filteredRoutes.value = emptyList()
+                selectRoute(null)
             }
         }
     }
@@ -146,13 +119,12 @@ class FlightSearchViewModel(
 
 class FlightSearchViewModelFactory(
     private val databaseHelper: FlightDatabaseHelper,
-    private val preferencesRepository: PreferencesRepository,
-    private val cacheDir: File
+    private val preferencesRepository: PreferencesRepository
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(FlightSearchViewModel::class.java)) {
-            return FlightSearchViewModel(databaseHelper, preferencesRepository, cacheDir) as T
+            return FlightSearchViewModel(databaseHelper, preferencesRepository) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }
