@@ -104,7 +104,7 @@ fun CheckInScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .windowInsetsPadding(WindowInsets.statusBars)
-                .padding(horizontal = Spacing.Large, vertical = Spacing.Medium),
+                .padding(start = Spacing.Large, top = Spacing.Medium, end = Spacing.Large, bottom = Spacing.Large),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Header Row
