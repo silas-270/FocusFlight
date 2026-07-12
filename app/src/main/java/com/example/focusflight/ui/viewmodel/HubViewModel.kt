@@ -67,6 +67,14 @@ class HubViewModel(
 
     private fun generateRouteMap(origin: Airport) {
         viewModelScope.launch(Dispatchers.IO) {
+            val outFile = File(cacheDir, "hub_route_map_${origin.iataCode}.png")
+            // Check if pre-rendered or cached image is present
+            if (outFile.exists() && outFile.length() > 0) {
+                Log.d("HubViewModel", "Cached route map found for ${origin.iataCode}. Loading instantly: ${outFile.absolutePath}")
+                _routeMapPath.value = outFile.absolutePath
+                return@launch
+            }
+
             _isRendering.value = true
             try {
                 // Fetch 12 random destination airports for routes display
@@ -75,7 +83,6 @@ class HubViewModel(
                     Pair(Pair(origin.lat, origin.lon), Pair(dest.lat, dest.lon))
                 }
 
-                val outFile = File(cacheDir, "hub_route_map.png")
                 if (outFile.exists()) {
                     outFile.delete()
                 }
