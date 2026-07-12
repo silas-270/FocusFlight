@@ -118,7 +118,7 @@ class CesiumActivity : ComponentActivity() {
 
                         composable(Screen.FlightSearch.route) {
                             val viewModel: FlightSearchViewModel by viewModels {
-                                FlightSearchViewModelFactory(databaseHelper, preferencesRepository, cacheDir)
+                                FlightSearchViewModelFactory(databaseHelper, preferencesRepository)
                             }
                             FlightSearchScreen(
                                 viewModel = viewModel,

@@ -57,7 +57,13 @@ class FlightDatabaseHelper(private val context: Context) {
                 WHEN iata_code LIKE ? THEN 2
                 WHEN municipality LIKE ? THEN 3
                 ELSE 4 
-              END, name ASC
+              END,
+              CASE 
+                WHEN type = 'large_airport' THEN 1
+                WHEN type = 'medium_airport' THEN 2
+                ELSE 3
+              END,
+              name ASC
             LIMIT 15
         """.trimIndent()
         val cleanQuery = "%${query.trim()}%"
@@ -233,8 +239,6 @@ class FlightDatabaseHelper(private val context: Context) {
             "Popular" -> " ORDER BY (LENGTH(r.carriers) - LENGTH(REPLACE(r.carriers, ',', '')) + 1) DESC, r.flight_time_min ASC"
             else -> " ORDER BY r.dest_iata ASC"
         }
-
-        sql += " LIMIT 30"
 
         try {
             db.rawQuery(sql, selectionArgs.toTypedArray()).use { cursor ->
