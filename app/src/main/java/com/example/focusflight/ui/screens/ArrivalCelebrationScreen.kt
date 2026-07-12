@@ -87,7 +87,7 @@ fun ArrivalCelebrationScreen(
             )
         }
 
-        delay(400) // Build anticipation for the stamp
+        delay(1500) // Wait for plane to exit (1.5 seconds)
         stampLanded = true
         // Massive Haptic touchdown feedback
         try {
@@ -342,7 +342,7 @@ fun ArrivalCelebrationScreen(
         Icon(
             imageVector = Icons.Default.Flight,
             contentDescription = null,
-            tint = Amber,
+            tint = Amber.copy(alpha = 0.25f),
             modifier = Modifier
                 .fillMaxWidth(0.75f)
                 .aspectRatio(1f)
