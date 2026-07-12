@@ -7,4 +7,8 @@ sealed class Screen(val route: String) {
     object CheckIn : Screen("check_in/{destIata}") {
         fun createRoute(destIata: String) = "check_in/$destIata"
     }
+    object InFlight : Screen("in_flight/{flightNo}/{destIata}/{durationMin}") {
+        fun createRoute(flightNo: String, destIata: String, durationMin: Int) =
+            "in_flight/$flightNo/$destIata/$durationMin"
+    }
 }
