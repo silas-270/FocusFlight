@@ -536,13 +536,13 @@ fun SelectionCard(route: FlightRoute, isSelected: Boolean, onClick: () -> Unit) 
                 Icon(
                     imageVector = Icons.Outlined.FlightTakeoff,
                     contentDescription = null,
-                    tint = Color.Black,
+                    tint = Midnight,
                     modifier = Modifier.size(20.dp).rotate(-15f)
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
                     text = route.destIata.uppercase(),
-                    color = Color.Black,
+                    color = Midnight,
                     fontFamily = FontFamily.SansSerif,
                     fontWeight = FontWeight.Black,
                     fontSize = 18.sp
@@ -1060,7 +1060,7 @@ private fun SuggestionTile(
             .background(Midnight.copy(alpha = 0.6f))
             .then(
                 if (isSelected) Modifier.border(1.5.dp, Amber, RoundedCornerShape(16.dp))
-                else Modifier.border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(16.dp))
+                else Modifier.border(1.dp, Border, RoundedCornerShape(16.dp))
             )
             .clickable(onClick = onClick)
             .padding(Spacing.Medium),
@@ -1076,7 +1076,7 @@ private fun SuggestionTile(
                     .size(width = 46.dp, height = 28.dp)
                     .border(
                         width = 1.dp,
-                        color = Color.White.copy(alpha = 0.15f),
+                        color = Border,
                         shape = RoundedCornerShape(6.dp)
                     )
                     .background(
