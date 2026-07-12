@@ -14,6 +14,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
+enum class SearchMode { TIME, AIRPORT }
+
 class FlightSearchViewModel(
     private val databaseHelper: FlightDatabaseHelper,
     private val preferencesRepository: PreferencesRepository
@@ -36,6 +38,15 @@ class FlightSearchViewModel(
 
     private val _selectedRoute = MutableStateFlow<FlightRoute?>(null)
     val selectedRoute: StateFlow<FlightRoute?> = _selectedRoute.asStateFlow()
+
+    private val _searchMode = MutableStateFlow(SearchMode.TIME)
+    val searchMode: StateFlow<SearchMode> = _searchMode.asStateFlow()
+
+    private val _airportSearchQuery = MutableStateFlow("")
+    val airportSearchQuery: StateFlow<String> = _airportSearchQuery.asStateFlow()
+
+    private val _airportSearchResults = MutableStateFlow<List<FlightRoute>>(emptyList())
+    val airportSearchResults: StateFlow<List<FlightRoute>> = _airportSearchResults.asStateFlow()
 
     init {
         loadOrigin()
@@ -68,6 +79,36 @@ class FlightSearchViewModel(
             selectRoute(filtered.first())
         } else {
             selectRoute(null)
+        }
+    }
+
+    fun toggleSearchMode() {
+        val nextMode = if (_searchMode.value == SearchMode.TIME) SearchMode.AIRPORT else SearchMode.TIME
+        _searchMode.value = nextMode
+        if (nextMode == SearchMode.TIME) {
+            _airportSearchQuery.value = ""
+            _airportSearchResults.value = emptyList()
+            if (_selectedInterval.value > 0) {
+                selectInterval(_selectedInterval.value)
+            } else if (_intervals.value.isNotEmpty()) {
+                selectInterval(_intervals.value.first())
+            }
+        } else {
+            selectRoute(null)
+        }
+    }
+
+    fun onAirportSearchQueryChanged(query: String) {
+        _airportSearchQuery.value = query
+        if (query.trim().isNotEmpty()) {
+            val filtered = _allRoutes.value.filter { route ->
+                route.destIata.contains(query, ignoreCase = true) ||
+                route.destName.contains(query, ignoreCase = true) ||
+                route.destMunicipality.contains(query, ignoreCase = true)
+            }
+            _airportSearchResults.value = filtered
+        } else {
+            _airportSearchResults.value = emptyList()
         }
     }
 
