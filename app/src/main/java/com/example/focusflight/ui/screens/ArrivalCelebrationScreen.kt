@@ -81,7 +81,7 @@ fun ArrivalCelebrationScreen(
             planeOffsetY.animateTo(
                 targetValue = -screenHeightPx,
                 animationSpec = tween(
-                    durationMillis = 1500,
+                    durationMillis = 5000,
                     easing = EaseOutCubic // Starts very fast, gets slower towards top
                 )
             )
@@ -348,7 +348,6 @@ fun ArrivalCelebrationScreen(
                 .aspectRatio(1f)
                 .graphicsLayer {
                     translationY = planeOffsetY.value
-                    rotationZ = -45f // Make it point straight up
                 }
         )
     }
