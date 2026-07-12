@@ -193,130 +193,139 @@ fun FlightSearchScreen(
 
             Spacer(modifier = Modifier.height(Spacing.Medium))
 
-            if (searchMode == SearchMode.TIME) {
-                // 3. Timeline Slider Container (aligned to grid margin)
-                if (intervals.isNotEmpty()) {
-                    TimelineSlider(
-                        intervals = intervals,
-                        selectedInterval = selectedInterval,
-                        onIntervalSelected = { viewModel.selectInterval(it) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = Spacing.Large)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(Spacing.Large))
-
-                // 4. Carousel / Cards (or Empty State)
-                if (filteredRoutes.isNotEmpty()) {
-                    val pagerState = rememberPagerState(pageCount = { filteredRoutes.size })
-
-                    // Reset pager selection back to the first option when the filtered list changes
-                    LaunchedEffect(filteredRoutes) {
-                        pagerState.scrollToPage(0)
-                    }
-
-                    // Sync current pager selection with active selected route in ViewModel
-                    LaunchedEffect(pagerState.currentPage, filteredRoutes) {
-                        if (pagerState.currentPage < filteredRoutes.size) {
-                            viewModel.selectRoute(filteredRoutes[pagerState.currentPage])
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(390.dp) // Maintain identical bottom panel height to preserve map height exactly
+            ) {
+                if (searchMode == SearchMode.TIME) {
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        // 3. Timeline Slider Container (aligned to grid margin)
+                        if (intervals.isNotEmpty()) {
+                            TimelineSlider(
+                                intervals = intervals,
+                                selectedInterval = selectedInterval,
+                                onIntervalSelected = { viewModel.selectInterval(it) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = Spacing.Large)
+                            )
                         }
-                    }
 
-                    HorizontalPager(
-                        state = pagerState,
-                        modifier = Modifier.fillMaxWidth(),
-                        contentPadding = PaddingValues(horizontal = 64.dp),
-                        pageSpacing = 16.dp
-                    ) { page ->
-                        val route = filteredRoutes[page]
-                        val isSelected = selectedRoute?.id == route.id
-                        SelectionCard(
-                            route = route,
-                            isSelected = isSelected,
-                            onClick = {
-                                if (isSelected) onRouteConfirm(route)
+                        Spacer(modifier = Modifier.height(Spacing.Large))
+
+                        // 4. Carousel / Cards (or Empty State)
+                        if (filteredRoutes.isNotEmpty()) {
+                            val pagerState = rememberPagerState(pageCount = { filteredRoutes.size })
+
+                            // Reset pager selection back to the first option when the filtered list changes
+                            LaunchedEffect(filteredRoutes) {
+                                pagerState.scrollToPage(0)
                             }
-                        )
-                    }
 
-                    Spacer(modifier = Modifier.height(Spacing.Medium))
+                            // Sync current pager selection with active selected route in ViewModel
+                            LaunchedEffect(pagerState.currentPage, filteredRoutes) {
+                                if (pagerState.currentPage < filteredRoutes.size) {
+                                    viewModel.selectRoute(filteredRoutes[pagerState.currentPage])
+                                }
+                            }
 
-                    // 5. Pagination Indicator
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        for (i in 0 until filteredRoutes.size) {
-                            val isActive = pagerState.currentPage == i
-                            if (isActive) {
-                                Box(
-                                    modifier = Modifier
-                                        .width(24.dp)
-                                        .height(6.dp)
-                                        .background(Slate, RoundedCornerShape(50))
+                            HorizontalPager(
+                                state = pagerState,
+                                modifier = Modifier.fillMaxWidth(),
+                                contentPadding = PaddingValues(horizontal = 64.dp),
+                                pageSpacing = 16.dp
+                            ) { page ->
+                                val route = filteredRoutes[page]
+                                val isSelected = selectedRoute?.id == route.id
+                                SelectionCard(
+                                    route = route,
+                                    isSelected = isSelected,
+                                    onClick = {
+                                        if (isSelected) onRouteConfirm(route)
+                                    }
                                 )
-                            } else {
-                                Box(
-                                    modifier = Modifier
-                                        .size(6.dp)
-                                        .background(OffWhite.copy(alpha = 0.4f), CircleShape)
-                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(Spacing.Medium))
+
+                            // 5. Pagination Indicator
+                            Row(
+                                modifier = Modifier.align(Alignment.CenterHorizontally),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                for (i in 0 until filteredRoutes.size) {
+                                    val isActive = pagerState.currentPage == i
+                                    if (isActive) {
+                                        Box(
+                                            modifier = Modifier
+                                                .width(24.dp)
+                                                .height(6.dp)
+                                                .background(Slate, RoundedCornerShape(50))
+                                        )
+                                    } else {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(6.dp)
+                                                .background(OffWhite.copy(alpha = 0.4f), CircleShape)
+                                        )
+                                    }
+                                }
+                            }
+                        } else {
+                            // Empty state for current interval (matching card aspect ratio and padding)
+                            Box(
+                                modifier = Modifier
+                                    .padding(horizontal = 64.dp)
+                                    .fillMaxWidth()
+                                    .aspectRatio(1.0f)
+                                    .background(Midnight.copy(alpha = 0.35f), RoundedCornerShape(20.dp))
+                                    .border(1.dp, Border, RoundedCornerShape(20.dp))
+                                    .padding(24.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.FlightTakeoff,
+                                        contentDescription = null,
+                                        tint = Haze,
+                                        modifier = Modifier.size(48.dp).alpha(0.6f)
+                                    )
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    Text(
+                                        text = "No flights available",
+                                        color = OffWhite,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = "There are no outbound routes matching this duration. Scroll the timeline to see other durations.",
+                                        color = Haze,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
                             }
                         }
                     }
                 } else {
-                    // Empty state for current interval (matching card aspect ratio and padding)
-                    Box(
+                    // Mode B: Search by Airport Panel
+                    AirportSearchPanel(
+                        query = airportSearchQuery,
+                        onQueryChange = { viewModel.onAirportSearchQueryChanged(it) },
+                        results = airportSearchResults,
+                        selectedRoute = selectedRoute,
+                        onRouteSelect = { viewModel.selectRoute(it) },
                         modifier = Modifier
-                            .padding(horizontal = 64.dp)
-                            .fillMaxWidth()
-                            .aspectRatio(1.0f)
-                            .background(Midnight.copy(alpha = 0.35f), RoundedCornerShape(20.dp))
-                            .border(1.dp, Border, RoundedCornerShape(20.dp))
-                            .padding(24.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.FlightTakeoff,
-                                contentDescription = null,
-                                tint = Haze,
-                                modifier = Modifier.size(48.dp).alpha(0.6f)
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Text(
-                                text = "No flights available",
-                                color = OffWhite,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = "There are no outbound routes matching this duration. Scroll the timeline to see other durations.",
-                                color = Haze,
-                                style = MaterialTheme.typography.bodyMedium,
-                                textAlign = TextAlign.Center
-                            )
-                        }
-                    }
+                            .fillMaxSize()
+                            .padding(horizontal = Spacing.Large)
+                    )
                 }
-            } else {
-                // Mode B: Search by Airport Panel
-                AirportSearchPanel(
-                    query = airportSearchQuery,
-                    onQueryChange = { viewModel.onAirportSearchQueryChanged(it) },
-                    results = airportSearchResults,
-                    selectedRoute = selectedRoute,
-                    onRouteSelect = { viewModel.selectRoute(it) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = Spacing.Large)
-                )
             }
 
             Spacer(modifier = Modifier.height(Spacing.Large))
@@ -780,7 +789,6 @@ fun AirportSearchPanel(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .height(280.dp)
     ) {
         androidx.compose.material3.OutlinedTextField(
             value = query,
@@ -788,7 +796,7 @@ fun AirportSearchPanel(
             modifier = Modifier.fillMaxWidth(),
             placeholder = {
                 Text(
-                    text = "Search destination airport or city…",
+                    text = "Search airport…",
                     style = MaterialTheme.typography.bodyLarge,
                     color = Haze,
                     modifier = Modifier.padding(start = 4.dp)
