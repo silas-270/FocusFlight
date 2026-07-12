@@ -71,7 +71,9 @@ class HubViewModel(
             // Check if pre-rendered or cached image is present
             if (outFile.exists() && outFile.length() > 0) {
                 Log.d("HubViewModel", "Cached route map found for ${origin.iataCode}. Loading instantly: ${outFile.absolutePath}")
+                outFile.setLastModified(System.currentTimeMillis())
                 _routeMapPath.value = outFile.absolutePath
+                CacheUtils.pruneMapCache(cacheDir)
                 return@launch
             }
 
@@ -98,6 +100,7 @@ class HubViewModel(
                 if (success && outFile.exists()) {
                     Log.d("HubViewModel", "Route rendering succeeded: ${outFile.absolutePath}")
                     _routeMapPath.value = outFile.absolutePath
+                    CacheUtils.pruneMapCache(cacheDir)
                 } else {
                     Log.e("HubViewModel", "Route rendering failed or file not created.")
                 }
