@@ -18,4 +18,8 @@ object CesiumBridge {
     external fun nativeSetCameraMode(mode: Int)
 
     external fun nativeGetTelemetry(): DoubleArray
+
+    external fun nativeSetRenderingEnabled(enabled: Boolean)
+
+    external fun nativeLoadPendingFlight()
 }
