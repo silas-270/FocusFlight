@@ -22,18 +22,12 @@ import com.example.focusflight.data.repository.PreferencesRepository
 import com.example.focusflight.ui.Screen
 import com.example.focusflight.ui.screens.OnboardingScreen
 import com.example.focusflight.ui.screens.FlightSearchScreen
-import com.example.focusflight.ui.screens.CheckInScreen
-import com.example.focusflight.ui.screens.InFlightScreen
-import com.example.focusflight.ui.screens.ArrivalCelebrationScreen
+import com.example.focusflight.ui.viewmodel.FlightSearchViewModel
+import com.example.focusflight.ui.viewmodel.FlightSearchViewModelFactory
 import com.example.focusflight.ui.theme.FocusFlightTheme
 import com.example.focusflight.ui.viewmodel.OnboardingViewModel
 import com.example.focusflight.ui.viewmodel.OnboardingViewModelFactory
-import com.example.focusflight.ui.viewmodel.FlightSearchViewModel
-import com.example.focusflight.ui.viewmodel.FlightSearchViewModelFactory
-import com.example.focusflight.ui.viewmodel.CheckInViewModel
-import com.example.focusflight.ui.viewmodel.CheckInViewModelFactory
-import com.example.focusflight.ui.viewmodel.InFlightViewModel
-import com.example.focusflight.ui.viewmodel.InFlightViewModelFactory
+import kotlinx.coroutines.launch
 
 class CesiumActivity : ComponentActivity() {
 
@@ -124,111 +118,48 @@ class CesiumActivity : ComponentActivity() {
                             val viewModel: FlightSearchViewModel = viewModel(
                                 factory = FlightSearchViewModelFactory(databaseHelper, preferencesRepository)
                             )
+                            val context = androidx.compose.ui.platform.LocalContext.current
+                            val launcher = androidx.activity.compose.rememberLauncherForActivityResult(
+                                contract = androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+                            ) { result ->
+                                if (result.resultCode == android.app.Activity.RESULT_OK) {
+                                    navController.navigate(Screen.Hub.route) {
+                                        popUpTo(Screen.Hub.route) { inclusive = true }
+                                    }
+                                }
+                            }
+                            val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
+
                             FlightSearchScreen(
                                 viewModel = viewModel,
                                 onBackClick = {
                                     navController.popBackStack()
                                 },
                                 onRouteConfirm = { route ->
-                                    navController.navigate(Screen.CheckIn.createRoute(route.destIata))
-                                }
-                            )
-                        }
+                                    coroutineScope.launch {
+                                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                            val originIata = preferencesRepository.getCurrentAirport() ?: "STR"
+                                            val origin = databaseHelper.getAirportByIata(originIata)
+                                            val dest = databaseHelper.getAirportByIata(route.destIata)
+                                            
+                                            val flightNo = "FF-${kotlin.math.abs(route.destIata.hashCode()) % 1000 + 100}"
+                                            val durationMin = route.flightTimeMin
 
-                        composable(
-                            route = Screen.CheckIn.route,
-                            arguments = listOf(
-                                androidx.navigation.navArgument("destIata") { type = androidx.navigation.NavType.StringType }
-                            )
-                        ) { backStackEntry ->
-                            val destIata = backStackEntry.arguments?.getString("destIata") ?: ""
-                            val viewModel: CheckInViewModel = viewModel(
-                                factory = CheckInViewModelFactory(databaseHelper, preferencesRepository, destIata)
-                            )
-                            CheckInScreen(
-                                viewModel = viewModel,
-                                onBackClick = {
-                                    navController.popBackStack()
-                                },
-                                onStartFlight = { flightNumber, destination, duration ->
-                                    navController.navigate(Screen.InFlight.createRoute(flightNumber, destination, duration))
-                                }
-                            )
-                        }
+                                            if (origin != null && dest != null) {
+                                                com.example.focusflight.engine.CesiumBridge.nativeSetPendingFlight(
+                                                    origin.lon, origin.lat, dest.lon, dest.lat, (durationMin * 60 * 1000).toLong()
+                                                )
+                                            }
 
-                        composable(
-                            route = Screen.InFlight.route,
-                            arguments = listOf(
-                                androidx.navigation.navArgument("flightNo") { type = androidx.navigation.NavType.StringType },
-                                androidx.navigation.navArgument("destIata") { type = androidx.navigation.NavType.StringType },
-                                androidx.navigation.navArgument("durationMin") { type = androidx.navigation.NavType.IntType }
-                            )
-                        ) { backStackEntry ->
-                            val flightNo = backStackEntry.arguments?.getString("flightNo") ?: ""
-                            val destIata = backStackEntry.arguments?.getString("destIata") ?: ""
-                            val durationMin = backStackEntry.arguments?.getInt("durationMin") ?: 0
-
-                            val context = androidx.compose.ui.platform.LocalContext.current
-                            val launcher = androidx.activity.compose.rememberLauncherForActivityResult(
-                                contract = androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
-                            ) { result ->
-                                if (result.resultCode == android.app.Activity.RESULT_OK) {
-                                    val data = result.data
-                                    val rank = data?.getStringExtra("rank") ?: "CO-PILOT"
-                                    navController.navigate(Screen.ArrivalCelebration.createRoute(flightNo, destIata, durationMin, rank)) {
-                                        popUpTo(Screen.Hub.route) { inclusive = false }
-                                    }
-                                } else {
-                                    navController.popBackStack()
-                                }
-                            }
-
-                            androidx.compose.runtime.LaunchedEffect(Unit) {
-                                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                                    val originIata = preferencesRepository.getCurrentAirport() ?: "STR"
-                                    val origin = databaseHelper.getAirportByIata(originIata)
-                                    val dest = databaseHelper.getAirportByIata(destIata)
-                                    
-                                    if (origin != null && dest != null) {
-                                        com.example.focusflight.engine.CesiumBridge.nativeSetPendingFlight(
-                                            origin.lon, origin.lat, dest.lon, dest.lat, (durationMin * 60 * 1000).toLong()
-                                        )
-                                    }
-
-                                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                        val intent = android.content.Intent(context, CesiumGameActivity::class.java).apply {
-                                            putExtra("flightNo", flightNo)
-                                            putExtra("destIata", destIata)
-                                            putExtra("durationMin", durationMin)
+                                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                                val intent = android.content.Intent(context, CesiumGameActivity::class.java).apply {
+                                                    putExtra("flightNo", flightNo)
+                                                    putExtra("destIata", route.destIata)
+                                                    putExtra("durationMin", durationMin)
+                                                }
+                                                launcher.launch(intent)
+                                            }
                                         }
-                                        launcher.launch(intent)
-                                    }
-                                }
-                            }
-                        }
-
-                        composable(
-                            route = Screen.ArrivalCelebration.route,
-                            arguments = listOf(
-                                androidx.navigation.navArgument("flightNo") { type = androidx.navigation.NavType.StringType },
-                                androidx.navigation.navArgument("destIata") { type = androidx.navigation.NavType.StringType },
-                                androidx.navigation.navArgument("durationMin") { type = androidx.navigation.NavType.IntType },
-                                androidx.navigation.navArgument("rank") { type = androidx.navigation.NavType.StringType }
-                            )
-                        ) { backStackEntry ->
-                            val flightNo = backStackEntry.arguments?.getString("flightNo") ?: ""
-                            val destIata = backStackEntry.arguments?.getString("destIata") ?: ""
-                            val durationMin = backStackEntry.arguments?.getInt("durationMin") ?: 0
-                            val rank = backStackEntry.arguments?.getString("rank") ?: ""
-
-                            ArrivalCelebrationScreen(
-                                flightNo = flightNo,
-                                destIata = destIata,
-                                durationMin = durationMin,
-                                rank = rank,
-                                onContinue = {
-                                    navController.navigate(Screen.Hub.route) {
-                                        popUpTo(Screen.Hub.route) { inclusive = true }
                                     }
                                 }
                             )

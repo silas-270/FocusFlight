@@ -61,7 +61,7 @@ tasks.register("cargoNdkBuild") {
         targets.forEach { (rustTarget, androidAbi) ->
             println("Building Rust library for target: $rustTarget (ABI: $androidAbi)...")
             
-            val builder = ProcessBuilder(cargoBin, "ndk", "--target", rustTarget, "build", "--lib", "--release")
+            val builder = ProcessBuilder(cargoBin, "ndk", "--target", rustTarget, "build", "--lib", "--release", "--no-default-features")
             builder.directory(File(absoluteRustPath))
             
             builder.environment()["ANDROID_NDK_HOME"] = ndkDir

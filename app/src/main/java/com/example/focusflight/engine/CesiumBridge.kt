@@ -16,4 +16,6 @@ object CesiumBridge {
     external fun nativeSetProgress(progress: Double)
 
     external fun nativeSetCameraMode(mode: Int)
+
+    external fun nativeGetTelemetry(): DoubleArray
 }
