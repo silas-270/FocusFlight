@@ -1,5 +1,6 @@
 package com.example.focusflight.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -8,7 +9,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Pause
@@ -121,6 +126,12 @@ fun InFlightScreen(
     val routeDetails by viewModel.routeDetails.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
 
+    // Intercept back button during flight
+    BackHandler {
+        // Do nothing for now to prevent accidental flight abort.
+        // TODO: Show a modal asking if they really want to quit.
+    }
+
     var showSettings by remember { mutableStateOf(false) }
     var sheetExpanded by remember { mutableStateOf(false) }
     var soundEnabled by remember { mutableStateOf(false) }
@@ -173,12 +184,17 @@ fun InFlightScreen(
         sheetContainerColor = DeepNavy,
         sheetShape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
         sheetDragHandle = {
+            val density = androidx.compose.ui.platform.LocalDensity.current
             Box(
                 modifier = Modifier
                     .padding(top = 12.dp, bottom = 16.dp)
                     .width(80.dp)
                     .height(4.dp)
                     .background(Border, RoundedCornerShape(2.dp))
+                    .onGloballyPositioned { coordinates ->
+                        // The top of the sheet is the drag handle's Y minus the top padding (12dp)
+                        com.example.focusflight.CesiumGameActivity.sheetTopY = coordinates.positionInWindow().y - (12f * density.density)
+                    }
             )
         },
         sheetPeekHeight = 104.dp,
@@ -325,7 +341,10 @@ fun InFlightScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .windowInsetsPadding(WindowInsets.statusBars)
-                    .padding(horizontal = Spacing.Large, vertical = Spacing.Medium),
+                    .padding(horizontal = Spacing.Large, vertical = Spacing.Medium)
+                    .onGloballyPositioned { coordinates ->
+                        com.example.focusflight.CesiumGameActivity.topBarBottomY = coordinates.positionInWindow().y + coordinates.size.height
+                    },
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {

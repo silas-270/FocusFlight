@@ -15,19 +15,18 @@
         android:theme="@style/Theme.FocusFlight"
         android:enableOnBackInvokedCallback="true">
         <activity
-            android:name=".CesiumActivity"
+            android:name=".CesiumGameActivity"
             android:theme="@style/Theme.CesiumTheme"
-            android:configChanges="orientation|keyboardHidden|screenSize"
+            android:configChanges="orientation|screenSize|keyboardHidden"
             android:exported="true">
+            <meta-data
+                android:name="android.app.lib_name"
+                android:value="cesium_rs" />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <activity 
-            android:name=".CesiumGameActivity"
-            android:theme="@style/Theme.CesiumTheme"
-            android:configChanges="orientation|screenSize|keyboardHidden" />
     </application>
 
 </manifest>

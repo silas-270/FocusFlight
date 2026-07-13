@@ -1,5 +1,6 @@
 package com.example.focusflight.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -39,6 +40,10 @@ fun ArrivalCelebrationScreen(
     rank: String,
     onContinue: () -> Unit
 ) {
+    BackHandler {
+        onContinue()
+    }
+    
     val context = LocalContext.current
     val textMeasurer = rememberTextMeasurer()
     val configuration = LocalConfiguration.current
