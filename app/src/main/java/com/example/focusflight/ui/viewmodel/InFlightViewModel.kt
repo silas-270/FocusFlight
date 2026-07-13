@@ -57,6 +57,7 @@ class InFlightViewModel(
         val totalSec = durationMin * 60L
         _uiState.value = InFlightState(
             timeRemainingSeconds = totalSec,
+            timeElapsedMs = -3000L, // 3 second start hold
             totalDurationSeconds = totalSec
         )
         loadFlightDetails()
@@ -89,14 +90,19 @@ class InFlightViewModel(
         if (timerJob != null) return
         _uiState.update { it.copy(isRunning = true) }
         val tickDelayMs = 33L
+        var lastTickTime = android.os.SystemClock.elapsedRealtime()
         timerJob = viewModelScope.launch {
             while (true) {
                 delay(tickDelayMs)
+                val now = android.os.SystemClock.elapsedRealtime()
+                val deltaMs = now - lastTickTime
+                lastTickTime = now
+                
                 _uiState.update { state ->
-                    val newElapsedMs = state.timeElapsedMs + tickDelayMs
+                    val newElapsedMs = state.timeElapsedMs + deltaMs
                     val totalMs = state.totalDurationSeconds * 1000L
                     
-                    if (newElapsedMs >= totalMs) {
+                    if (newElapsedMs >= totalMs + 3000L) { // Added 3 second end hold
                         timerJob?.cancel()
                         timerJob = null
                         preferencesRepository.setCurrentAirport(destIata)
@@ -112,32 +118,30 @@ class InFlightViewModel(
                             isCompleted = true
                         )
                     } else {
-                        val newProgress = newElapsedMs.toFloat() / totalMs.toFloat()
+                        val displayElapsedMs = newElapsedMs.coerceIn(0L, totalMs)
+                        val newProgress = (displayElapsedMs.toFloat() / totalMs.toFloat()).coerceIn(0f, 1f)
                         com.example.focusflight.engine.CesiumBridge.nativeSetProgress(newProgress.toDouble())
 
-                        val newElapsedSec = newElapsedMs / 1000L
+                        val telemetry = com.example.focusflight.engine.CesiumBridge.nativeGetTelemetry()
+                        val newElapsedSec = displayElapsedMs / 1000L
                         val newRemainingSec = state.totalDurationSeconds - newElapsedSec
 
-                        // Linear interpolation of coordinates
-                        val origin = _originAirport.value
-                        val dest = _destAirport.value
-                        val currentLat = if (origin != null && dest != null) {
-                            origin.lat + (dest.lat - origin.lat) * newProgress
-                        } else state.currentLat
-                        val currentLon = if (origin != null && dest != null) {
-                            origin.lon + (dest.lon - origin.lon) * newProgress
-                        } else state.currentLon
+                        var currentLat = state.currentLat
+                        var currentLon = state.currentLon
+                        var currentAlt = state.altitudeMeters
+                        var currentSpeed = state.speedKmh
 
-                        // Subtle variations for flight instruments realism
-                        val speedOffset = ((newElapsedSec % 60).toInt() - 30) / 10
-                        val currentSpeed = 840 + speedOffset
-                        val altOffset = ((newElapsedSec % 120).toInt() - 60) / 10
-                        val currentAlt = 10600 + altOffset
+                        if (telemetry.size >= 8) {
+                            currentLat = telemetry[1]
+                            currentLon = telemetry[2]
+                            currentAlt = telemetry[3].toInt()
+                            currentSpeed = (telemetry[4] * 3.6).toInt() // Convert m/s to km/h
+                        }
 
                         state.copy(
                             timeRemainingSeconds = newRemainingSec,
                             timeElapsedSeconds = newElapsedSec,
-                            timeElapsedMs = newElapsedMs,
+                            timeElapsedMs = newElapsedMs, // Keep underlying timer going
                             progress = newProgress,
                             currentLat = currentLat,
                             currentLon = currentLon,

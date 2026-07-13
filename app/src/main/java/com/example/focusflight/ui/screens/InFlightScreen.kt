@@ -7,11 +7,16 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Explore
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.Flight
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -104,6 +109,7 @@ class EngineSoundManager {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun InFlightScreen(
     viewModel: InFlightViewModel,
@@ -118,6 +124,7 @@ fun InFlightScreen(
     var showSettings by remember { mutableStateOf(false) }
     var sheetExpanded by remember { mutableStateOf(false) }
     var soundEnabled by remember { mutableStateOf(false) }
+    var selectedCamera by remember { mutableStateOf(1) } // Default to CHASE
 
     val soundManager = remember { EngineSoundManager() }
 
@@ -159,214 +166,81 @@ fun InFlightScreen(
         }
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Transparent) // Make background transparent to see engine
-    ) {
-        // --- Layer 1: Background 3D Engine Placeholder / Tactical Radar ---
-        // (Removed 2D canvas, the Rust wgpu engine renders underneath this Compose layer)
+    val scaffoldState = rememberBottomSheetScaffoldState()
 
-        // --- Live Cockpit Coordinates Overlay ---
-        Column(
-            modifier = Modifier
-                .align(Alignment.CenterStart)
-                .padding(start = 24.dp, top = 100.dp)
-        ) {
-            TelemetryText("G-SPD", "${uiState.speedKmh} KM/H")
-            Spacer(modifier = Modifier.height(16.dp))
-            TelemetryText("ALT", "${uiState.altitudeMeters} M")
-        }
-
-        Column(
-            modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .padding(end = 24.dp, top = 100.dp),
-            horizontalAlignment = Alignment.End
-        ) {
-            val formattedLat = "%.4f° %s".format(kotlin.math.abs(uiState.currentLat), if (uiState.currentLat >= 0) "N" else "S")
-            val formattedLon = "%.4f° %s".format(kotlin.math.abs(uiState.currentLon), if (uiState.currentLon >= 0) "E" else "W")
-            TelemetryText("LAT", formattedLat)
-            Spacer(modifier = Modifier.height(16.dp))
-            TelemetryText("LON", formattedLon)
-        }
-
-        // --- Layer 2: Cockpit HUD Top Bar controls ---
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .windowInsetsPadding(WindowInsets.statusBars)
-                .padding(horizontal = Spacing.Large, vertical = Spacing.Medium),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Exit Flight Button
-            IconButton(
-                onClick = onExitFlight,
-                modifier = Modifier
-                    .size(40.dp)
-                    .background(DeepNavy.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
-                    .border(1.dp, Border, RoundedCornerShape(12.dp))
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
-                    contentDescription = "Abort Flight",
-                    tint = OffWhite
-                )
-            }
-
-            // Right-side controls row
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Skip Flight Button (for debugging)
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .background(DeepNavy.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
-                        .border(1.dp, Border, RoundedCornerShape(12.dp))
-                        .clickable { viewModel.skipFlight() },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = ">>",
-                        color = Amber,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace
-                    )
-                }
-
-                // Pause / Resume Focus Button
-                IconButton(
-                    onClick = {
-                        if (uiState.isRunning) {
-                            viewModel.pauseTimer()
-                        } else {
-                            viewModel.startTimer()
-                        }
-                    },
-                    modifier = Modifier
-                        .size(40.dp)
-                        .background(DeepNavy.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
-                        .border(1.dp, Border, RoundedCornerShape(12.dp))
-                ) {
-                    Icon(
-                        imageVector = if (uiState.isRunning) Icons.Outlined.Pause else Icons.Outlined.PlayArrow,
-                        contentDescription = "Pause / Resume Flight",
-                        tint = if (uiState.isRunning) OffWhite else Amber
-                    )
-                }
-
-                // Settings gear button
-                IconButton(
-                    onClick = { showSettings = true },
-                    modifier = Modifier
-                        .size(40.dp)
-                        .background(DeepNavy.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
-                        .border(1.dp, Border, RoundedCornerShape(12.dp))
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Settings,
-                        contentDescription = "Flight Instruments",
-                        tint = OffWhite
-                    )
-                }
-            }
-        }
-
-        // --- Flight Completion Navigation Trigger ---
-        LaunchedEffect(uiState.isCompleted) {
-            if (uiState.isCompleted) {
-                val durationHours = viewModel.durationMin / 60.0
-                val rank = when {
-                    durationHours >= 8.0 -> "GLOBETROTTER"
-                    durationHours >= 4.0 -> "COMMANDER"
-                    durationHours >= 2.0 -> "CAPTAIN"
-                    else -> "CO-PILOT"
-                }
-                onLandingCelebration(rank)
-            }
-        }
-
-        // --- Layer 3: Draggable / Swipeable Bottom Sheet ---
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .animateContentSize()
-                .background(
-                    color = Midnight,
-                    shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
-                )
-                .border(
-                    width = 1.dp,
-                    color = Border,
-                    shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
-                )
-                .clickable { sheetExpanded = !sheetExpanded }
-                .padding(horizontal = Spacing.Large, vertical = 16.dp)
-        ) {
-            // Drag handle representation
+    BottomSheetScaffold(
+        scaffoldState = scaffoldState,
+        sheetContainerColor = DeepNavy,
+        sheetShape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        sheetDragHandle = {
             Box(
                 modifier = Modifier
-                    .width(40.dp)
+                    .padding(top = 12.dp, bottom = 16.dp)
+                    .width(80.dp)
                     .height(4.dp)
                     .background(Border, RoundedCornerShape(2.dp))
-                    .align(Alignment.CenterHorizontally)
             )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // --- Collapsed Info Summary (Always Visible) ---
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+        },
+        sheetPeekHeight = 104.dp,
+        containerColor = Color.Transparent, // Restored so globe is visible
+        sheetContent = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Spacing.Large)
+                    .padding(bottom = 30.dp)
             ) {
-                Column {
-                    Text(text = "TIME REMAINING", style = MaterialTheme.typography.labelSmall, color = Haze)
-                    Text(
-                        text = formatRemainingTime(uiState.timeRemainingSeconds),
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace
-                        ),
-                        color = OffWhite
-                    )
+                // --- Collapsed Info Summary (Always Visible in peek mode) ---
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Left: Ground Speed
+                    Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.Start) {
+                        Text(text = "GROUND SPEED", style = MaterialTheme.typography.labelSmall, color = Haze)
+                        Text(
+                            text = "${uiState.speedKmh} km/h",
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            ),
+                            color = OffWhite
+                        )
+                    }
+
+                    // Center: Time Remaining (Stronger Visual)
+                    Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(text = "REMAINING", style = MaterialTheme.typography.labelSmall, color = Haze)
+                        Text(
+                            text = formatRemainingTime(uiState.timeRemainingSeconds),
+                            style = MaterialTheme.typography.headlineMedium.copy(
+                                fontWeight = FontWeight.Black,
+                                fontFamily = FontFamily.Monospace,
+                                letterSpacing = 2.sp
+                            ),
+                            color = Amber
+                        )
+                    }
+
+                    // Right: Altitude
+                    Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
+                        Text(text = "ALTITUDE", style = MaterialTheme.typography.labelSmall, color = Haze)
+                        Text(
+                            text = "${uiState.altitudeMeters} m",
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            ),
+                            color = OffWhite
+                        )
+                    }
                 }
 
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(text = "SPD", style = MaterialTheme.typography.labelSmall, color = Haze)
-                    Text(
-                        text = "${uiState.speedKmh} km/h",
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace
-                        ),
-                        color = OffWhite
-                    )
-                }
-
-                Column(horizontalAlignment = Alignment.End) {
-                    Text(text = "PROGRESS", style = MaterialTheme.typography.labelSmall, color = Haze)
-                    Text(
-                        text = "${(uiState.progress * 100).roundToInt()}%",
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace
-                        ),
-                        color = Amber
-                    )
-                }
-            }
-
-            // --- Expanded Info Panel (Visible on Expand) ---
-            if (sheetExpanded) {
-                Spacer(modifier = Modifier.height(24.dp))
+                // --- Expanded Info Panel ---
+                Spacer(modifier = Modifier.height(30.dp))
                 HorizontalDivider(color = Border, thickness = 1.dp)
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(30.dp))
 
                 // Route Details Header
                 Row(
@@ -434,169 +308,216 @@ fun InFlightScreen(
                     TelemetryBlock("LONGITUDE", formattedLon)
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
-                HorizontalDivider(color = Border, thickness = 1.dp)
-                Spacer(modifier = Modifier.height(24.dp))
+            }
+        }
+    ) { paddingValues ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .background(Color.Transparent) // Make background transparent to see engine
+        ) {
+            // --- Layer 1: Background 3D Engine Placeholder / Tactical Radar ---
+            // (Removed 2D canvas, the Rust wgpu engine renders underneath this Compose layer)
 
-                // Tactical mini progress map
-                Text(
-                    text = "TACTICAL FLIGHT SEGMENT",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Haze,
-                    modifier = Modifier.padding(bottom = 12.dp)
-                )
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(120.dp)
-                        .background(Slate, RoundedCornerShape(16.dp))
-                        .border(1.dp, Border, RoundedCornerShape(16.dp))
+            // --- Layer 2: Cockpit HUD Top Bar controls ---
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .windowInsetsPadding(WindowInsets.statusBars)
+                    .padding(horizontal = Spacing.Large, vertical = Spacing.Medium),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Canvas(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-                        val trackColor = Border.copy(alpha = 0.5f)
-                        val startPt = Offset(size.width * 0.15f, size.height * 0.5f)
-                        val endPt = Offset(size.width * 0.85f, size.height * 0.5f)
-
-                        // Path trajectory
-                        drawLine(
-                            color = trackColor,
-                            start = startPt,
-                            end = endPt,
-                            strokeWidth = 2.dp.toPx(),
-                            pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
-                        )
-
-                        // Departure node indicator
-                        drawCircle(color = Haze, radius = 6.dp.toPx(), center = startPt)
-                        // Destination node indicator
-                        drawCircle(color = Haze, radius = 6.dp.toPx(), center = endPt)
-
-                        // Current airplane progress locator dot
-                        val progressOffset = Offset(
-                            startPt.x + (endPt.x - startPt.x) * uiState.progress,
-                            startPt.y
-                        )
-                        drawCircle(color = Amber, radius = 8.dp.toPx(), center = progressOffset)
-                        drawCircle(
-                            color = Amber.copy(alpha = 0.25f),
-                            radius = 16.dp.toPx(),
-                            center = progressOffset
+                    // Skip Flight Button (for debugging)
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .background(DeepNavy.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
+                            .border(1.dp, Border, RoundedCornerShape(12.dp))
+                            .clickable { viewModel.skipFlight() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = ">>",
+                            color = Amber,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
                         )
                     }
-                    Text(
-                        text = originAirport?.iataCode ?: "DEP",
-                        color = OffWhite,
-                        fontSize = 11.sp,
-                        fontFamily = FontFamily.Monospace,
-                        modifier = Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = 12.dp)
-                    )
-                    Text(
-                        text = destAirport?.iataCode ?: "ARR",
-                        color = OffWhite,
-                        fontSize = 11.sp,
-                        fontFamily = FontFamily.Monospace,
-                        modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 12.dp)
-                    )
+
+                    // Settings gear button
+                    IconButton(
+                        onClick = { showSettings = true },
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Settings,
+                            contentDescription = "Flight Instruments",
+                            tint = OffWhite
+                        )
+                    }
+                }
+            }
+
+            // --- Flight Completion Navigation Trigger ---
+            LaunchedEffect(uiState.isCompleted) {
+                if (uiState.isCompleted) {
+                    val durationHours = viewModel.durationMin / 60.0
+                    val rank = when {
+                        durationHours >= 8.0 -> "GLOBETROTTER"
+                        durationHours >= 4.0 -> "COMMANDER"
+                        durationHours >= 2.0 -> "CAPTAIN"
+                        else -> "CO-PILOT"
+                    }
+                    onLandingCelebration(rank)
+                }
+            }
+        }
+
+    // --- Layer 2 Settings modal Dialog overlay ---
+    if (showSettings) {
+        // Full screen transparent click catcher to close modal
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clickable { showSettings = false }
+        )
+
+        // Modal content positioned below top bar
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 80.dp)
+                .padding(horizontal = Spacing.Large)
+                .background(DeepNavy, RoundedCornerShape(16.dp))
+                .border(1.dp, Border, RoundedCornerShape(16.dp))
+                .padding(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                val cameraViews = listOf(
+                    Triple("FREE", 0, Icons.Outlined.Explore),
+                    Triple("CHASE", 1, Icons.Outlined.Visibility),
+                    Triple("COCKPIT", 2, Icons.Outlined.Flight)
+                )
+
+                cameraViews.forEach { (camName, camMode, icon) ->
+                    val isActive = selectedCamera == camMode
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .background(if (isActive) DeepNavy else Slate, RoundedCornerShape(12.dp))
+                            .border(
+                                width = if (isActive) 2.dp else 1.dp,
+                                color = if (isActive) Amber else Border,
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                            .clickable {
+                                selectedCamera = camMode
+                                com.example.focusflight.engine.CesiumBridge.nativeSetCameraMode(camMode)
+                                showSettings = false
+                            }
+                            .padding(vertical = 16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = camName,
+                            tint = if (isActive) Amber else OffWhite,
+                            modifier = Modifier.size(28.dp)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = camName,
+                            color = if (isActive) Amber else OffWhite,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
                 }
             }
         }
     }
+    }
 
-    // --- Layer 2 Settings modal Dialog overlay ---
-    if (showSettings) {
-        Dialog(onDismissRequest = { showSettings = false }) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth(0.9f)
-                    .background(DeepNavy, RoundedCornerShape(20.dp))
-                    .border(1.dp, Border, RoundedCornerShape(20.dp))
-                    .padding(24.dp)
-            ) {
-                Text(
-                    text = "FLIGHT INSTRUMENTS",
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.sp
-                    ),
-                    color = Amber
-                )
-                Spacer(modifier = Modifier.height(24.dp))
+    // --- Movie Style Countdown Overlay ---
+    if (uiState.timeElapsedMs < 0) {
+        MovieCountdown(uiState.timeElapsedMs)
+    }
+}
 
-                // Cabin Hum volume sound toggle
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(text = "Cabin Engine Hum", color = OffWhite, style = MaterialTheme.typography.bodyLarge)
-                    Switch(
-                        checked = soundEnabled,
-                        onCheckedChange = { soundEnabled = it },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = Midnight,
-                            checkedTrackColor = Amber,
-                            uncheckedThumbColor = Haze,
-                            uncheckedTrackColor = Border
-                        )
-                    )
-                }
+@Composable
+fun MovieCountdown(timeElapsedMs: Long) {
+    if (timeElapsedMs >= 0) return
+    
+    // timeElapsedMs goes from -3000 to 0.
+    val totalHoldMs = 3000L
+    // seconds remaining: 3, 2, 1
+    val secondsRemaining = kotlin.math.ceil(kotlin.math.abs(timeElapsedMs) / 1000.0).toInt()
+    // fraction of the current second (0.0 to 1.0)
+    val fraction = (kotlin.math.abs(timeElapsedMs) % 1000) / 1000f
 
-                Spacer(modifier = Modifier.height(24.dp))
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.5f)),
+        contentAlignment = Alignment.Center
+    ) {
+        // Draw the movie-style circle and sweeping line
+        Canvas(modifier = Modifier.size(200.dp)) {
+            val strokeWidth = 8.dp.toPx()
+            
+            // Background circle
+            drawCircle(
+                color = Color.White.copy(alpha = 0.2f),
+                radius = size.width / 2,
+                style = Stroke(width = strokeWidth)
+            )
+            
+            // Sweeping circle (like old film countdowns)
+            // It sweeps 360 degrees every second
+            drawArc(
+                color = Color.White,
+                startAngle = -90f,
+                sweepAngle = 360f * fraction,
+                useCenter = false,
+                style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+            )
 
-                // Camera Views selectors
-                Text(
-                    text = "CAMERA MODE",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Haze,
-                    modifier = Modifier.padding(bottom = 10.dp)
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    val cameraViews = listOf("FREE" to 0, "CHASE" to 1, "COCKPIT" to 2)
-                    var selectedCamera by remember { mutableStateOf(1) } // Default to CHASE
-                    
-                    cameraViews.forEach { (camName, camMode) ->
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .background(if (selectedCamera == camMode) Amber else Slate, RoundedCornerShape(8.dp))
-                                .clickable { 
-                                    selectedCamera = camMode 
-                                    com.example.focusflight.engine.CesiumBridge.nativeSetCameraMode(camMode)
-                                }
-                                .padding(vertical = 10.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = camName,
-                                color = if (selectedCamera == camMode) Midnight else OffWhite,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(32.dp))
-                Button(
-                    onClick = { showSettings = false },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(54.dp),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Midnight)
-                ) {
-                    Text(
-                        text = "CLOSE",
-                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold)
-                    )
-                }
-            }
+            // Inner crosshairs (movie style)
+            drawLine(
+                color = Color.White.copy(alpha = 0.3f),
+                start = Offset(size.width / 2, 0f),
+                end = Offset(size.width / 2, size.height),
+                strokeWidth = 2.dp.toPx()
+            )
+            drawLine(
+                color = Color.White.copy(alpha = 0.3f),
+                start = Offset(0f, size.height / 2),
+                end = Offset(size.width, size.height / 2),
+                strokeWidth = 2.dp.toPx()
+            )
         }
+        
+        Text(
+            text = secondsRemaining.toString(),
+            color = Color.White,
+            style = MaterialTheme.typography.displayLarge.copy(
+                fontSize = 100.sp,
+                fontWeight = FontWeight.Black,
+                fontFamily = FontFamily.Monospace
+            )
+        )
     }
 }
 
@@ -635,7 +556,11 @@ private fun formatRemainingTime(seconds: Long): String {
     val h = seconds / 3600
     val m = (seconds % 3600) / 60
     val s = seconds % 60
-    return "%02d:%02d:%02d".format(h, m, s)
+    return if (h > 0) {
+        String.format(java.util.Locale.US, "%02d:%02d:%02d", h, m, s)
+    } else {
+        String.format(java.util.Locale.US, "%02d:%02d", m, s)
+    }
 }
 
 @Composable

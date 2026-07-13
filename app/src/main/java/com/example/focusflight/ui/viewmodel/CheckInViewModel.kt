@@ -20,7 +20,8 @@ import kotlin.random.Random
 class CheckInViewModel(
     private val databaseHelper: FlightDatabaseHelper,
     private val preferencesRepository: PreferencesRepository,
-    val destIata: String
+    val destIata: String,
+    val flightNumber: String
 ) : ViewModel() {
 
     private val _originAirport = MutableStateFlow<Airport?>(null)
@@ -32,7 +33,6 @@ class CheckInViewModel(
     private val _routeDetails = MutableStateFlow<FlightRoute?>(null)
     val routeDetails: StateFlow<FlightRoute?> = _routeDetails.asStateFlow()
 
-    val flightNumber = "FF-${Random.nextInt(1000, 10000)}"
     val currentDate: String = SimpleDateFormat("dd MMM yyyy", Locale.US).format(Date()).uppercase()
 
     init {
@@ -62,12 +62,13 @@ class CheckInViewModel(
 class CheckInViewModelFactory(
     private val databaseHelper: FlightDatabaseHelper,
     private val preferencesRepository: PreferencesRepository,
-    private val destIata: String
+    private val destIata: String,
+    private val flightNumber: String
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(CheckInViewModel::class.java)) {
-            return CheckInViewModel(databaseHelper, preferencesRepository, destIata) as T
+            return CheckInViewModel(databaseHelper, preferencesRepository, destIata, flightNumber) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }
