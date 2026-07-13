@@ -19,6 +19,7 @@ import kotlinx.coroutines.launch
 data class InFlightState(
     val timeRemainingSeconds: Long = 0,
     val timeElapsedSeconds: Long = 0,
+    val timeElapsedMs: Long = 0,
     val totalDurationSeconds: Long = 0,
     val isRunning: Boolean = true,
     val isCompleted: Boolean = false,
@@ -87,29 +88,35 @@ class InFlightViewModel(
     fun startTimer() {
         if (timerJob != null) return
         _uiState.update { it.copy(isRunning = true) }
+        val tickDelayMs = 33L
         timerJob = viewModelScope.launch {
             while (true) {
-                delay(1000)
+                delay(tickDelayMs)
                 _uiState.update { state ->
-                    if (state.timeRemainingSeconds <= 1) {
+                    val newElapsedMs = state.timeElapsedMs + tickDelayMs
+                    val totalMs = state.totalDurationSeconds * 1000L
+                    
+                    if (newElapsedMs >= totalMs) {
                         timerJob?.cancel()
                         timerJob = null
                         preferencesRepository.setCurrentAirport(destIata)
                         preRenderDestinationMap()
                         saveFlightLogToPrefs()
+                        com.example.focusflight.engine.CesiumBridge.nativeSetProgress(1.0)
                         state.copy(
                             timeRemainingSeconds = 0,
                             timeElapsedSeconds = state.totalDurationSeconds,
+                            timeElapsedMs = totalMs,
                             progress = 1.0f,
                             isRunning = false,
                             isCompleted = true
                         )
                     } else {
-                        val newRemaining = state.timeRemainingSeconds - 1
-                        val newElapsed = state.timeElapsedSeconds + 1
-                        val newProgress = newElapsed.toFloat() / state.totalDurationSeconds.toFloat()
-                        
+                        val newProgress = newElapsedMs.toFloat() / totalMs.toFloat()
                         com.example.focusflight.engine.CesiumBridge.nativeSetProgress(newProgress.toDouble())
+
+                        val newElapsedSec = newElapsedMs / 1000L
+                        val newRemainingSec = state.totalDurationSeconds - newElapsedSec
 
                         // Linear interpolation of coordinates
                         val origin = _originAirport.value
@@ -122,14 +129,15 @@ class InFlightViewModel(
                         } else state.currentLon
 
                         // Subtle variations for flight instruments realism
-                        val speedOffset = ((newElapsed % 60).toInt() - 30) / 10
+                        val speedOffset = ((newElapsedSec % 60).toInt() - 30) / 10
                         val currentSpeed = 840 + speedOffset
-                        val altOffset = ((newElapsed % 120).toInt() - 60) / 10
+                        val altOffset = ((newElapsedSec % 120).toInt() - 60) / 10
                         val currentAlt = 10600 + altOffset
 
                         state.copy(
-                            timeRemainingSeconds = newRemaining,
-                            timeElapsedSeconds = newElapsed,
+                            timeRemainingSeconds = newRemainingSec,
+                            timeElapsedSeconds = newElapsedSec,
+                            timeElapsedMs = newElapsedMs,
                             progress = newProgress,
                             currentLat = currentLat,
                             currentLon = currentLon,
@@ -154,10 +162,12 @@ class InFlightViewModel(
         preferencesRepository.setCurrentAirport(destIata)
         preRenderDestinationMap()
         saveFlightLogToPrefs()
+        com.example.focusflight.engine.CesiumBridge.nativeSetProgress(1.0)
         _uiState.update { state ->
             state.copy(
                 timeRemainingSeconds = 0,
                 timeElapsedSeconds = state.totalDurationSeconds,
+                timeElapsedMs = state.totalDurationSeconds * 1000L,
                 progress = 1.0f,
                 isRunning = false,
                 isCompleted = true
