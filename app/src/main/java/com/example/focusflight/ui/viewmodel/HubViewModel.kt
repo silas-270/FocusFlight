@@ -42,6 +42,9 @@ class HubViewModel(
     private val _isRendering = MutableStateFlow(false)
     val isRendering: StateFlow<Boolean> = _isRendering.asStateFlow()
 
+    private val _activeFlightContext = MutableStateFlow<Triple<String, String, Int>?>(null)
+    val activeFlightContext: StateFlow<Triple<String, String, Int>?> = _activeFlightContext.asStateFlow()
+
     private val _mapRenderError = MutableStateFlow<String?>(null)
     val mapRenderError: StateFlow<String?> = _mapRenderError.asStateFlow()
 
@@ -55,6 +58,9 @@ class HubViewModel(
             if (baseIata != null) {
                 val airport = databaseHelper.getAirportByIata(baseIata)
                 _currentAirport.value = airport
+                
+                _activeFlightContext.value = preferencesRepository.getActiveFlightContext()
+                
                 if (airport != null) {
                     generateRouteMap(airport)
                 }

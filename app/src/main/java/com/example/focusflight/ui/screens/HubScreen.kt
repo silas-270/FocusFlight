@@ -56,6 +56,7 @@ import com.example.focusflight.ui.viewmodel.HubViewModel
 fun HubScreen(
     viewModel: HubViewModel,
     onBookFlightClick: () -> Unit,
+    onResumeFlightClick: (flightNo: String, destIata: String, durationMin: Int) -> Unit,
     onPassportClick: () -> Unit,
     onSettingsClick: () -> Unit
 ) {
@@ -208,31 +209,85 @@ fun HubScreen(
 
                 Spacer(modifier = Modifier.height(48.dp))
 
+                val activeFlightContext by viewModel.activeFlightContext.collectAsState()
+
                 // 4. Call to Action
-                Button(
-                    onClick = onBookFlightClick,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Amber,
-                        contentColor = Midnight
-                    )
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.FlightTakeoff,
-                        contentDescription = null,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(modifier = Modifier.width(Spacing.Small))
-                    Text(
-                        text = "BOOK A FLIGHT",
-                        style = MaterialTheme.typography.labelLarge.copy(
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 1.5.sp
+                if (activeFlightContext != null) {
+                    val context = activeFlightContext!!
+                    Button(
+                        onClick = { onResumeFlightClick(context.first, context.second, context.third) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = OffWhite
                         )
-                    )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.FlightTakeoff,
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(Spacing.Small))
+                        Text(
+                            text = "RESUME FLIGHT",
+                            style = MaterialTheme.typography.labelLarge.copy(
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.5.sp
+                            )
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    Button(
+                        onClick = onBookFlightClick,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = DeepNavy,
+                            contentColor = Amber
+                        ),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Amber)
+                    ) {
+                        Text(
+                            text = "BOOK NEW FLIGHT",
+                            style = MaterialTheme.typography.labelLarge.copy(
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.5.sp
+                            )
+                        )
+                    }
+                } else {
+                    Button(
+                        onClick = onBookFlightClick,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Amber,
+                            contentColor = Midnight
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.FlightTakeoff,
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(Spacing.Small))
+                        Text(
+                            text = "BOOK A FLIGHT",
+                            style = MaterialTheme.typography.labelLarge.copy(
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.5.sp
+                            )
+                        )
+                    }
                 }
             }
         }
