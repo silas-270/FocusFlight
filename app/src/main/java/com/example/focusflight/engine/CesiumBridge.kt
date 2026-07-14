@@ -21,5 +21,21 @@ object CesiumBridge {
 
     external fun nativeSetRenderingEnabled(enabled: Boolean)
 
+    external fun nativeSetSuspended(suspended: Boolean)
+
+    external fun nativeDestroyEngine()
+
     external fun nativeLoadPendingFlight()
+
+    external fun nativeSetRunways(
+        airportIds: IntArray,
+        lengthFt: FloatArray,
+        widthFt: FloatArray,
+        leHeading: FloatArray,
+        leLat: DoubleArray,
+        leLon: DoubleArray,
+        heHeading: FloatArray,
+        heLat: DoubleArray,
+        heLon: DoubleArray
+    )
 }

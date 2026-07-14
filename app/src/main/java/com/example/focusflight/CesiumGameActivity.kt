@@ -7,8 +7,10 @@ import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.ExperimentalComposeUiApi
+import com.example.focusflight.engine.CesiumEngineManager
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.platform.ComposeView
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -61,19 +63,11 @@ class CesiumGameActivity : GameActivity() {
         // Copy database asset on first run
         databaseHelper.ensureDatabaseCopied()
 
-        val container = object : android.widget.FrameLayout(this) {
-            override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean {
-                // Let Compose handle the touch first
-                super.dispatchTouchEvent(ev)
-                
-                // Only pass the touch to the Rust engine if it's above the bottom sheet (info card)
-                // and below the top buttons
-                if (ev.y < sheetTopY && ev.y > topBarBottomY) {
-                    this@CesiumGameActivity.onTouchEvent(ev)
-                }
-                return true
-            }
-        }
+        // Attach the lifecycle observer ONCE before Compose content is set.
+        // This is not re-triggered on recomposition because it targets the Activity lifecycle,
+        // not the Compose recomposition lifecycle.
+        lifecycle.addObserver(CesiumEngineManager())
+
         val composeView = ComposeView(this).apply {
             setContent {
                 FocusFlightTheme {
@@ -84,15 +78,13 @@ class CesiumGameActivity : GameActivity() {
                         Screen.Onboarding.route
                     }
 
-                    // ── Rendering toggle: enable Vulkan rendering only on flight screens ──
+                    // ── Rendering toggle: used to control background transparency on flight screens ──
                     val currentEntry = navController.currentBackStackEntryAsState().value
                     val currentRoute = currentEntry?.destination?.route
                     val shouldRender = currentRoute?.startsWith("check_in/") == true
                             || currentRoute?.startsWith("in_flight/") == true
-                            
-                    LaunchedEffect(shouldRender) {
-                        CesiumBridge.nativeSetRenderingEnabled(shouldRender)
-                    }
+                    // NOTE: engine suspend/resume is now managed by CesiumEngineManager
+                    // (lifecycle observer), not by this Compose-level LaunchedEffect.
 
                     val bgColor = if (shouldRender) {
                         androidx.compose.ui.graphics.Color.Transparent
@@ -101,7 +93,9 @@ class CesiumGameActivity : GameActivity() {
                     }
 
                     Surface(
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .pointerInteropFilter { true },
                         color = bgColor
                     ) {
                         NavHost(
@@ -189,6 +183,25 @@ class CesiumGameActivity : GameActivity() {
                                                 val durationMin = route.flightTimeMin
 
                                                 if (origin != null && dest != null) {
+                                                    val originRunway = databaseHelper.getRunwaysForAirport(origin.id).maxByOrNull { it.lengthFt }
+                                                    val destRunway = databaseHelper.getRunwaysForAirport(dest.id).maxByOrNull { it.lengthFt }
+                                                    val allRunways = listOfNotNull(originRunway, destRunway)
+
+                                                    val airportIds = allRunways.map { it.airportId }.toIntArray()
+                                                    val lengthFt = allRunways.map { it.lengthFt }.toFloatArray()
+                                                    val widthFt = allRunways.map { it.widthFt }.toFloatArray()
+                                                    val leHeading = allRunways.map { it.leHeading }.toFloatArray()
+                                                    val leLat = allRunways.map { it.leLat }.toDoubleArray()
+                                                    val leLon = allRunways.map { it.leLon }.toDoubleArray()
+                                                    val heHeading = allRunways.map { it.heHeading }.toFloatArray()
+                                                    val heLat = allRunways.map { it.heLat }.toDoubleArray()
+                                                    val heLon = allRunways.map { it.heLon }.toDoubleArray()
+
+                                                    CesiumBridge.nativeSetRunways(
+                                                        airportIds, lengthFt, widthFt, leHeading, leLat, leLon,
+                                                        heHeading, heLat, heLon
+                                                    )
+
                                                     CesiumBridge.nativeSetPendingFlight(
                                                         origin.lon, origin.lat, dest.lon, dest.lat, (durationMin * 60 * 1000).toLong()
                                                     )
@@ -299,15 +312,9 @@ class CesiumGameActivity : GameActivity() {
             }
         }
 
-        container.addView(composeView)
-        addContentView(container, ViewGroup.LayoutParams(
+        addContentView(composeView, ViewGroup.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT
         ))
-    }
-    
-    companion object {
-        var sheetTopY: Float = Float.MAX_VALUE
-        var topBarBottomY: Float = 0f
     }
 }
