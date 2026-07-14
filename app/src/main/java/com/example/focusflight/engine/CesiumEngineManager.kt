@@ -29,11 +29,10 @@ class CesiumEngineManager : DefaultLifecycleObserver {
     }
 
     /**
-     * Activity is no longer visible. Disable rendering first, then put winit into
-     * ControlFlow::Wait to stop burning GPU cycles in the background.
+     * Activity is no longer visible. Put winit into ControlFlow::Wait to stop
+     * burning CPU/GPU cycles in the background.
      */
     override fun onStop(owner: LifecycleOwner) {
-        CesiumBridge.nativeSetRenderingEnabled(false)
         CesiumBridge.nativeSetSuspended(true)
     }
 
