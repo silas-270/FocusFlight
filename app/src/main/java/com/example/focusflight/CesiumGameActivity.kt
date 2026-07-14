@@ -7,6 +7,7 @@ import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.ExperimentalComposeUiApi
 import com.example.focusflight.engine.CesiumEngineManager
 import androidx.compose.ui.Modifier
@@ -78,13 +79,17 @@ class CesiumGameActivity : GameActivity() {
                         Screen.Onboarding.route
                     }
 
-                    // ── Rendering toggle: used to control background transparency on flight screens ──
+                    // ── Rendering toggle: enable wgpu rendering on flight screens only ──
                     val currentEntry = navController.currentBackStackEntryAsState().value
                     val currentRoute = currentEntry?.destination?.route
                     val shouldRender = currentRoute?.startsWith("check_in/") == true
                             || currentRoute?.startsWith("in_flight/") == true
-                    // NOTE: engine suspend/resume is now managed by CesiumEngineManager
-                    // (lifecycle observer), not by this Compose-level LaunchedEffect.
+
+                    // Rendering enable/disable is route-scoped (only on flight screens).
+                    // Suspend/resume (winit sleep/wake) is lifecycle-scoped via CesiumEngineManager.
+                    LaunchedEffect(shouldRender) {
+                        CesiumBridge.nativeSetRenderingEnabled(shouldRender)
+                    }
 
                     val bgColor = if (shouldRender) {
                         androidx.compose.ui.graphics.Color.Transparent
@@ -94,8 +99,7 @@ class CesiumGameActivity : GameActivity() {
 
                     Surface(
                         modifier = Modifier
-                            .fillMaxSize()
-                            .pointerInteropFilter { true },
+                            .fillMaxSize(),
                         color = bgColor
                     ) {
                         NavHost(

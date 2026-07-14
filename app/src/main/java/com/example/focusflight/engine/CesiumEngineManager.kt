@@ -20,17 +20,17 @@ class CesiumEngineManager : DefaultLifecycleObserver {
 
     /**
      * Activity is becoming visible. Wake the winit event loop from ControlFlow::Wait
-     * and re-enable the rendering flag. Routes through the same EventLoopProxy
-     * mechanism that was established for Bug 13 (deadlock fix) via nativeSetSuspended.
+     * so it stops blocking and is ready to render when it next navigates to a flight screen.
+     * Does NOT enable rendering — that is route-scoped via nativeSetRenderingEnabled,
+     * which is driven by the shouldRender flag in Compose.
      */
     override fun onStart(owner: LifecycleOwner) {
         CesiumBridge.nativeSetSuspended(false)
-        CesiumBridge.nativeSetRenderingEnabled(true)
     }
 
     /**
-     * Activity is no longer visible. Stop the render loop and put winit into
-     * ControlFlow::Wait to avoid burning GPU cycles in the background.
+     * Activity is no longer visible. Disable rendering first, then put winit into
+     * ControlFlow::Wait to stop burning GPU cycles in the background.
      */
     override fun onStop(owner: LifecycleOwner) {
         CesiumBridge.nativeSetRenderingEnabled(false)
