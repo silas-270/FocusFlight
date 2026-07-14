@@ -16,8 +16,8 @@ open class LatLon : Structure() {
 // Equivalent to Rust's HeadlessRoute
 @Structure.FieldOrder("start", "end")
 open class HeadlessRoute : Structure() {
-    @JvmField var start: LatLon = LatLon()
-    @JvmField var end: LatLon = LatLon()
+    @JvmField var start: LatLon.ByValue = LatLon.ByValue()
+    @JvmField var end: LatLon.ByValue = LatLon.ByValue()
 
     class ByValue : HeadlessRoute(), Structure.ByValue
 }

@@ -42,6 +42,9 @@ class HubViewModel(
     private val _isRendering = MutableStateFlow(false)
     val isRendering: StateFlow<Boolean> = _isRendering.asStateFlow()
 
+    private val _mapRenderError = MutableStateFlow<String?>(null)
+    val mapRenderError: StateFlow<String?> = _mapRenderError.asStateFlow()
+
     init {
         loadData()
     }
@@ -66,6 +69,7 @@ class HubViewModel(
     }
 
     private fun generateRouteMap(origin: Airport) {
+        _mapRenderError.value = null
         viewModelScope.launch(Dispatchers.IO) {
             val outFile = File(cacheDir, "hub_route_map_${origin.iataCode}.png")
             // Check if pre-rendered or cached image is present
@@ -103,12 +107,25 @@ class HubViewModel(
                     CacheUtils.pruneMapCache(cacheDir)
                 } else {
                     Log.e("HubViewModel", "Route rendering failed or file not created.")
+                    // TODO (Architecture Review): Investigate underlying JNI memory pressure/Vulkan OOM
+                    // causing CesiumRSLibrary.renderRoutes to fail silently under load.
+                    // This error state is a graceful degradation patch, but the root cause in C++/Rust remains.
+                    _mapRenderError.value = "Failed to render map."
                 }
             } catch (e: Exception) {
                 Log.e("HubViewModel", "Error in route rendering", e)
+                // TODO (Architecture Review): Investigate underlying JNI memory pressure/Vulkan OOM
+                _mapRenderError.value = "Failed to render map."
             } finally {
                 _isRendering.value = false
             }
+        }
+    }
+
+    fun retryRenderMap() {
+        val origin = _currentAirport.value
+        if (origin != null) {
+            generateRouteMap(origin)
         }
     }
 }

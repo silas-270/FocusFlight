@@ -122,10 +122,6 @@ fun FlightSearchScreen(
     val airportSearchQuery by viewModel.airportSearchQuery.collectAsState()
     val airportSearchResults by viewModel.airportSearchResults.collectAsState()
 
-    LaunchedEffect(Unit) {
-        viewModel.resetState()
-    }
-
     Box(modifier = Modifier.fillMaxSize().background(Midnight)) {
         // Main Screen Column
         Column(
@@ -231,8 +227,8 @@ fun FlightSearchScreen(
                             // Sync VM selectedRoute -> UI pagerState page (bidirectional)
                             LaunchedEffect(selectedRoute, filteredRoutes) {
                                 val index = filteredRoutes.indexOfFirst { it.id == selectedRoute?.id }
-                                if (index >= 0 && index != pagerState.currentPage) {
-                                    pagerState.scrollToPage(index)
+                                if (index >= 0 && index != pagerState.currentPage && !pagerState.isScrollInProgress) {
+                                    pagerState.animateScrollToPage(index)
                                 }
                             }
 
