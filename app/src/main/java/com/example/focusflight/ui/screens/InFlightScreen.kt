@@ -24,6 +24,7 @@ import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.Flight
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -37,6 +38,9 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.input.pointer.pointerInteropFilter
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -135,7 +139,11 @@ fun InFlightScreen(
     var showSettings by remember { mutableStateOf(false) }
     var sheetExpanded by remember { mutableStateOf(false) }
     var soundEnabled by remember { mutableStateOf(false) }
-    var selectedCamera by remember { mutableStateOf(1) } // Default to CHASE
+    var selectedCamera by rememberSaveable { mutableStateOf(1) } // Default to CHASE
+
+    LaunchedEffect(selectedCamera) {
+        com.example.focusflight.engine.CesiumBridge.nativeSetCameraMode(selectedCamera)
+    }
 
     val soundManager = remember { EngineSoundManager() }
 
@@ -160,6 +168,7 @@ fun InFlightScreen(
             activity?.window?.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
     }
+
 
     // --- Lifecycle Focus Observer ---
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -191,10 +200,6 @@ fun InFlightScreen(
                     .width(80.dp)
                     .height(4.dp)
                     .background(Border, RoundedCornerShape(2.dp))
-                    .onGloballyPositioned { coordinates ->
-                        // The top of the sheet is the drag handle's Y minus the top padding (12dp)
-                        com.example.focusflight.CesiumGameActivity.sheetTopY = coordinates.positionInWindow().y - (12f * density.density)
-                    }
             )
         },
         sheetPeekHeight = 104.dp,
@@ -333,7 +338,19 @@ fun InFlightScreen(
                 .padding(paddingValues)
                 .background(Color.Transparent) // Make background transparent to see engine
         ) {
-            // --- Layer 1: Background 3D Engine Placeholder / Tactical Radar ---
+            // --- Layer 1: Touch Receiver for the Engine ---
+            // Placed at the bottom of the Box (z-index 0) so it only receives touches
+            // that were NOT consumed by foreground HUD controls like the Skip button.
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInteropFilter { event ->
+                        val activity = context as? android.app.Activity
+                        activity?.onTouchEvent(event) ?: false
+                    }
+            )
+
+            // --- Layer 2: Background 3D Engine Placeholder / Tactical Radar ---
             // (Removed 2D canvas, the Rust wgpu engine renders underneath this Compose layer)
 
             // --- Layer 2: Cockpit HUD Top Bar controls ---
@@ -341,10 +358,7 @@ fun InFlightScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .windowInsetsPadding(WindowInsets.statusBars)
-                    .padding(horizontal = Spacing.Large, vertical = Spacing.Medium)
-                    .onGloballyPositioned { coordinates ->
-                        com.example.focusflight.CesiumGameActivity.topBarBottomY = coordinates.positionInWindow().y + coordinates.size.height
-                    },
+                    .padding(horizontal = Spacing.Large, vertical = Spacing.Medium),
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -441,7 +455,6 @@ fun InFlightScreen(
                             )
                             .clickable {
                                 selectedCamera = camMode
-                                com.example.focusflight.engine.CesiumBridge.nativeSetCameraMode(camMode)
                                 showSettings = false
                             }
                             .padding(vertical = 16.dp),

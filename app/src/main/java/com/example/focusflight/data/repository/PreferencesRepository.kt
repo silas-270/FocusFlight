@@ -47,4 +47,17 @@ class PreferencesRepository(context: Context) {
     fun getFlightLogs(): List<String> {
         return prefs.getStringSet("flight_logs_set", emptySet())?.toList() ?: emptyList()
     }
+
+    fun saveActiveFlightProgress(flightNo: String, elapsedMs: Long) {
+        prefs.edit().putLong("active_flight_$flightNo", elapsedMs).apply()
+    }
+
+    fun getActiveFlightProgress(flightNo: String): Long? {
+        val key = "active_flight_$flightNo"
+        return if (prefs.contains(key)) prefs.getLong(key, 0L) else null
+    }
+
+    fun clearActiveFlightProgress(flightNo: String) {
+        prefs.edit().remove("active_flight_$flightNo").apply()
+    }
 }

@@ -5,6 +5,7 @@ import android.database.sqlite.SQLiteDatabase
 import android.util.Log
 import com.example.focusflight.data.model.Airport
 import com.example.focusflight.data.model.FlightRoute
+import com.example.focusflight.data.model.Runway
 import java.io.FileOutputStream
 import java.io.IOException
 
@@ -17,6 +18,7 @@ class FlightDatabaseHelper(private val context: Context) {
 
     private val dbPath = context.getDatabasePath(DATABASE_NAME)
 
+    @Synchronized
     fun ensureDatabaseCopied() {
         if (!dbPath.exists()) {
             dbPath.parentFile?.mkdirs()
@@ -155,6 +157,59 @@ class FlightDatabaseHelper(private val context: Context) {
             db.close()
         }
         return null
+    }
+
+    fun getRunwaysForAirport(airportId: Int): List<Runway> {
+        val runways = mutableListOf<Runway>()
+        val db = getReadableDatabase()
+        val sql = "SELECT * FROM runways WHERE airport_id = ?"
+        try {
+            db.rawQuery(sql, arrayOf(airportId.toString())).use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val idCol = cursor.getColumnIndexOrThrow("runway_id")
+                    val airportIdCol = cursor.getColumnIndexOrThrow("airport_id")
+                    val lengthCol = cursor.getColumnIndexOrThrow("length_ft")
+                    val widthCol = cursor.getColumnIndexOrThrow("width_ft")
+                    val leHeadingCol = cursor.getColumnIndexOrThrow("le_heading")
+                    val heHeadingCol = cursor.getColumnIndexOrThrow("he_heading")
+                    val leLatCol = cursor.getColumnIndexOrThrow("le_lat")
+                    val leLonCol = cursor.getColumnIndexOrThrow("le_lon")
+                    val heLatCol = cursor.getColumnIndexOrThrow("he_lat")
+                    val heLonCol = cursor.getColumnIndexOrThrow("he_lon")
+                    
+                    do {
+                        val lengthFt = cursor.getFloat(lengthCol)
+                        val widthFt = cursor.getFloat(widthCol)
+                        val leHeading = cursor.getFloat(leHeadingCol)
+                        val heHeading = cursor.getFloat(heHeadingCol)
+                        val leLat = cursor.getDouble(leLatCol)
+                        val leLon = cursor.getDouble(leLonCol)
+                        val heLat = cursor.getDouble(heLatCol)
+                        val heLon = cursor.getDouble(heLonCol)
+
+                        runways.add(
+                            Runway(
+                                runwayId = cursor.getInt(idCol),
+                                airportId = cursor.getInt(airportIdCol),
+                                lengthFt = lengthFt,
+                                widthFt = widthFt,
+                                leHeading = leHeading,
+                                heHeading = heHeading,
+                                leLat = leLat,
+                                leLon = leLon,
+                                heLat = heLat,
+                                heLon = heLon
+                            )
+                        )
+                    } while (cursor.moveToNext())
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error querying runways", e)
+        } finally {
+            db.close()
+        }
+        return runways
     }
 
     fun getRandomAirports(limit: Int, excludeIata: String): List<Airport> {

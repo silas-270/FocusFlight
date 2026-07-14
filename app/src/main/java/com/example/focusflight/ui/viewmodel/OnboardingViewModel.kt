@@ -11,6 +11,7 @@ import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
 
@@ -34,12 +35,12 @@ class OnboardingViewModel(
         viewModelScope.launch {
             _searchQuery
                 .debounce(300)
-                .collect { query ->
+                .collectLatest { query ->
                     if (query.trim().length >= 2) {
-                        viewModelScope.launch(Dispatchers.IO) {
-                            val results = databaseHelper.searchAirports(query)
-                            _searchResults.value = results
+                        val results = kotlinx.coroutines.withContext(Dispatchers.IO) {
+                            databaseHelper.searchAirports(query)
                         }
+                        _searchResults.value = results
                     } else {
                         _searchResults.value = emptyList()
                     }

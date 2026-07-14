@@ -110,8 +110,14 @@ class FlightSearchViewModel(
                 )
             }
             _airportSearchResults.value = filtered
+            
+            val currentSelected = _selectedRoute.value
+            if (currentSelected != null && !filtered.any { it.id == currentSelected.id }) {
+                _selectedRoute.value = null
+            }
         } else {
             _airportSearchResults.value = emptyList()
+            _selectedRoute.value = null
         }
     }
 

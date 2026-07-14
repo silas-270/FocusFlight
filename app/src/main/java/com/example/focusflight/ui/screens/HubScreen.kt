@@ -1,6 +1,7 @@
 package com.example.focusflight.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,6 +21,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.FlightTakeoff
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Button
@@ -84,6 +86,40 @@ fun HubScreen(
                     contentScale = ContentScale.Crop,
                     alignment = Alignment.Center
                 )
+            } else {
+                val mapRenderError by viewModel.mapRenderError.collectAsState()
+                if (mapRenderError != null) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier
+                                .background(DeepNavy.copy(alpha = 0.8f), RoundedCornerShape(16.dp))
+                                .padding(Spacing.Large)
+                                .clickable { viewModel.retryRenderMap() }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Info,
+                                contentDescription = "Error",
+                                tint = Amber,
+                                modifier = Modifier.size(32.dp)
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = mapRenderError!!,
+                                color = OffWhite,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Text(
+                                text = "Tap to retry",
+                                color = Amber,
+                                style = MaterialTheme.typography.labelMedium
+                            )
+                        }
+                    }
+                }
             }
         }
 

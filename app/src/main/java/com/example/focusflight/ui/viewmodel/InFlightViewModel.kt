@@ -15,6 +15,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 
 data class InFlightState(
     val timeRemainingSeconds: Long = 0,
@@ -52,13 +55,18 @@ class InFlightViewModel(
     val uiState: StateFlow<InFlightState> = _uiState.asStateFlow()
 
     private var timerJob: Job? = null
+    private val renderScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     init {
         val totalSec = durationMin * 60L
+        val savedProgress = preferencesRepository.getActiveFlightProgress(flightNumber)
+        val initialElapsedMs = savedProgress ?: -3000L
+
         _uiState.value = InFlightState(
-            timeRemainingSeconds = totalSec,
-            timeElapsedMs = -3000L, // 3 second start hold
-            totalDurationSeconds = totalSec
+            timeRemainingSeconds = totalSec - (initialElapsedMs.coerceAtLeast(0L) / 1000L),
+            timeElapsedMs = initialElapsedMs, // 3 second start hold if not saved
+            totalDurationSeconds = totalSec,
+            timeElapsedSeconds = initialElapsedMs.coerceAtLeast(0L) / 1000L
         )
         loadFlightDetails()
         startTimer()
@@ -106,6 +114,7 @@ class InFlightViewModel(
                         timerJob?.cancel()
                         timerJob = null
                         preferencesRepository.setCurrentAirport(destIata)
+                        preferencesRepository.clearActiveFlightProgress(flightNumber)
                         preRenderDestinationMap()
                         saveFlightLogToPrefs()
                         com.example.focusflight.engine.CesiumBridge.nativeSetProgress(1.0)
@@ -125,6 +134,10 @@ class InFlightViewModel(
                         val telemetry = com.example.focusflight.engine.CesiumBridge.nativeGetTelemetry()
                         val newElapsedSec = displayElapsedMs / 1000L
                         val newRemainingSec = state.totalDurationSeconds - newElapsedSec
+
+                        if (newElapsedSec != state.timeElapsedSeconds) {
+                            preferencesRepository.saveActiveFlightProgress(flightNumber, newElapsedMs)
+                        }
 
                         var currentLat = state.currentLat
                         var currentLon = state.currentLon
@@ -164,6 +177,7 @@ class InFlightViewModel(
         timerJob?.cancel()
         timerJob = null
         preferencesRepository.setCurrentAirport(destIata)
+        preferencesRepository.clearActiveFlightProgress(flightNumber)
         preRenderDestinationMap()
         saveFlightLogToPrefs()
         com.example.focusflight.engine.CesiumBridge.nativeSetProgress(1.0)
@@ -179,8 +193,10 @@ class InFlightViewModel(
         }
     }
 
+    private var renderJob: kotlinx.coroutines.Job? = null
+
     private fun preRenderDestinationMap() {
-        viewModelScope.launch(Dispatchers.IO) {
+        renderJob = renderScope.launch {
             try {
                 val dest = databaseHelper.getAirportByIata(destIata) ?: return@launch
                 val destinations = databaseHelper.getRandomAirports(12, dest.iataCode)
@@ -230,6 +246,12 @@ class InFlightViewModel(
     override fun onCleared() {
         super.onCleared()
         timerJob?.cancel()
+        
+        // Wait for the render job to finish (if any) before cancelling the scope
+        renderScope.launch {
+            renderJob?.join()
+            renderScope.cancel()
+        }
     }
 }
 
