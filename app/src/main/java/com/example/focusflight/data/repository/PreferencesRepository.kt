@@ -60,4 +60,22 @@ class PreferencesRepository(context: Context) {
     fun clearActiveFlightProgress(flightNo: String) {
         prefs.edit().remove("active_flight_$flightNo").apply()
     }
+
+    fun saveActiveFlightContext(flightNo: String, destIata: String, durationMin: Int) {
+        prefs.edit().putString("active_flight_context", "$flightNo|$destIata|$durationMin").apply()
+    }
+
+    fun getActiveFlightContext(): Triple<String, String, Int>? {
+        val str = prefs.getString("active_flight_context", null) ?: return null
+        val parts = str.split("|")
+        if (parts.size == 3) {
+            val duration = parts[2].toIntOrNull() ?: return null
+            return Triple(parts[0], parts[1], duration)
+        }
+        return null
+    }
+
+    fun clearActiveFlightContext() {
+        prefs.edit().remove("active_flight_context").apply()
+    }
 }

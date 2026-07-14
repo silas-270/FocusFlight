@@ -150,10 +150,49 @@ class CesiumGameActivity : GameActivity() {
                                 val viewModel: HubViewModel = viewModel(
                                     factory = HubViewModelFactory(databaseHelper, preferencesRepository, cacheDir)
                                 )
+                                val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
                                 com.example.focusflight.ui.screens.HubScreen(
                                     viewModel = viewModel,
                                     onBookFlightClick = {
                                         navController.navigate(Screen.FlightSearch.route)
+                                    },
+                                    onResumeFlightClick = { flightNo, destIata, durationMin ->
+                                        coroutineScope.launch {
+                                            withContext(Dispatchers.IO) {
+                                                val originIata = preferencesRepository.getCurrentAirport() ?: "STR"
+                                                val origin = databaseHelper.getAirportByIata(originIata)
+                                                val dest = databaseHelper.getAirportByIata(destIata)
+                                                
+                                                if (origin != null && dest != null) {
+                                                    val originRunway = databaseHelper.getRunwaysForAirport(origin.id).maxByOrNull { it.lengthFt }
+                                                    val destRunway = databaseHelper.getRunwaysForAirport(dest.id).maxByOrNull { it.lengthFt }
+                                                    val allRunways = listOfNotNull(originRunway, destRunway)
+
+                                                    val airportIds = allRunways.map { it.airportId }.toIntArray()
+                                                    val lengthFt = allRunways.map { it.lengthFt }.toFloatArray()
+                                                    val widthFt = allRunways.map { it.widthFt }.toFloatArray()
+                                                    val leHeading = allRunways.map { it.leHeading }.toFloatArray()
+                                                    val leLat = allRunways.map { it.leLat }.toDoubleArray()
+                                                    val leLon = allRunways.map { it.leLon }.toDoubleArray()
+                                                    val heHeading = allRunways.map { it.heHeading }.toFloatArray()
+                                                    val heLat = allRunways.map { it.heLat }.toDoubleArray()
+                                                    val heLon = allRunways.map { it.heLon }.toDoubleArray()
+
+                                                    CesiumBridge.nativeSetRunways(
+                                                        airportIds, lengthFt, widthFt, leHeading, leLat, leLon,
+                                                        heHeading, heLat, heLon
+                                                    )
+                                                    CesiumBridge.nativeSetPendingFlight(
+                                                        origin.lon, origin.lat, dest.lon, dest.lat, (durationMin * 60 * 1000).toLong()
+                                                    )
+                                                    CesiumBridge.nativeLoadPendingFlight()
+                                                }
+
+                                                withContext(Dispatchers.Main) {
+                                                    navController.navigate(Screen.InFlight.createRoute(flightNo, destIata, durationMin))
+                                                }
+                                            }
+                                        }
                                     },
                                     onPassportClick = {
                                         // TODO: Navigate to Passport
@@ -205,7 +244,7 @@ class CesiumGameActivity : GameActivity() {
                                                         airportIds, lengthFt, widthFt, leHeading, leLat, leLon,
                                                         heHeading, heLat, heLon
                                                     )
-
+                                                    android.util.Log.e("LUANDA_DEBUG", "Kotlin origin from DB: ${origin.iataCode} - lon: ${origin.lon}, lat: ${origin.lat}")
                                                     CesiumBridge.nativeSetPendingFlight(
                                                         origin.lon, origin.lat, dest.lon, dest.lat, (durationMin * 60 * 1000).toLong()
                                                     )
@@ -244,6 +283,8 @@ class CesiumGameActivity : GameActivity() {
                                         navController.popBackStack()
                                     },
                                     onStartFlight = { fn, di, dm ->
+                                        preferencesRepository.clearActiveFlightProgress(fn)
+                                        preferencesRepository.saveActiveFlightContext(fn, di, dm)
                                         navController.navigate(Screen.InFlight.createRoute(fn, di, dm)) {
                                             popUpTo(Screen.CheckIn.route) { inclusive = true }
                                         }
@@ -271,11 +312,13 @@ class CesiumGameActivity : GameActivity() {
                                 InFlightScreen(
                                     viewModel = viewModel,
                                     onLandingCelebration = { rank ->
+                                        preferencesRepository.clearActiveFlightContext()
                                         navController.navigate(Screen.ArrivalCelebration.createRoute(flightNo, destIata, durationMin, rank)) {
                                             popUpTo(Screen.InFlight.route) { inclusive = true }
                                         }
                                     },
                                     onExitFlight = {
+                                        preferencesRepository.clearActiveFlightContext()
                                         navController.navigate(Screen.Hub.route) {
                                             popUpTo(Screen.Hub.route) { inclusive = true }
                                         }

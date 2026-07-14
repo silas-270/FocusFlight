@@ -178,6 +178,10 @@ class FlightDatabaseHelper(private val context: Context) {
                     val heLonCol = cursor.getColumnIndexOrThrow("he_lon")
                     
                     do {
+                        if (cursor.isNull(leLatCol) || cursor.isNull(leLonCol)) {
+                            continue
+                        }
+
                         val lengthFt = cursor.getFloat(lengthCol)
                         val widthFt = cursor.getFloat(widthCol)
                         val leHeading = cursor.getFloat(leHeadingCol)
