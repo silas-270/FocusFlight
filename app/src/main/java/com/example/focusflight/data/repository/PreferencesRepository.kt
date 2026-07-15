@@ -36,17 +36,7 @@ class PreferencesRepository(context: Context) {
         prefs.edit().putString(KEY_CURRENT_AIRPORT, iata).apply()
     }
 
-    fun saveFlightLog(origin: String, dest: String, durationMin: Int, flightNo: String, rank: String, date: String) {
-        val currentLogs = prefs.getStringSet("flight_logs_set", emptySet()) ?: emptySet()
-        val entry = "$origin|$dest|$durationMin|$flightNo|$rank|$date"
-        val newLogs = currentLogs.toMutableSet()
-        newLogs.add(entry)
-        prefs.edit().putStringSet("flight_logs_set", newLogs).apply()
-    }
 
-    fun getFlightLogs(): List<String> {
-        return prefs.getStringSet("flight_logs_set", emptySet())?.toList() ?: emptyList()
-    }
 
     fun saveActiveFlightProgress(flightNo: String, elapsedMs: Long) {
         prefs.edit().putLong("active_flight_$flightNo", elapsedMs).apply()

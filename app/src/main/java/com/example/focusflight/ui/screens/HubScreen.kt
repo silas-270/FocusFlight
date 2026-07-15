@@ -1,5 +1,6 @@
 package com.example.focusflight.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -8,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -73,22 +75,91 @@ fun HubScreen(
     val scaffoldState = rememberBottomSheetScaffoldState()
     val isExpanded = scaffoldState.bottomSheetState.currentValue == SheetValue.Expanded
 
-    BottomSheetScaffold(
-        scaffoldState = scaffoldState,
-        sheetContainerColor = DeepNavy,
-        sheetShape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-        sheetDragHandle = {
+    val activeFlightContext by viewModel.activeFlightContext.collectAsState()
+
+    androidx.compose.material3.Scaffold(
+        bottomBar = {
             Box(
                 modifier = Modifier
-                    .padding(top = 12.dp, bottom = 16.dp)
-                    .width(80.dp)
-                    .height(4.dp)
-                    .background(Border, RoundedCornerShape(2.dp))
-            )
-        },
-        sheetPeekHeight = 260.dp,
-        containerColor = Midnight,
-        sheetContent = {
+                    .fillMaxWidth()
+                    .background(DeepNavy)
+                    .padding(
+                        start = Spacing.Large,
+                        end = Spacing.Large,
+                        bottom = Spacing.Large,
+                        top = Spacing.Medium
+                    )
+            ) {
+                if (activeFlightContext != null) {
+                    val context = activeFlightContext!!
+                    Button(
+                        onClick = { onResumeFlightClick(context.first, context.second, context.third) },
+                        modifier = Modifier.fillMaxWidth().height(56.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = OffWhite
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.FlightTakeoff,
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(Spacing.Small))
+                        Text(
+                            text = "RESUME FLIGHT",
+                            style = MaterialTheme.typography.labelLarge.copy(
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.5.sp
+                            )
+                        )
+                    }
+                } else {
+                    Button(
+                        onClick = onBookFlightClick,
+                        modifier = Modifier.fillMaxWidth().height(56.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Amber,
+                            contentColor = Midnight
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.FlightTakeoff,
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(Spacing.Small))
+                        Text(
+                            text = "BOOK A FLIGHT",
+                            style = MaterialTheme.typography.labelLarge.copy(
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.5.sp
+                            )
+                        )
+                    }
+                }
+            }
+        }
+    ) { innerPadding ->
+        BottomSheetScaffold(
+            modifier = Modifier.padding(innerPadding),
+            scaffoldState = scaffoldState,
+            sheetContainerColor = DeepNavy,
+            sheetShape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+            sheetDragHandle = {
+                Box(
+                    modifier = Modifier
+                        .padding(top = 12.dp, bottom = 16.dp)
+                        .width(80.dp)
+                        .height(4.dp)
+                        .background(Border, RoundedCornerShape(2.dp))
+                )
+            },
+            sheetPeekHeight = 160.dp,
+            containerColor = Midnight,
+            sheetContent = {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -118,161 +189,45 @@ fun HubScreen(
                     color = Haze
                 )
 
-                // Stats and Divider shown ONLY in expanded state
-                if (isExpanded) {
-                    Spacer(modifier = Modifier.height(30.dp))
-                    HorizontalDivider(color = Border, thickness = 1.dp)
-                    Spacer(modifier = Modifier.height(30.dp))
+                // Stats and Divider (below the fold when collapsed)
+                Spacer(modifier = Modifier.height(30.dp))
+                HorizontalDivider(color = Border, thickness = 1.dp)
+                Spacer(modifier = Modifier.height(30.dp))
 
-                    // Stats
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        StatItem(value = stats.totalFlights.toString(), label = "FLIGHTS")
-                        StatItem(value = "${String.format(java.util.Locale.US, "%.1f", stats.totalHours)}h", label = "HOURS")
-                        StatItem(value = stats.airportsVisited.toString(), label = "AIRPORTS")
-                    }
+                // Stats
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    StatItem(value = stats.totalFlights.toString(), label = "FLIGHTS")
+                    val hoursInt = stats.totalMinutes / 60
+                    val minutesInt = stats.totalMinutes % 60
+                    StatItem(value = String.format(java.util.Locale.US, "%02d:%02d", hoursInt, minutesInt), label = "HOURS")
+                    StatItem(value = stats.airportsVisited.toString(), label = "AIRPORTS")
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
-
-                val activeFlightContext by viewModel.activeFlightContext.collectAsState()
-
-                if (isExpanded) {
-                    // Expanded state: show both buttons if active flight exists, else just book flight button
-                    if (activeFlightContext != null) {
-                        val context = activeFlightContext!!
-                        Button(
-                            onClick = { onResumeFlightClick(context.first, context.second, context.third) },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(56.dp),
-                            shape = RoundedCornerShape(16.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primary,
-                                contentColor = OffWhite
+                // Secondary Button (only if active flight exists)
+                if (activeFlightContext != null) {
+                    Spacer(modifier = Modifier.height(30.dp))
+                    Button(
+                        onClick = onBookFlightClick,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = DeepNavy,
+                            contentColor = Amber
+                        ),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Amber)
+                    ) {
+                        Text(
+                            text = "BOOK NEW FLIGHT",
+                            style = MaterialTheme.typography.labelLarge.copy(
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.5.sp
                             )
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.FlightTakeoff,
-                                contentDescription = null,
-                                modifier = Modifier.size(24.dp)
-                            )
-                            Spacer(modifier = Modifier.width(Spacing.Small))
-                            Text(
-                                text = "RESUME FLIGHT",
-                                style = MaterialTheme.typography.labelLarge.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    letterSpacing = 1.5.sp
-                                )
-                            )
-                        }
-                        
-                        Spacer(modifier = Modifier.height(12.dp))
-                        
-                        Button(
-                            onClick = onBookFlightClick,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(56.dp),
-                            shape = RoundedCornerShape(16.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = DeepNavy,
-                                contentColor = Amber
-                            ),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Amber)
-                        ) {
-                            Text(
-                                text = "BOOK NEW FLIGHT",
-                                style = MaterialTheme.typography.labelLarge.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    letterSpacing = 1.5.sp
-                                )
-                            )
-                        }
-                    } else {
-                        Button(
-                            onClick = onBookFlightClick,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(56.dp),
-                            shape = RoundedCornerShape(16.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Amber,
-                                contentColor = Midnight
-                            )
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.FlightTakeoff,
-                                contentDescription = null,
-                                modifier = Modifier.size(24.dp)
-                            )
-                            Spacer(modifier = Modifier.width(Spacing.Small))
-                            Text(
-                                text = "BOOK A FLIGHT",
-                                style = MaterialTheme.typography.labelLarge.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    letterSpacing = 1.5.sp
-                                )
-                            )
-                        }
-                    }
-                } else {
-                    // Collapsed state: show only resume flight if active flight exists, else book flight button
-                    if (activeFlightContext != null) {
-                        val context = activeFlightContext!!
-                        Button(
-                            onClick = { onResumeFlightClick(context.first, context.second, context.third) },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(56.dp),
-                            shape = RoundedCornerShape(16.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primary,
-                                contentColor = OffWhite
-                            )
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.FlightTakeoff,
-                                contentDescription = null,
-                                modifier = Modifier.size(24.dp)
-                            )
-                            Spacer(modifier = Modifier.width(Spacing.Small))
-                            Text(
-                                text = "RESUME FLIGHT",
-                                style = MaterialTheme.typography.labelLarge.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    letterSpacing = 1.5.sp
-                                )
-                            )
-                        }
-                    } else {
-                        Button(
-                            onClick = onBookFlightClick,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(56.dp),
-                            shape = RoundedCornerShape(16.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Amber,
-                                contentColor = Midnight
-                            )
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.FlightTakeoff,
-                                contentDescription = null,
-                                modifier = Modifier.size(24.dp)
-                            )
-                            Spacer(modifier = Modifier.width(Spacing.Small))
-                            Text(
-                                text = "BOOK A FLIGHT",
-                                style = MaterialTheme.typography.labelLarge.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    letterSpacing = 1.5.sp
-                                )
-                            )
-                        }
+                        )
                     }
                 }
             }
@@ -342,17 +297,22 @@ fun HubScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .windowInsetsPadding(WindowInsets.statusBars)
-                    .padding(horizontal = Spacing.Large, vertical = Spacing.Medium),
+                    .padding(start = Spacing.Large, end = Spacing.Large, top = Spacing.Large, bottom = Spacing.Medium),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Profile Avatar (No background container)
-                Icon(
-                    imageVector = Icons.Outlined.Person,
-                    contentDescription = "Profile",
-                    tint = OffWhite,
+                IconButton(
+                    onClick = onPassportClick,
                     modifier = Modifier.size(24.dp)
-                )
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Person,
+                        contentDescription = "Profile",
+                        tint = OffWhite,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
 
                 // Settings Gear
                 IconButton(
@@ -368,6 +328,7 @@ fun HubScreen(
                 }
             }
         }
+    }
     }
 }
 

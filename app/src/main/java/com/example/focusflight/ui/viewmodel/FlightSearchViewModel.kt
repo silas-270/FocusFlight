@@ -8,6 +8,8 @@ import com.example.focusflight.data.model.Airport
 import com.example.focusflight.data.model.FlightRoute
 import com.example.focusflight.data.repository.FlightDatabaseHelper
 import com.example.focusflight.data.repository.PreferencesRepository
+import com.example.focusflight.data.repository.UserRepository
+import com.example.focusflight.data.repository.FlightLogRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -17,8 +19,11 @@ import kotlinx.coroutines.launch
 enum class SearchMode { TIME, AIRPORT }
 
 class FlightSearchViewModel(
+    private val context: android.content.Context,
     private val databaseHelper: FlightDatabaseHelper,
-    private val preferencesRepository: PreferencesRepository
+    private val preferencesRepository: PreferencesRepository,
+    private val userRepository: UserRepository,
+    private val flightLogRepository: FlightLogRepository
 ) : ViewModel() {
 
     private val _originAirport = MutableStateFlow<Airport?>(null)
@@ -48,8 +53,51 @@ class FlightSearchViewModel(
     private val _airportSearchResults = MutableStateFlow<List<FlightRoute>>(emptyList())
     val airportSearchResults: StateFlow<List<FlightRoute>> = _airportSearchResults.asStateFlow()
 
+    // World Map Data
+    val mapPaths = MutableStateFlow<List<com.example.focusflight.ui.map.CountryPath>>(emptyList())
+    val visitedCountries = MutableStateFlow<Set<String>>(emptySet())
+    val countryToContinent = MutableStateFlow<Map<String, String>>(emptyMap())
+    val completedContinents = MutableStateFlow<Set<String>>(emptySet())
+
     init {
         loadOrigin()
+        loadMapData()
+    }
+
+    private fun loadMapData() {
+        viewModelScope.launch(Dispatchers.IO) {
+            // Load SVG map paths
+            mapPaths.value = com.example.focusflight.ui.map.WorldMapParser.parseWorldMap(context)
+
+            // Get profile and calculate stats
+            val profile = userRepository.getProfile()
+            val homeIata = profile?.homeAirportIata
+
+            flightLogRepository.getFlightHistoryFlow().collect { history ->
+                val visitedIatas = history.map { it.destIata }.toMutableList()
+                if (homeIata != null) {
+                    visitedIatas.add(homeIata)
+                }
+                val uniqueVisited = visitedIatas.distinct()
+                val visitedSet = databaseHelper.getCountriesForAirports(uniqueVisited)
+                visitedCountries.value = visitedSet
+
+                val worldMap = databaseHelper.getContinentCountryMap()
+                val mapping = mutableMapOf<String, String>()
+                worldMap.forEach { (continent, countries) ->
+                    countries.forEach { country ->
+                        mapping[country] = continent
+                    }
+                }
+                countryToContinent.value = mapping
+
+                val completed = worldMap.filter { (_, allCountries) ->
+                    val missing = allCountries.subtract(visitedSet)
+                    missing.isEmpty() && allCountries.isNotEmpty()
+                }.keys
+                completedContinents.value = completed
+            }
+        }
     }
 
     private fun loadOrigin() {
@@ -180,13 +228,16 @@ class FlightSearchViewModel(
 }
 
 class FlightSearchViewModelFactory(
+    private val context: android.content.Context,
     private val databaseHelper: FlightDatabaseHelper,
-    private val preferencesRepository: PreferencesRepository
+    private val preferencesRepository: PreferencesRepository,
+    private val userRepository: UserRepository,
+    private val flightLogRepository: FlightLogRepository
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(FlightSearchViewModel::class.java)) {
-            return FlightSearchViewModel(databaseHelper, preferencesRepository) as T
+            return FlightSearchViewModel(context, databaseHelper, preferencesRepository, userRepository, flightLogRepository) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

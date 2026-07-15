@@ -216,53 +216,7 @@ class FlightDatabaseHelper(private val context: Context) {
         return runways
     }
 
-    fun getRandomAirports(limit: Int, excludeIata: String): List<Airport> {
-        val airportsList = mutableListOf<Airport>()
-        val db = getReadableDatabase()
-        val sql = "SELECT * FROM airports WHERE iata_code != '' AND iata_code != ? ORDER BY RANDOM() LIMIT ?"
-        try {
-            db.rawQuery(sql, arrayOf(excludeIata, limit.toString())).use { cursor ->
-                if (cursor.moveToFirst()) {
-                    val idCol = cursor.getColumnIndexOrThrow("airport_id")
-                    val identCol = cursor.getColumnIndexOrThrow("ident")
-                    val iataCol = cursor.getColumnIndexOrThrow("iata_code")
-                    val nameCol = cursor.getColumnIndexOrThrow("name")
-                    val latCol = cursor.getColumnIndexOrThrow("lat")
-                    val lonCol = cursor.getColumnIndexOrThrow("lon")
-                    val elevCol = cursor.getColumnIndexOrThrow("elevation_ft")
-                    val contCol = cursor.getColumnIndexOrThrow("continent")
-                    val countryCol = cursor.getColumnIndexOrThrow("iso_country")
-                    val regionCol = cursor.getColumnIndexOrThrow("iso_region")
-                    val munCol = cursor.getColumnIndexOrThrow("municipality")
-                    val typeCol = cursor.getColumnIndexOrThrow("type")
-                    
-                    do {
-                        airportsList.add(
-                            Airport(
-                                id = cursor.getInt(idCol),
-                                ident = cursor.getString(identCol) ?: "",
-                                iataCode = cursor.getString(iataCol) ?: "",
-                                name = cursor.getString(nameCol) ?: "",
-                                lat = cursor.getDouble(latCol),
-                                lon = cursor.getDouble(lonCol),
-                                elevationFt = cursor.getDouble(elevCol),
-                                continent = cursor.getString(contCol) ?: "",
-                                isoCountry = cursor.getString(countryCol) ?: "",
-                                isoRegion = cursor.getString(regionCol) ?: "",
-                                municipality = cursor.getString(munCol) ?: "",
-                                type = cursor.getString(typeCol) ?: ""
-                            )
-                        )
-                    } while (cursor.moveToNext())
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error querying random airports", e)
-        } finally {
-            db.close()
-        }
-        return airportsList
-    }
+
 
     fun getOutboundRoutes(
         originIata: String,
@@ -339,5 +293,62 @@ class FlightDatabaseHelper(private val context: Context) {
             db.close()
         }
         return routesList
+    }
+
+    fun getContinentCountryMap(): Map<String, Set<String>> {
+        val map = mutableMapOf<String, MutableSet<String>>()
+        val db = getReadableDatabase()
+        val sql = "SELECT DISTINCT continent, iso_country FROM airports WHERE type IN ('large_airport', 'medium_airport') AND iso_country != '' AND continent != ''"
+        
+        try {
+            db.rawQuery(sql, null).use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val contCol = cursor.getColumnIndexOrThrow("continent")
+                    val countryCol = cursor.getColumnIndexOrThrow("iso_country")
+                    
+                    do {
+                        val continent = cursor.getString(contCol) ?: continue
+                        val country = cursor.getString(countryCol) ?: continue
+                        
+                        map.getOrPut(continent) { mutableSetOf() }.add(country)
+                    } while (cursor.moveToNext())
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error querying continent country map", e)
+        } finally {
+            db.close()
+        }
+        return map
+    }
+
+    fun getCountriesForAirports(iatas: List<String>): Set<String> {
+        if (iatas.isEmpty()) return emptySet()
+        
+        val countries = mutableSetOf<String>()
+        val db = getReadableDatabase()
+        
+        // SQLite has a limit on the number of variables in IN (?), so we chunk if necessary, 
+        // but for a user's flight log it shouldn't exceed 999.
+        val placeholders = iatas.joinToString(",") { "?" }
+        val sql = "SELECT DISTINCT iso_country FROM airports WHERE iata_code IN ($placeholders) AND iso_country != ''"
+        
+        try {
+            db.rawQuery(sql, iatas.toTypedArray()).use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val countryCol = cursor.getColumnIndexOrThrow("iso_country")
+                    
+                    do {
+                        val country = cursor.getString(countryCol) ?: continue
+                        countries.add(country)
+                    } while (cursor.moveToNext())
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error querying countries for airports", e)
+        } finally {
+            db.close()
+        }
+        return countries
     }
 }

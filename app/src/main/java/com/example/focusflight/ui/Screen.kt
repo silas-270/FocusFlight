@@ -16,4 +16,5 @@ sealed class Screen(val route: String) {
         fun createRoute(flightNo: String, destIata: String, durationMin: Int, rank: String) =
             "arrival_celebration/$flightNo/$destIata/$durationMin/$rank"
     }
+    object Account : Screen("account")
 }
