@@ -41,7 +41,7 @@ data class UserProfile(
             repeat(CODE_LENGTH) {
                 code.append(CHARSET[random.nextInt(CHARSET.length)])
             }
-            return "#$code"
+            return code.toString()
         }
 
         fun generateRandomName(): String {

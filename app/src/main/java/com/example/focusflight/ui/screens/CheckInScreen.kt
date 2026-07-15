@@ -22,12 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.FlightTakeoff
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -54,6 +49,7 @@ import com.example.focusflight.ui.theme.Slate
 import com.example.focusflight.ui.theme.Spacing
 import com.example.focusflight.ui.viewmodel.CheckInViewModel
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CheckInScreen(
     viewModel: CheckInViewModel,
@@ -64,50 +60,43 @@ fun CheckInScreen(
     val destAirport by viewModel.destAirport.collectAsState()
     val routeDetails by viewModel.routeDetails.collectAsState()
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Midnight)
-    ) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        "CHECK-IN",
+                        style = MaterialTheme.typography.labelLarge.copy(
+                            letterSpacing = 3.sp,
+                            fontWeight = FontWeight.Bold
+                        ),
+                        color = Amber
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBackClick) {
+                        Icon(
+                            Icons.AutoMirrored.Outlined.ArrowBack,
+                            contentDescription = "Back",
+                            tint = OffWhite
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Midnight
+                )
+            )
+        },
+        containerColor = Midnight
+    ) { paddingValues ->
         // ── Main Content Column ──
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .windowInsetsPadding(WindowInsets.statusBars)
-                .padding(start = Spacing.Large, top = Spacing.Large, end = Spacing.Large, bottom = Spacing.Large),
+                .padding(paddingValues)
+                .padding(start = Spacing.Large, top = Spacing.Medium, end = Spacing.Large, bottom = Spacing.Large),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Header Row
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(
-                    onClick = onBackClick,
-                    modifier = Modifier
-                        .size(40.dp)
-                        .background(DeepNavy.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
-                        .border(1.dp, Border, RoundedCornerShape(12.dp))
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
-                        contentDescription = "Back",
-                        tint = OffWhite
-                    )
-                }
-                Spacer(modifier = Modifier.width(Spacing.Medium))
-                Text(
-                    text = "CHECK-IN",
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontWeight = FontWeight.Black,
-                        letterSpacing = 2.sp,
-                        color = OffWhite,
-                        fontFamily = FontFamily.SansSerif
-                    )
-                )
-            }
-
-            Spacer(modifier = Modifier.height(32.dp))
 
             // Boarding Pass Ticket Card
             Column(

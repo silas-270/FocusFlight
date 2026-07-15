@@ -38,12 +38,7 @@ import androidx.compose.material.icons.outlined.FlightTakeoff
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Timer
 import com.example.focusflight.ui.viewmodel.SearchMode
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -106,6 +101,7 @@ import com.example.focusflight.ui.viewmodel.FlightSearchViewModel
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FlightSearchScreen(
     viewModel: FlightSearchViewModel,
@@ -122,64 +118,56 @@ fun FlightSearchScreen(
     val airportSearchQuery by viewModel.airportSearchQuery.collectAsState()
     val airportSearchResults by viewModel.airportSearchResults.collectAsState()
 
-    Box(modifier = Modifier.fillMaxSize().background(Midnight)) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        "SELECT ROUTE",
+                        style = MaterialTheme.typography.labelLarge.copy(
+                            letterSpacing = 3.sp,
+                            fontWeight = FontWeight.Bold
+                        ),
+                        color = Amber
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBackClick) {
+                        Icon(
+                            Icons.AutoMirrored.Outlined.ArrowBack,
+                            contentDescription = "Back",
+                            tint = OffWhite
+                        )
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { viewModel.toggleSearchMode() }) {
+                        Icon(
+                            imageVector = if (searchMode == SearchMode.TIME) {
+                                Icons.Outlined.Search
+                            } else {
+                                Icons.Outlined.Timer
+                            },
+                            contentDescription = "Toggle Search Mode",
+                            tint = Amber
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Midnight
+                )
+            )
+        },
+        containerColor = Midnight
+    ) { paddingValues ->
         // Main Screen Column
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .windowInsetsPadding(WindowInsets.statusBars)
+                .padding(paddingValues)
                 .padding(bottom = Spacing.Large),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // 1. Top Header Bar (incorporating the return button minimalist-style)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = Spacing.Large, end = Spacing.Large, top = Spacing.Large, bottom = Spacing.Medium),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(
-                    onClick = onBackClick,
-                    modifier = Modifier
-                        .size(40.dp)
-                        .background(DeepNavy.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
-                        .border(1.dp, Border, RoundedCornerShape(12.dp))
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
-                        contentDescription = "Back",
-                        tint = OffWhite
-                    )
-                }
-                Spacer(modifier = Modifier.width(Spacing.Medium))
-                Text(
-                    text = "SELECT ROUTE",
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontWeight = FontWeight.Black,
-                        letterSpacing = 2.sp,
-                        color = OffWhite,
-                        fontFamily = FontFamily.SansSerif
-                    )
-                )
-                Spacer(modifier = Modifier.weight(1f))
-                IconButton(
-                    onClick = { viewModel.toggleSearchMode() },
-                    modifier = Modifier
-                        .size(40.dp)
-                        .background(DeepNavy.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
-                        .border(1.dp, Border, RoundedCornerShape(12.dp))
-                ) {
-                    Icon(
-                        imageVector = if (searchMode == SearchMode.TIME) {
-                            Icons.Outlined.Search
-                        } else {
-                            Icons.Outlined.Timer
-                        },
-                        contentDescription = "Toggle Search Mode",
-                        tint = Amber
-                    )
-                }
-            }
 
             // 2. Tactical 2D Route Map (expands to take available vertical space, no border, consistent padding)
             RouteMap(

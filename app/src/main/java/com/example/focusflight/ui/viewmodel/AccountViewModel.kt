@@ -3,19 +3,41 @@ package com.example.focusflight.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import androidx.paging.Pager
+import androidx.paging.PagingConfig
+import androidx.paging.PagingData
+import androidx.paging.cachedIn
 import com.example.focusflight.data.model.FlightLog
 import com.example.focusflight.data.repository.FlightDatabaseHelper
 import com.example.focusflight.data.repository.FlightLogRepository
 import com.example.focusflight.data.repository.UserRepository
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+
+enum class FlightSortOrder(val displayName: String) {
+    DATE_DESC("Newest First"),
+    DATE_ASC("Oldest First"),
+    DISTANCE_DESC("Longest Distance"),
+    DISTANCE_ASC("Shortest Distance"),
+    DURATION_DESC("Longest Duration")
+}
+
+data class FlightHighlights(
+    val longestFlight: FlightLog? = null,
+    val mostVisitedIata: String? = null,
+    val mostVisitedCount: Int = 0,
+    val equatorRatio: Double = 0.0
+)
 
 data class ContinentStats(
     val continentCode: String,
@@ -37,7 +59,7 @@ data class AccountUiState(
     val totalMinutes: Int = 0,
     val airportsVisited: Int = 0,
     
-    // Flight History
+    // Flight History (used for map paths/stats)
     val flightHistory: List<FlightLog> = emptyList(),
     
     // Map Data
@@ -47,9 +69,14 @@ data class AccountUiState(
     val countryToContinent: Map<String, String> = emptyMap(),
     val mapPaths: List<com.example.focusflight.ui.map.CountryPath> = emptyList(),
     
+    // Highlights Card Data
+    val highlights: FlightHighlights = FlightHighlights(),
+    val sortOrder: FlightSortOrder = FlightSortOrder.DATE_DESC,
+    
     val isLoading: Boolean = true
 )
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class AccountViewModel(
     private val context: android.content.Context,
     private val userRepository: UserRepository,
@@ -61,6 +88,20 @@ class AccountViewModel(
     val uiState: StateFlow<AccountUiState> = _uiState.asStateFlow()
 
     private val dateFormat = SimpleDateFormat("MMM yyyy", Locale.US)
+
+    private val _sortOrder = MutableStateFlow(FlightSortOrder.DATE_DESC)
+    val sortOrder: StateFlow<FlightSortOrder> = _sortOrder.asStateFlow()
+
+    // Expose Paged Data Flow to UI
+    val pagedFlights: Flow<PagingData<FlightLog>> = _sortOrder.flatMapLatest { sort ->
+        Pager(
+            config = PagingConfig(
+                pageSize = 20,
+                enablePlaceholders = false
+            ),
+            pagingSourceFactory = { flightLogRepository.getFlightsPagingSource(sort) }
+        ).flow
+    }.cachedIn(viewModelScope)
 
     init {
         loadData()
@@ -75,7 +116,7 @@ class AccountViewModel(
                     _uiState.update { state ->
                         state.copy(
                             username = profile.username,
-                            userCode = profile.userCode,
+                            userCode = profile.userCode.removePrefix("#").removePrefix("@"),
                             homeAirportIata = profile.homeAirportIata,
                             joinDateFormatted = formattedDate
                         )
@@ -84,7 +125,7 @@ class AccountViewModel(
             }
         }
 
-        // Collect flight history and calculate map stats
+        // Collect flight history and calculate map stats + highlights
         viewModelScope.launch(Dispatchers.IO) {
             // Load SVG map paths once
             val mapPaths = com.example.focusflight.ui.map.WorldMapParser.parseWorldMap(context)
@@ -92,8 +133,11 @@ class AccountViewModel(
             flightLogRepository.getFlightHistoryFlow().collect { history ->
                 // 1. Get base aggregates from Room
                 val stats = flightLogRepository.getFlightStats()
+                
+                // 2. Fetch specific Flight Highlights
+                val highlights = flightLogRepository.getFlightHighlights()
 
-                // 2. Extract unique destination IATAs and include home airport
+                // 3. Extract unique destination IATAs and include home airport
                 val profile = userRepository.getProfile()
                 val homeIata = profile?.homeAirportIata
                 
@@ -103,13 +147,13 @@ class AccountViewModel(
                 }
                 val uniqueVisitedIatas = visitedIatas.distinct()
                 
-                // 3. Translate IATAs to Countries (SQLite)
+                // 4. Translate IATAs to Countries (SQLite)
                 val visitedCountries = databaseHelper.getCountriesForAirports(uniqueVisitedIatas)
                 
-                // 4. Get World Geography Data (SQLite)
+                // 5. Get World Geography Data (SQLite)
                 val worldMap = databaseHelper.getContinentCountryMap()
                 
-                // 5. Reverse map country to continent
+                // 6. Reverse map country to continent
                 val countryToContinent = mutableMapOf<String, String>()
                 worldMap.forEach { (continent, countries) ->
                     countries.forEach { country ->
@@ -117,7 +161,7 @@ class AccountViewModel(
                     }
                 }
 
-                // 6. Calculate Continent Completion
+                // 7. Calculate Continent Completion
                 val continentStatsList = worldMap.map { (continent, allCountriesInContinent) ->
                     val visitedInContinent = allCountriesInContinent.intersect(visitedCountries)
                     val missingInContinent = allCountriesInContinent.subtract(visitedCountries)
@@ -144,11 +188,17 @@ class AccountViewModel(
                         completedContinents = completedContinents,
                         countryToContinent = countryToContinent,
                         mapPaths = mapPaths,
+                        highlights = highlights,
                         isLoading = false
                     )
                 }
             }
         }
+    }
+
+    fun setSortOrder(order: FlightSortOrder) {
+        _sortOrder.value = order
+        _uiState.update { it.copy(sortOrder = order) }
     }
 
     fun updateUsername(newName: String) {
