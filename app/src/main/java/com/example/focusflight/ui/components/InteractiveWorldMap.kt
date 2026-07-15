@@ -65,7 +65,7 @@ fun InteractiveWorldMap(
 
                             countryPath.paths.forEach { path ->
                                 drawPath(
-                                    path = path.asComposePath(),
+                                    path = path,
                                     color = fillColor
                                 )
                             }
@@ -91,7 +91,7 @@ fun InteractiveWorldMap(
 
                             countryPath.paths.forEach { path ->
                                 drawPath(
-                                    path = path.asComposePath(),
+                                    path = path,
                                     color = strokeColor,
                                     style = Stroke(width = strokeWidth)
                                 )

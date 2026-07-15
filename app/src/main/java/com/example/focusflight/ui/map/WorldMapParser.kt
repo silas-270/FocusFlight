@@ -1,7 +1,7 @@
 package com.example.focusflight.ui.map
 
 import android.content.Context
-import android.graphics.Path
+import androidx.compose.ui.graphics.asComposePath
 import androidx.core.graphics.PathParser
 import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserFactory
@@ -10,7 +10,7 @@ import java.util.Locale
 
 data class CountryPath(
     val countryCode: String, // Uppercased ISO code (e.g., "US", "DE")
-    val paths: List<Path>
+    val paths: List<androidx.compose.ui.graphics.Path>
 )
 
 object WorldMapParser {
@@ -28,7 +28,7 @@ object WorldMapParser {
 
             var eventType = parser.eventType
             var currentGroupId: String? = null
-            val groupPaths = mutableListOf<Path>()
+            val groupPaths = mutableListOf<androidx.compose.ui.graphics.Path>()
 
             while (eventType != XmlPullParser.END_DOCUMENT) {
                 val name = parser.name
@@ -45,15 +45,16 @@ object WorldMapParser {
                             if (d != null) {
                                 try {
                                     val androidPath = PathParser.createPathFromPathData(d)
+                                    val composePath = androidPath.asComposePath()
                                     if (currentGroupId != null) {
-                                        groupPaths.add(androidPath)
+                                        groupPaths.add(composePath)
                                     } else {
                                         val id = parser.getAttributeValue(null, "id")
                                         if (id != null) {
                                             countries.add(
                                                 CountryPath(
                                                     countryCode = id.uppercase(Locale.US),
-                                                    paths = listOf(androidPath)
+                                                    paths = listOf(composePath)
                                                 )
                                             )
                                         }
@@ -72,7 +73,7 @@ object WorldMapParser {
                                         countryCode = currentGroupId.uppercase(Locale.US),
                                         paths = ArrayList(groupPaths)
                                     )
-                                )
+                                    )
                                 currentGroupId = null
                                 groupPaths.clear()
                             }
