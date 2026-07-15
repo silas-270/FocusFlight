@@ -3,6 +3,7 @@ import java.io.File
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.ksp)
 }
 
 android {
@@ -47,8 +48,7 @@ tasks.register("cargoNdkBuild") {
             "/home/silas270/CesiumRS"
         }
         val targets = mapOf(
-            "aarch64-linux-android" to "arm64-v8a",
-            "x86_64-linux-android" to "x86_64"
+            "aarch64-linux-android" to "arm64-v8a"
         )
 
         val cargoBin = if (isWindows) "cargo" else "/home/silas270/.cargo/bin/cargo"
@@ -113,6 +113,9 @@ dependencies {
     implementation("io.coil-kt.coil3:coil-svg:3.0.4")
     implementation("androidx.webkit:webkit:1.11.0")
     implementation(libs.gson)
+    implementation(libs.room.runtime)
+    implementation(libs.room.ktx)
+    ksp(libs.room.compiler)
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)

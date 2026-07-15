@@ -5,8 +5,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.focusflight.data.model.Airport
+import com.example.focusflight.data.model.FlightLog
 import com.example.focusflight.data.repository.CesiumRSLibrary
 import com.example.focusflight.data.repository.FlightDatabaseHelper
+import com.example.focusflight.data.repository.FlightLogRepository
 import com.example.focusflight.data.repository.PreferencesRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -17,13 +19,14 @@ import java.io.File
 
 data class FlightStats(
     val totalFlights: Int = 0,
-    val totalHours: Double = 0.0,
+    val totalMinutes: Int = 0,
     val airportsVisited: Int = 0
 )
 
 class HubViewModel(
     private val databaseHelper: FlightDatabaseHelper,
     private val preferencesRepository: PreferencesRepository,
+    private val flightLogRepository: FlightLogRepository,
     private val cacheDir: File
 ) : ViewModel() {
 
@@ -33,8 +36,8 @@ class HubViewModel(
     private val _flightStats = MutableStateFlow(FlightStats())
     val flightStats: StateFlow<FlightStats> = _flightStats.asStateFlow()
 
-    private val _recentFlights = MutableStateFlow<List<Any>>(emptyList())
-    val recentFlights: StateFlow<List<Any>> = _recentFlights.asStateFlow()
+    private val _recentFlights = MutableStateFlow<List<FlightLog>>(emptyList())
+    val recentFlights: StateFlow<List<FlightLog>> = _recentFlights.asStateFlow()
 
     private val _routeMapPath = MutableStateFlow<String?>(null)
     val routeMapPath: StateFlow<String?> = _routeMapPath.asStateFlow()
@@ -66,11 +69,19 @@ class HubViewModel(
                 }
             }
             
-            _flightStats.value = FlightStats(
-                totalFlights = 0,
-                totalHours = 0.0,
-                airportsVisited = if (_currentAirport.value != null) 1 else 0
-            )
+            // Load real flight stats from Room
+            try {
+                val stats = flightLogRepository.getFlightStats()
+                _flightStats.value = stats
+                _recentFlights.value = flightLogRepository.getRecentFlights(5)
+            } catch (e: Exception) {
+                Log.e("HubViewModel", "Error loading flight stats", e)
+                _flightStats.value = FlightStats(
+                    totalFlights = 0,
+                    totalMinutes = 0,
+                    airportsVisited = if (_currentAirport.value != null) 1 else 0
+                )
+            }
         }
     }
 
@@ -89,10 +100,10 @@ class HubViewModel(
 
             _isRendering.value = true
             try {
-                // Fetch 12 random destination airports for routes display
-                val destinations = databaseHelper.getRandomAirports(12, origin.iataCode)
-                val routesData = destinations.map { dest ->
-                    Pair(Pair(origin.lat, origin.lon), Pair(dest.lat, dest.lon))
+                // Fetch up to 12 actual destination airports for routes display
+                val outboundRoutes = databaseHelper.getOutboundRoutes(origin.iataCode).filter { it.distanceKm <= 10000.0 }.shuffled().take(12)
+                val routesData = outboundRoutes.map { route ->
+                    Pair(Pair(origin.lat, origin.lon), Pair(route.destLat, route.destLon))
                 }
 
                 if (outFile.exists()) {
@@ -139,12 +150,13 @@ class HubViewModel(
 class HubViewModelFactory(
     private val databaseHelper: FlightDatabaseHelper,
     private val preferencesRepository: PreferencesRepository,
+    private val flightLogRepository: FlightLogRepository,
     private val cacheDir: File
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(HubViewModel::class.java)) {
-            return HubViewModel(databaseHelper, preferencesRepository, cacheDir) as T
+            return HubViewModel(databaseHelper, preferencesRepository, flightLogRepository, cacheDir) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

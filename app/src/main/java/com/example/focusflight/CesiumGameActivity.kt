@@ -1,6 +1,7 @@
 package com.example.focusflight
 
 import android.os.Bundle
+import android.util.Log
 import android.view.ViewGroup
 import android.view.WindowManager
 import androidx.compose.animation.AnimatedContentTransitionScope
@@ -13,6 +14,14 @@ import com.example.focusflight.engine.CesiumEngineManager
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material3.Text
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
@@ -21,8 +30,13 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.example.focusflight.data.local.AppDatabase
 import com.example.focusflight.data.repository.FlightDatabaseHelper
+import com.example.focusflight.data.repository.FlightLogRepository
+import com.example.focusflight.data.repository.LocalFlightLogRepository
+import com.example.focusflight.data.repository.LocalUserRepository
 import com.example.focusflight.data.repository.PreferencesRepository
+import com.example.focusflight.data.repository.UserRepository
 import com.example.focusflight.engine.CesiumBridge
 import com.example.focusflight.ui.Screen
 import com.example.focusflight.ui.screens.ArrivalCelebrationScreen
@@ -37,6 +51,8 @@ import com.example.focusflight.ui.viewmodel.FlightSearchViewModel
 import com.example.focusflight.ui.viewmodel.FlightSearchViewModelFactory
 import com.example.focusflight.ui.viewmodel.HubViewModel
 import com.example.focusflight.ui.viewmodel.HubViewModelFactory
+import com.example.focusflight.ui.viewmodel.AccountViewModel
+import com.example.focusflight.ui.viewmodel.AccountViewModelFactory
 import com.example.focusflight.ui.viewmodel.InFlightViewModel
 import com.example.focusflight.ui.viewmodel.InFlightViewModelFactory
 import com.example.focusflight.ui.viewmodel.OnboardingViewModel
@@ -44,12 +60,15 @@ import com.example.focusflight.ui.viewmodel.OnboardingViewModelFactory
 import com.google.androidgamesdk.GameActivity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 
 class CesiumGameActivity : GameActivity() {
 
     private lateinit var databaseHelper: FlightDatabaseHelper
     private lateinit var preferencesRepository: PreferencesRepository
+    private lateinit var userRepository: UserRepository
+    private lateinit var flightLogRepository: FlightLogRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -57,12 +76,27 @@ class CesiumGameActivity : GameActivity() {
         // Keep screen on during flight
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
-        // Initialize database helper and preferences repository (absorbed from CesiumActivity)
+        // Immersive mode
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        WindowInsetsControllerCompat(window, window.decorView).let { controller ->
+            controller.hide(WindowInsetsCompat.Type.systemBars())
+            controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
+
+        // Initialize database helper and preferences repository
         databaseHelper = FlightDatabaseHelper(applicationContext)
         preferencesRepository = PreferencesRepository(applicationContext)
 
-        // Copy database asset on first run
+        // Initialize Room database and repositories
+        val appDatabase = AppDatabase.getInstance(applicationContext)
+        userRepository = LocalUserRepository(appDatabase.userProfileDao())
+        flightLogRepository = LocalFlightLogRepository(appDatabase.flightLogDao(), appDatabase.userProfileDao())
+
+        // Copy reference database asset on first run
         databaseHelper.ensureDatabaseCopied()
+
+        // Migrate SharedPreferences flight logs to Room (one-time)
+        migrateFlightLogsIfNeeded()
 
         // Attach the lifecycle observer ONCE before Compose content is set.
         // This is not re-triggered on recomposition because it targets the Activity lifecycle,
@@ -133,7 +167,7 @@ class CesiumGameActivity : GameActivity() {
                             // ── Onboarding ──
                             composable(Screen.Onboarding.route) {
                                 val viewModel: OnboardingViewModel = viewModel(
-                                    factory = OnboardingViewModelFactory(databaseHelper, preferencesRepository, cacheDir)
+                                    factory = OnboardingViewModelFactory(databaseHelper, preferencesRepository, userRepository, cacheDir)
                                 )
                                 OnboardingScreen(
                                     viewModel = viewModel,
@@ -148,7 +182,7 @@ class CesiumGameActivity : GameActivity() {
                             // ── Hub ──
                             composable(Screen.Hub.route) {
                                 val viewModel: HubViewModel = viewModel(
-                                    factory = HubViewModelFactory(databaseHelper, preferencesRepository, cacheDir)
+                                    factory = HubViewModelFactory(databaseHelper, preferencesRepository, flightLogRepository, cacheDir)
                                 )
                                 val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
                                 com.example.focusflight.ui.screens.HubScreen(
@@ -195,7 +229,7 @@ class CesiumGameActivity : GameActivity() {
                                         }
                                     },
                                     onPassportClick = {
-                                        // TODO: Navigate to Passport
+                                        navController.navigate(Screen.Account.route)
                                     },
                                     onSettingsClick = {
                                         // TODO: Navigate to Settings
@@ -206,7 +240,7 @@ class CesiumGameActivity : GameActivity() {
                             // ── Flight Search ──
                             composable(Screen.FlightSearch.route) {
                                 val viewModel: FlightSearchViewModel = viewModel(
-                                    factory = FlightSearchViewModelFactory(databaseHelper, preferencesRepository)
+                                    factory = FlightSearchViewModelFactory(applicationContext, databaseHelper, preferencesRepository, userRepository, flightLogRepository)
                                 )
                                 val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
 
@@ -306,7 +340,7 @@ class CesiumGameActivity : GameActivity() {
                                 val durationMin = backStackEntry.arguments?.getInt("durationMin") ?: 0
 
                                 val viewModel: InFlightViewModel = viewModel(
-                                    factory = InFlightViewModelFactory(databaseHelper, preferencesRepository, cacheDir, flightNo, destIata, durationMin)
+                                    factory = InFlightViewModelFactory(databaseHelper, preferencesRepository, flightLogRepository, cacheDir, flightNo, destIata, durationMin)
                                 )
 
                                 InFlightScreen(
@@ -353,6 +387,18 @@ class CesiumGameActivity : GameActivity() {
                                     }
                                 )
                             }
+
+                            // ── Account / Passport ──
+                            composable(Screen.Account.route) {
+                                val viewModel: AccountViewModel = viewModel(
+                                    factory = AccountViewModelFactory(applicationContext, userRepository, flightLogRepository, databaseHelper)
+                                )
+                                
+                                com.example.focusflight.ui.screens.AccountScreen(
+                                    viewModel = viewModel,
+                                    onBackClick = { navController.popBackStack() }
+                                )
+                            }
                         }
                     }
                 }
@@ -363,5 +409,53 @@ class CesiumGameActivity : GameActivity() {
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT
         ))
+    }
+
+    private fun migrateFlightLogsIfNeeded() {
+        val prefs = getSharedPreferences("focus_flight_prefs", MODE_PRIVATE)
+        val legacyLogs = prefs.getStringSet("flight_logs_set", null) ?: return
+        if (legacyLogs.isEmpty()) return
+
+        Log.d("Migration", "Migrating ${legacyLogs.size} flight logs from SharedPreferences to Room...")
+
+        runBlocking(Dispatchers.IO) {
+            // Ensure a user profile exists for migration
+            var profile = userRepository.getProfile()
+            if (profile == null) {
+                val homeIata = preferencesRepository.getHomeAirport() ?: "STR"
+                profile = userRepository.createProfile(com.example.focusflight.data.model.UserProfile.generateRandomName(), homeIata)
+            }
+
+            for (entry in legacyLogs) {
+                try {
+                    val parts = entry.split("|")
+                    if (parts.size >= 4) {
+                        val origin = parts[0]
+                        val dest = parts[1]
+                        val duration = parts[2].toIntOrNull() ?: continue
+                        val flightNo = parts[3]
+
+                        // Look up distance from routes table, default to 0.0
+                        val routes = databaseHelper.getOutboundRoutes(origin)
+                        val matchingRoute = routes.find { it.destIata == dest }
+                        val distanceKm = matchingRoute?.distanceKm ?: 0.0
+
+                        flightLogRepository.logFlight(
+                            flightNumber = flightNo,
+                            originIata = origin,
+                            destIata = dest,
+                            durationMin = duration,
+                            distanceKm = distanceKm
+                        )
+                    }
+                } catch (e: Exception) {
+                    Log.e("Migration", "Failed to migrate flight log entry: $entry", e)
+                }
+            }
+        }
+
+        // Clear migrated data
+        prefs.edit().remove("flight_logs_set").apply()
+        Log.d("Migration", "Migration complete. Cleared legacy flight_logs_set.")
     }
 }

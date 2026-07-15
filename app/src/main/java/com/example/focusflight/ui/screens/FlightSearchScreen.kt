@@ -135,7 +135,7 @@ fun FlightSearchScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = Spacing.Large, vertical = Spacing.Medium),
+                    .padding(start = Spacing.Large, end = Spacing.Large, top = Spacing.Large, bottom = Spacing.Medium),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(
@@ -183,11 +183,11 @@ fun FlightSearchScreen(
 
             // 2. Tactical 2D Route Map (expands to take available vertical space, no border, consistent padding)
             RouteMap(
+                viewModel = viewModel,
                 originAirport = originAirport,
                 routes = if (searchMode == SearchMode.TIME) filteredRoutes else airportSearchResults,
                 selectedRoute = selectedRoute,
                 modifier = Modifier
-                    .weight(1f)
                     .fillMaxWidth()
                     .padding(horizontal = Spacing.Large, vertical = Spacing.Small)
             )
@@ -197,7 +197,7 @@ fun FlightSearchScreen(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(390.dp) // Maintain identical bottom panel height to preserve map height exactly
+                    .weight(1f) // Let the bottom panel shrink to fill remaining space
             ) {
                 if (searchMode == SearchMode.TIME) {
                     Column(modifier = Modifier.fillMaxSize()) {
@@ -631,6 +631,7 @@ fun rememberInertiaSnapFlingBehavior(
 
 @Composable
 fun RouteMap(
+    viewModel: FlightSearchViewModel,
     originAirport: Airport?,
     routes: List<FlightRoute>,
     selectedRoute: FlightRoute?,
@@ -647,146 +648,24 @@ fun RouteMap(
         label = "flight_progress"
     )
 
-    Box(
+    val mapPaths by viewModel.mapPaths.collectAsState()
+    val visitedCountries by viewModel.visitedCountries.collectAsState()
+    val countryToContinent by viewModel.countryToContinent.collectAsState()
+    val completedContinents by viewModel.completedContinents.collectAsState()
+
+    com.example.focusflight.ui.components.InteractiveWorldMap(
+        mapPaths = mapPaths,
+        visitedCountries = visitedCountries,
+        countryToContinent = countryToContinent,
+        completedContinents = completedContinents,
+        originAirport = originAirport,
+        routes = routes,
+        selectedRoute = selectedRoute,
+        animationProgress = animationProgress,
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
-            .background(DeepNavy.copy(alpha = 0.6f))
-    ) {
-        Image(
-            painter = painterResource(R.drawable.ic_world_map),
-            contentDescription = "World Map",
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.FillBounds,
-            alpha = 0.35f
-        )
-
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            if (originAirport == null) return@Canvas
-
-            val cxOrigin = size.width * ((originAirport.lon + 180) / 360f).toFloat()
-            val cyOrigin = size.height * ((90 - originAirport.lat) / 180f).toFloat()
-
-            // 1. Draw non-selected routes in the current interval (muted Haze)
-            routes.forEach { route ->
-                if (route.id != selectedRoute?.id) {
-                    val cxDest = size.width * ((route.destLon + 180) / 360f).toFloat()
-                    val cyDest = size.height * ((90 - route.destLat) / 180f).toFloat()
-
-                    val path = Path().apply {
-                        moveTo(cxOrigin, cyOrigin)
-                        val dx = cxDest - cxOrigin
-                        val midX = (cxOrigin + cxDest) / 2f
-                        val midY = (cyOrigin + cyDest) / 2f
-                        val controlY = midY - kotlin.math.abs(dx) * 0.15f - 20f
-                        quadraticTo(midX, controlY, cxDest, cyDest)
-                    }
-
-                    drawPath(
-                        path = path,
-                        color = Haze.copy(alpha = 0.4f),
-                        style = Stroke(
-                            width = 2f,
-                            pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f),
-                            cap = StrokeCap.Round
-                        )
-                    )
-
-                    drawCircle(
-                        color = Haze.copy(alpha = 0.6f),
-                        radius = 3.dp.toPx(),
-                        center = Offset(cxDest, cyDest)
-                    )
-                }
-            }
-
-            // 2. Draw the selected route (bright Amber, thick glowing line, animation)
-            selectedRoute?.let { route ->
-                val cxDest = size.width * ((route.destLon + 180) / 360f).toFloat()
-                val cyDest = size.height * ((90 - route.destLat) / 180f).toFloat()
-
-                val path = Path().apply {
-                    moveTo(cxOrigin, cyOrigin)
-                    val dx = cxDest - cxOrigin
-                    val midX = (cxOrigin + cxDest) / 2f
-                    val midY = (cyOrigin + cyDest) / 2f
-                    val controlY = midY - kotlin.math.abs(dx) * 0.15f - 20f
-                    quadraticTo(midX, controlY, cxDest, cyDest)
-                }
-
-                // Glow
-                drawPath(
-                    path = path,
-                    color = Amber.copy(alpha = 0.2f),
-                    style = Stroke(
-                        width = 8f,
-                        cap = StrokeCap.Round
-                    )
-                )
-
-                // Main path
-                drawPath(
-                    path = path,
-                    color = Amber,
-                    style = Stroke(
-                        width = 4f,
-                        cap = StrokeCap.Round
-                    )
-                )
-
-                // Animated flying dot
-                try {
-                    val pathMeasure = android.graphics.PathMeasure(path.asAndroidPath(), false)
-                    val length = pathMeasure.length
-                    val pos = FloatArray(2)
-                    if (length > 0f) {
-                        pathMeasure.getPosTan(length * animationProgress, pos, null)
-                        val dotX = pos[0]
-                        val dotY = pos[1]
-
-                        drawCircle(
-                            color = Amber.copy(alpha = 0.8f),
-                            radius = 3.dp.toPx(),
-                            center = Offset(dotX, dotY)
-                        )
-                        drawCircle(
-                            color = Amber.copy(alpha = 0.2f),
-                            radius = 3.dp.toPx() + 5.dp.toPx() * (1f - animationProgress),
-                            center = Offset(dotX, dotY),
-                            style = Stroke(width = 1f.dp.toPx())
-                        )
-                    }
-                } catch (e: Exception) {
-                    // Fallback
-                }
-
-                // Destination target ring
-                drawCircle(
-                    color = Amber,
-                    radius = 4.dp.toPx(),
-                    center = Offset(cxDest, cyDest)
-                )
-                drawCircle(
-                    color = Amber,
-                    radius = 9.dp.toPx(),
-                    center = Offset(cxDest, cyDest),
-                    style = Stroke(width = 1.5f.dp.toPx())
-                )
-            }
-
-            // 3. Draw origin airport (home base) marker
-            drawCircle(
-                color = OffWhite,
-                radius = 5.dp.toPx(),
-                center = Offset(cxOrigin, cyOrigin)
-            )
-            drawCircle(
-                color = Amber,
-                radius = 2.5.dp.toPx(),
-                center = Offset(cxOrigin, cyOrigin)
-            )
-        }
-    }
+    )
 }
 
 @Composable

@@ -348,7 +348,7 @@ fun OnboardingScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(Spacing.ExtraLarge))
+            Spacer(modifier = Modifier.height(Spacing.Large))
         }
     }
 }

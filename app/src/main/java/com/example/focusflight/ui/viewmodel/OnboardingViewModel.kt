@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.focusflight.data.model.Airport
 import com.example.focusflight.data.repository.FlightDatabaseHelper
 import com.example.focusflight.data.repository.PreferencesRepository
+import com.example.focusflight.data.repository.UserRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,6 +20,7 @@ import kotlinx.coroutines.launch
 class OnboardingViewModel(
     private val databaseHelper: FlightDatabaseHelper,
     private val preferencesRepository: PreferencesRepository,
+    private val userRepository: UserRepository,
     private val cacheDir: java.io.File
 ) : ViewModel() {
 
@@ -87,15 +89,25 @@ class OnboardingViewModel(
         preferencesRepository.setHomeAirport(airport.iataCode)
         preferencesRepository.setCurrentAirport(airport.iataCode)
         preferencesRepository.setOnboardingCompleted(true)
+
+        // Create user profile in Room
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                userRepository.createProfile(com.example.focusflight.data.model.UserProfile.generateRandomName(), airport.iataCode)
+            } catch (e: Exception) {
+                android.util.Log.e("OnboardingViewModel", "Error creating user profile", e)
+            }
+        }
+
         return true
     }
 
     private fun preRenderMap(airport: Airport) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val destinations = databaseHelper.getRandomAirports(12, airport.iataCode)
-                val routesData = destinations.map { dest ->
-                    Pair(Pair(airport.lat, airport.lon), Pair(dest.lat, dest.lon))
+                val outboundRoutes = databaseHelper.getOutboundRoutes(airport.iataCode).filter { it.distanceKm <= 10000.0 }.shuffled().take(12)
+                val routesData = outboundRoutes.map { route ->
+                    Pair(Pair(airport.lat, airport.lon), Pair(route.destLat, route.destLon))
                 }
 
                 val outFile = java.io.File(cacheDir, "hub_route_map_${airport.iataCode}.png")
@@ -123,12 +135,13 @@ class OnboardingViewModel(
 class OnboardingViewModelFactory(
     private val databaseHelper: FlightDatabaseHelper,
     private val preferencesRepository: PreferencesRepository,
+    private val userRepository: UserRepository,
     private val cacheDir: java.io.File
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(OnboardingViewModel::class.java)) {
-            return OnboardingViewModel(databaseHelper, preferencesRepository, cacheDir) as T
+            return OnboardingViewModel(databaseHelper, preferencesRepository, userRepository, cacheDir) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

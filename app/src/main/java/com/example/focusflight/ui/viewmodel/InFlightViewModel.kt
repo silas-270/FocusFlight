@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.focusflight.data.model.Airport
 import com.example.focusflight.data.model.FlightRoute
 import com.example.focusflight.data.repository.FlightDatabaseHelper
+import com.example.focusflight.data.repository.FlightLogRepository
 import com.example.focusflight.data.repository.PreferencesRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -36,6 +37,7 @@ data class InFlightState(
 class InFlightViewModel(
     private val databaseHelper: FlightDatabaseHelper,
     private val preferencesRepository: PreferencesRepository,
+    private val flightLogRepository: FlightLogRepository,
     private val cacheDir: java.io.File,
     val flightNumber: String,
     val destIata: String,
@@ -116,7 +118,7 @@ class InFlightViewModel(
                         preferencesRepository.setCurrentAirport(destIata)
                         preferencesRepository.clearActiveFlightProgress(flightNumber)
                         preRenderDestinationMap()
-                        saveFlightLogToPrefs()
+                        saveFlightLog()
                         com.example.focusflight.engine.CesiumBridge.nativeSetProgress(1.0)
                         state.copy(
                             timeRemainingSeconds = 0,
@@ -179,7 +181,7 @@ class InFlightViewModel(
         preferencesRepository.setCurrentAirport(destIata)
         preferencesRepository.clearActiveFlightProgress(flightNumber)
         preRenderDestinationMap()
-        saveFlightLogToPrefs()
+        saveFlightLog()
         com.example.focusflight.engine.CesiumBridge.nativeSetProgress(1.0)
         _uiState.update { state ->
             state.copy(
@@ -199,9 +201,9 @@ class InFlightViewModel(
         renderJob = renderScope.launch {
             try {
                 val dest = databaseHelper.getAirportByIata(destIata) ?: return@launch
-                val destinations = databaseHelper.getRandomAirports(12, dest.iataCode)
-                val routesData = destinations.map { d ->
-                    Pair(Pair(dest.lat, dest.lon), Pair(d.lat, d.lon))
+                val outboundRoutes = databaseHelper.getOutboundRoutes(dest.iataCode).filter { it.distanceKm <= 10000.0 }.shuffled().take(12)
+                val routesData = outboundRoutes.map { route ->
+                    Pair(Pair(dest.lat, dest.lon), Pair(route.destLat, route.destLon))
                 }
 
                 val outFile = java.io.File(cacheDir, "hub_route_map_${dest.iataCode}.png")
@@ -228,19 +230,24 @@ class InFlightViewModel(
         }
     }
 
-    private fun saveFlightLogToPrefs() {
-        val origin = _originAirport.value?.iataCode ?: "STR"
-        val dest = destIata
-        val duration = durationMin
-        val hrs = duration / 60.0
-        val rank = when {
-            hrs >= 8.0 -> "GLOBETROTTER"
-            hrs >= 4.0 -> "COMMANDER"
-            hrs >= 2.0 -> "CAPTAIN"
-            else -> "CO-PILOT"
+    private fun saveFlightLog() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val origin = _originAirport.value?.iataCode ?: "STR"
+                val route = _routeDetails.value
+                val distanceKm = route?.distanceKm ?: 0.0
+
+                flightLogRepository.logFlight(
+                    flightNumber = flightNumber,
+                    originIata = origin,
+                    destIata = destIata,
+                    durationMin = durationMin,
+                    distanceKm = distanceKm
+                )
+            } catch (e: Exception) {
+                android.util.Log.e("InFlightViewModel", "Error saving flight log to Room", e)
+            }
         }
-        val dateStr = java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.US).format(java.util.Date()).uppercase()
-        preferencesRepository.saveFlightLog(origin, dest, duration, flightNumber, rank, dateStr)
     }
 
     override fun onCleared() {
@@ -258,6 +265,7 @@ class InFlightViewModel(
 class InFlightViewModelFactory(
     private val databaseHelper: FlightDatabaseHelper,
     private val preferencesRepository: PreferencesRepository,
+    private val flightLogRepository: FlightLogRepository,
     private val cacheDir: java.io.File,
     private val flightNumber: String,
     private val destIata: String,
@@ -266,7 +274,7 @@ class InFlightViewModelFactory(
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(InFlightViewModel::class.java)) {
-            return InFlightViewModel(databaseHelper, preferencesRepository, cacheDir, flightNumber, destIata, durationMin) as T
+            return InFlightViewModel(databaseHelper, preferencesRepository, flightLogRepository, cacheDir, flightNumber, destIata, durationMin) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }
