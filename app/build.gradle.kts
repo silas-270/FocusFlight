@@ -47,21 +47,34 @@ android {
 tasks.register("cargoNdkBuild") {
     doLast {
         val isWindows = System.getProperty("os.name").lowercase().contains("windows")
-        val absoluteRustPath = if (isWindows) {
+        val userHome = System.getProperty("user.home")
+        val sdkRoot = System.getenv("ANDROID_HOME") ?: System.getenv("ANDROID_SDK_ROOT")
+
+        // CESIUM_RS_HOME lets each dev machine point at its own CesiumRS checkout;
+        // falls back to the historical per-machine defaults if unset.
+        val absoluteRustPath = System.getenv("CESIUM_RS_HOME") ?: if (isWindows) {
             "c:/Users/kamme/Desktop/CesiumRS"
         } else {
-            "/home/silas270/CesiumRS"
+            "$userHome/CesiumRS"
         }
         val targets = mapOf(
             "aarch64-linux-android" to "arm64-v8a"
         )
 
-        val cargoBin = if (isWindows) "cargo" else "/home/silas270/.cargo/bin/cargo"
-        val ndkDir = if (isWindows) {
-            System.getenv("ANDROID_NDK_HOME") ?: "C:/Users/kamme/AppData/Local/Android/Sdk/ndk/30.0.14904198"
-        } else {
-            "/home/silas270/android-sdk/ndk/27.1.12297006"
-        }
+        // rustup installs put cargo in ~/.cargo/bin; a system package (e.g. pacman,
+        // apt) puts it on PATH instead - prefer whichever actually exists.
+        val rustupCargo = File("$userHome/.cargo/bin/cargo")
+        val cargoBin = if (isWindows) "cargo" else if (rustupCargo.exists()) rustupCargo.absolutePath else "cargo"
+        // ANDROID_NDK_HOME wins if set; otherwise derive from the SDK root env var
+        // (ANDROID_HOME/ANDROID_SDK_ROOT), falling back to the historical
+        // per-machine hardcoded paths as a last resort.
+        val ndkDir = System.getenv("ANDROID_NDK_HOME")
+            ?: sdkRoot?.let { "$it/ndk/27.1.12297006" }
+            ?: if (isWindows) {
+                "C:/Users/kamme/AppData/Local/Android/Sdk/ndk/30.0.14904198"
+            } else {
+                "$userHome/android-sdk/ndk/27.1.12297006"
+            }
 
         targets.forEach { (rustTarget, androidAbi) ->
             println("Building Rust library for target: $rustTarget (ABI: $androidAbi)...")
@@ -71,7 +84,7 @@ tasks.register("cargoNdkBuild") {
             
             builder.environment()["ANDROID_NDK_HOME"] = ndkDir
             if (!isWindows) {
-                builder.environment()["PATH"] = "/home/silas270/.cargo/bin:" + System.getenv("PATH")
+                builder.environment()["PATH"] = "$userHome/.cargo/bin:" + System.getenv("PATH")
             }
             
             val logFile = File(absoluteRustPath, "cargo_build.log")
