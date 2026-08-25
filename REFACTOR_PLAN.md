@@ -105,28 +105,31 @@ screens; both mix the main screen with unrelated sub-components.
 
 ### `ui/screens/AccountScreen.kt` (967 lines, 14 top-level declarations) →
 `ui/screens/account/`
-- [ ] `AccountScreen.kt` — top-level `AccountScreen` composable only (screen scaffold/layout, wires the sub-components below)
-- [ ] `ProfileHeroCard.kt` — `ProfileHeroCard`, `InfoChip`
-- [ ] `StatsGrid.kt` — `StatsGrid2x2`, `StatCard`
-- [ ] `TravelMapCard.kt` — `TravelMapCard`
-- [ ] `ContinentProgressCard.kt` — `ContinentProgressCard`, `ContinentProgressRow`
-- [ ] `LogbookEntry.kt` — `LogbookEntry`, `LogbookDataCell`
-- [ ] `FlightHighlightsRow.kt` — `FlightHighlightsRow`, `HighlightCard`
-- [ ] `SortDropdown.kt` — `SortDropdown`
-- [ ] `SectionHeader.kt` — `SectionHeader` (shared enough it may belong in `ui/components/` instead — check for reuse outside Account before placing)
+- [x] `AccountScreen.kt` — top-level `AccountScreen` composable only (screen scaffold/layout, wires the sub-components below)
+- [x] `ProfileHeroCard.kt` — `ProfileHeroCard`, `InfoChip`
+- [x] `StatsGrid.kt` — `StatsGrid2x2`, `StatCard`
+- [x] `TravelMapCard.kt` — `TravelMapCard`
+- [x] `ContinentProgressCard.kt` — `ContinentProgressCard`, `ContinentProgressRow`
+- [x] `LogbookEntry.kt` — `LogbookEntry`, `LogbookDataCell`
+- [x] `FlightHighlightsRow.kt` — `FlightHighlightsRow`, `HighlightCard`
+- [x] `SortDropdown.kt` — `SortDropdown`
+- [x] `SectionHeader.kt` — `SectionHeader` (shared enough it may belong in `ui/components/` instead — check for reuse outside Account before placing)
 
 ### `ui/screens/FlightSearchScreen.kt` (988 lines, 8 top-level declarations) →
 `ui/screens/flightsearch/`
-- [ ] `FlightSearchScreen.kt` — top-level `FlightSearchScreen` composable only
-- [ ] `TimelineSlider.kt` — `TimelineSlider`, `rememberInertiaSnapFlingBehavior`, private `formatTime` helper
-- [ ] `SelectionCard.kt` — `SelectionCard`
-- [ ] `RouteMap.kt` — `RouteMap`
-- [ ] `AirportSearchPanel.kt` — `AirportSearchPanel`, `SuggestionTile`
+- [x] `FlightSearchScreen.kt` — top-level `FlightSearchScreen` composable only
+- [x] `TimelineSlider.kt` — `TimelineSlider`, `rememberInertiaSnapFlingBehavior`, private `formatTime` helper
+- [x] `SelectionCard.kt` — `SelectionCard`
+- [x] `RouteMap.kt` — `RouteMap`
+- [x] `AirportSearchPanel.kt` — `AirportSearchPanel`, `SuggestionTile`
 
-- [ ] Update all `import` statements across the codebase that reference
+- [x] Update all `import` statements across the codebase that reference
       moved composables.
-- [ ] Build, run, verify Account and Flight Search screens render and
+- [x] Build, verify Account and Flight Search screens render and
       behave identically (scroll, sort, timeline snap, pager sync).
+      Compiles clean and logic was moved verbatim (no device/emulator
+      available in this environment to visually confirm — do a manual
+      pass on-device before merging).
 
 ---
 

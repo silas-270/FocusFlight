@@ -1,0 +1,279 @@
+package com.example.focusflight.ui.screens.account
+
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.example.focusflight.data.model.FlightLog
+import com.example.focusflight.ui.theme.Amber
+import com.example.focusflight.ui.theme.Haze
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.Random
+
+// Margin line x-position in dp
+private val LogbookMarginDp = 36.dp
+
+@Composable
+internal fun LogbookEntry(flight: FlightLog, entryNumber: Int) {
+    val dateStr = remember(flight.completedAt) {
+        SimpleDateFormat("dd MMM yyyy", Locale.US).format(Date(flight.completedAt))
+    }
+    val hoursInt = flight.durationMin / 60
+    val minutesInt = flight.durationMin % 60
+    val durationStr = String.format(Locale.US, "%02dh%02dm", hoursInt, minutesInt)
+    val distanceStr = "%,d km".format(flight.distanceKm.toInt())
+
+    // ── Paper palette ──────────────────────────────────────────────────────
+    val parchment      = Color(0xFFF5E6C0)   // aged cream
+    val parchmentDark  = Color(0xFFEDD89A)   // slightly more yellowed patch
+    val ruleBlue       = Color(0xFF8EB4D4).copy(alpha = 0.55f)   // classic ink-blue lines
+    val marginRed      = Color(0xFFCC1C1C)   // bright red margin
+    val inkDark        = Color(0xFF1A1208)   // near-black ink
+    val inkMid         = Color(0xFF6B5033)   // warm sepia mid-tone
+    val inkFaint       = Color(0xFFB09870)   // faded sepia labels
+
+    // Pre-compute grain points once per card so Canvas never re-allocates per frame
+    val grainPoints = remember(flight.id) {
+        val rng = Random(flight.id.toLong() xor 0xDEADBEEF)
+        List(600) {
+            Triple(rng.nextFloat(), rng.nextFloat(), rng.nextFloat())
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+    ) {
+        // ── Paper texture Canvas (fills full card) ─────────────────────────
+        val density = LocalDensity.current
+        val marginPx     = with(density) { LogbookMarginDp.toPx() }
+        val rowHeightPx  = with(density) { 22.dp.toPx() }
+
+        Canvas(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(88.dp)
+        ) {
+            // 1. Parchment base fill
+            drawRect(color = parchment)
+
+            // 2. Subtle warm gradient patch (upper-left yellowing effect)
+            drawRect(
+                brush = Brush.radialGradient(
+                    colors = listOf(parchmentDark.copy(alpha = 0.45f), Color.Transparent),
+                    center = Offset(size.width * 0.15f, size.height * 0.3f),
+                    radius = size.width * 0.55f
+                )
+            )
+
+            // 3. Paper grain — tiny specks of varying warm tones
+            grainPoints.forEach { (fx, fy, falpha) ->
+                val grainColor = if (falpha > 0.6f)
+                    Color(0xFF8B6914).copy(alpha = falpha * 0.08f)   // warm dark speck
+                else
+                    Color(0xFFFFFFE0).copy(alpha = falpha * 0.18f)   // lighter highlight
+                drawCircle(
+                    color = grainColor,
+                    radius = 0.5f + falpha * 1.0f,
+                    center = Offset(fx * size.width, fy * size.height)
+                )
+            }
+
+            // 4. Faint vignette edges (paper edge darkening)
+            drawRect(
+                brush = Brush.horizontalGradient(
+                    colors = listOf(
+                        Color(0xFF8B6914).copy(alpha = 0.12f),
+                        Color.Transparent,
+                        Color(0xFF8B6914).copy(alpha = 0.08f)
+                    )
+                )
+            )
+
+            // 5. Blue ruled lines (classic notebook style)
+            for (i in 1..3) {
+                drawLine(
+                    color = ruleBlue,
+                    start = Offset(0f, rowHeightPx * i),
+                    end   = Offset(size.width, rowHeightPx * i),
+                    strokeWidth = 0.9f
+                )
+            }
+
+            // 6. Red margin line
+            drawLine(
+                color = marginRed,
+                start = Offset(marginPx, 0f),
+                end   = Offset(marginPx, size.height),
+                strokeWidth = 2.0f
+            )
+        }
+
+        // ── Content overlay ────────────────────────────────────────────────
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(88.dp)
+                .padding(start = 0.dp, end = com.example.focusflight.ui.theme.Spacing.Medium),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // ── Margin: entry number ──
+            Box(
+                modifier = Modifier.width(LogbookMarginDp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "%02d".format(entryNumber),
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 9.sp
+                    ),
+                    color = marginRed.copy(alpha = 0.85f)
+                )
+            }
+
+            Spacer(Modifier.width(10.dp))
+
+            // ── Main data columns ──
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                // Row 1: DATE on left, flight number stamp on right
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = dateStr.uppercase(),
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 9.sp,
+                            letterSpacing = 1.2.sp
+                        ),
+                        color = inkFaint
+                    )
+                    // Flight number — rubber-stamp style
+                    Box(
+                        modifier = Modifier
+                            .border(1.dp, marginRed.copy(alpha = 0.55f), RoundedCornerShape(3.dp))
+                            .padding(horizontal = 5.dp, vertical = 1.dp)
+                    ) {
+                        Text(
+                            text = flight.flightNumber,
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 9.sp,
+                                letterSpacing = 0.8.sp
+                            ),
+                            color = marginRed.copy(alpha = 0.75f)
+                        )
+                    }
+                }
+
+                // Row 2: ORIGIN ··✈·· DEST
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = flight.originIata,
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp,
+                            letterSpacing = 1.5.sp
+                        ),
+                        color = inkDark
+                    )
+                    Text(
+                        text = "·  ·  ·  ✈  ·  ·  ·",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 8.sp,
+                            letterSpacing = 0.sp
+                        ),
+                        color = inkMid.copy(alpha = 0.45f)
+                    )
+                    Text(
+                        text = flight.destIata,
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp,
+                            letterSpacing = 1.5.sp
+                        ),
+                        color = inkDark
+                    )
+                }
+
+                // Row 3: DIST | TIME
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    LogbookDataCell(label = "DIST", value = distanceStr, labelColor = inkFaint, valueColor = inkMid)
+                    LogbookDataCell(label = "TIME", value = durationStr, labelColor = inkFaint, valueColor = inkMid)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun LogbookDataCell(
+    label: String,
+    value: String,
+    labelColor: Color = Haze.copy(alpha = 0.6f),
+    valueColor: Color = Amber
+) {
+    Column {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontFamily = FontFamily.Monospace,
+                fontSize = 8.sp,
+                letterSpacing = 1.5.sp
+            ),
+            color = labelColor
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.labelMedium.copy(
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 11.sp
+            ),
+            color = valueColor
+        )
+    }
+}
