@@ -1,7 +1,6 @@
 package com.example.focusflight.ui.screens.account
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -29,10 +28,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.focusflight.ui.theme.Amber
-import com.example.focusflight.ui.theme.Border
 import com.example.focusflight.ui.theme.DeepNavy
 import com.example.focusflight.ui.theme.OffWhite
-import com.example.focusflight.ui.theme.SoftAmber
 import com.example.focusflight.data.model.FlightSortOrder
 
 @Composable
@@ -51,9 +48,7 @@ internal fun SortDropdown(
             ),
             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
             shape = RoundedCornerShape(8.dp),
-            modifier = Modifier
-                .height(32.dp)
-                .border(1.dp, SoftAmber.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
+            modifier = Modifier.height(32.dp)
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -76,9 +71,7 @@ internal fun SortDropdown(
         DropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
-            modifier = Modifier
-                .background(DeepNavy)
-                .border(1.dp, Border, RoundedCornerShape(8.dp))
+            modifier = Modifier.background(DeepNavy)
         ) {
             FlightSortOrder.entries.forEach { order ->
                 DropdownMenuItem(
