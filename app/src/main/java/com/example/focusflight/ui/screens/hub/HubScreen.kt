@@ -98,7 +98,7 @@ fun HubScreen(
                         shape = RoundedCornerShape(16.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = OffWhite
+                            contentColor = Midnight
                         )
                     ) {
                         Icon(
