@@ -1,9 +1,10 @@
 package com.example.focusflight.ui.screens.account
 
-import androidx.compose.foundation.border
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -11,132 +12,206 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.AirplanemodeActive
-import androidx.compose.material.icons.outlined.StarHalf
-import androidx.compose.material.icons.outlined.Tour
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material.icons.outlined.FlightTakeoff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.focusflight.data.model.FlightHighlights
+import com.example.focusflight.data.model.FlightLog
 import com.example.focusflight.ui.theme.Amber
 import com.example.focusflight.ui.theme.DeepNavy
+import com.example.focusflight.ui.theme.Green
 import com.example.focusflight.ui.theme.Haze
 import com.example.focusflight.ui.theme.OffWhite
-import com.example.focusflight.ui.theme.SoftAmber
-import com.example.focusflight.data.model.FlightHighlights
+import com.example.focusflight.ui.theme.Slate
+import kotlin.math.floor
+
+private val equatorLapColors = listOf(Amber, Green)
 
 @Composable
 internal fun FlightHighlightsRow(highlights: FlightHighlights) {
-    LazyRow(
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        contentPadding = PaddingValues(vertical = 4.dp),
-        modifier = Modifier.fillMaxWidth()
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(168.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // 1. Longest Flight Card
-        highlights.longestFlight?.let { flight ->
-            item {
-                HighlightCard(
-                    title = "LONGEST FLIGHT",
-                    value = "${flight.originIata} → ${flight.destIata}",
-                    subtext = "%,.0f km".format(flight.distanceKm),
-                    icon = Icons.Outlined.AirplanemodeActive
-                )
-            }
-        }
-        // 2. Most Visited Card
-        highlights.mostVisitedIata?.let { iata ->
-            item {
-                HighlightCard(
-                    title = "MOST VISITED",
-                    value = iata,
-                    subtext = "${highlights.mostVisitedCount} visits",
-                    icon = Icons.Outlined.Tour
-                )
-            }
-        }
-        // 3. Equator Ratio Card
-        item {
-            val equatorRatioPercent = highlights.equatorRatio * 100
-            val subtext = if (highlights.equatorRatio >= 1.0) {
-                "%.2f equator runs".format(highlights.equatorRatio)
-            } else {
-                "%.1f%% of the equator".format(equatorRatioPercent)
-            }
-            HighlightCard(
-                title = "EQUATOR PROGRESS",
-                value = "🌍",
-                subtext = subtext,
-                icon = Icons.Outlined.StarHalf
+        LongestFlightCard(
+            flight = highlights.longestFlight,
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxSize()
+        )
+        EquatorProgressCard(
+            ratio = highlights.equatorRatio,
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxSize()
+        )
+    }
+}
+
+@Composable
+private fun LongestFlightCard(flight: FlightLog?, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(
+                Brush.linearGradient(colors = listOf(Slate, DeepNavy))
             )
+            .padding(16.dp)
+    ) {
+        Text(
+            text = "LONGEST FLIGHT",
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp
+            ),
+            color = Haze
+        )
+
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+            contentAlignment = Alignment.Center
+        ) {
+            if (flight != null) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "%,.0f km".format(flight.distanceKm),
+                        style = MaterialTheme.typography.displaySmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        ),
+                        color = Amber
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = flight.originIata,
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = OffWhite
+                        )
+                        Icon(
+                            imageVector = Icons.Outlined.FlightTakeoff,
+                            contentDescription = null,
+                            tint = Amber,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = flight.destIata,
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = OffWhite
+                        )
+                    }
+                }
+            } else {
+                Text(
+                    text = "No flights yet",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Haze
+                )
+            }
         }
     }
 }
 
 @Composable
-internal fun HighlightCard(
-    title: String,
-    value: String,
-    subtext: String,
-    icon: ImageVector
-) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = DeepNavy),
-        modifier = Modifier
-            .width(170.dp)
-            .height(110.dp)
-            .border(1.dp, SoftAmber.copy(alpha = 0.2f), RoundedCornerShape(12.dp)),
-        shape = RoundedCornerShape(12.dp)
+private fun EquatorProgressCard(ratio: Double, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(DeepNavy)
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Column(
+        Text(
+            text = "EQUATOR PROGRESS",
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp
+            ),
+            color = Haze
+        )
+
+        val safeRatio = ratio.coerceAtLeast(0.0)
+        var lapIndex = floor(safeRatio).toInt()
+        var fraction = (safeRatio - lapIndex).toFloat()
+        if (fraction <= 0f && safeRatio > 0.0) {
+            // Exact multiple of a lap (e.g. 1.0, 2.0) - show that lap fully completed.
+            lapIndex -= 1
+            fraction = 1f
+        }
+        val lapColor = equatorLapColors[lapIndex % equatorLapColors.size]
+        val percentText = "%,.0f%%".format(safeRatio * 100)
+
+        Box(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(12.dp),
-            verticalArrangement = Arrangement.SpaceBetween
+                .weight(1f)
+                .fillMaxWidth(),
+            contentAlignment = Alignment.Center
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            Box(
+                modifier = Modifier.size(96.dp),
+                contentAlignment = Alignment.Center
             ) {
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    val strokeWidth = 10.dp.toPx()
+                    val arcSize = Size(size.width - strokeWidth, size.height - strokeWidth)
+                    val topLeft = androidx.compose.ui.geometry.Offset(strokeWidth / 2, strokeWidth / 2)
+
+                    drawArc(
+                        color = Slate,
+                        startAngle = -90f,
+                        sweepAngle = 360f,
+                        useCenter = false,
+                        topLeft = topLeft,
+                        size = arcSize,
+                        style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+                    )
+                    if (fraction > 0f) {
+                        drawArc(
+                            color = lapColor,
+                            startAngle = -90f,
+                            sweepAngle = 360f * fraction,
+                            useCenter = false,
+                            topLeft = topLeft,
+                            size = arcSize,
+                            style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+                        )
+                    }
+                }
                 Text(
-                    text = title,
-                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontSize = 9.sp),
-                    color = Haze
-                )
-                Icon(icon, contentDescription = null, tint = Amber, modifier = Modifier.size(14.dp))
-            }
-            Column {
-                Text(
-                    text = value,
+                    text = percentText,
                     style = MaterialTheme.typography.titleMedium.copy(
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace
                     ),
-                    color = OffWhite,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    text = subtext,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Amber,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    color = OffWhite
                 )
             }
         }
