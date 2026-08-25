@@ -12,8 +12,8 @@ Baseline before starting: `compileDebugKotlin` passes clean (verified
 
 ## Phase 0 — Safety net
 
-- [ ] Create a branch for this work (e.g. `refactor/architecture-cleanup`).
-- [ ] Confirm `./gradlew :app:compileDebugKotlin` is clean before touching anything (already verified).
+- [x] Create a branch for this work (e.g. `refactor/architecture-cleanup`).
+- [x] Confirm `./gradlew :app:compileDebugKotlin` is clean before touching anything (already verified).
 
 ---
 
@@ -26,12 +26,12 @@ correctly goes through `Repository` interfaces. This is the single biggest
 inconsistency in the codebase and it's exactly the layer a future
 Challenges feature will need to extend, so it must be fixed first.
 
-1. [ ] Rename `data/repository/FlightDatabaseHelper.kt` →
+1. [x] Rename `data/repository/FlightDatabaseHelper.kt` →
       `data/local/airport/AirportRouteSqliteDataSource.kt`. It keeps its
       current job (opening `flights.db`, running the raw queries, copying
       the asset DB on first launch) but nothing else — no more public API
       that ViewModels touch directly.
-2. [ ] Create `data/repository/AirportRepository.kt` (interface) +
+2. [x] Create `data/repository/AirportRepository.kt` (interface) +
       `data/repository/LocalAirportRepository.kt` (impl wrapping the new
       `AirportRouteSqliteDataSource`), matching the existing
       `UserRepository`/`LocalUserRepository` pattern. Expose exactly the
@@ -40,7 +40,7 @@ Challenges feature will need to extend, so it must be fixed first.
       `getAirportByIata(iata)`, `getRunwaysForAirport(iata)`,
       `getOutboundRoutes(iata)`, `getContinentCountryMap()`,
       `getCountriesForAirports(iatas)`.
-3. [ ] Update every call site to go through `AirportRepository` instead of
+3. [x] Update every call site to go through `AirportRepository` instead of
       the data source directly:
       - `HubViewModel.kt` (`getAirportByIata` L62, `getOutboundRoutes` L104)
       - `CheckInViewModel.kt` (`getAirportByIata` L46/L49, `getOutboundRoutes` L53)
@@ -48,15 +48,15 @@ Challenges feature will need to extend, so it must be fixed first.
       - `OnboardingViewModel.kt` (`searchAirports` L43, `getAirportByIata` L72, `getOutboundRoutes` L108)
       - `FlightSearchViewModel.kt` (`getCountriesForAirports` L82, `getContinentCountryMap` L85, `getAirportByIata` L108/L193, `getOutboundRoutes` L186/L197)
       - `InFlightViewModel.kt` (`getAirportByIata` L81/L84/L203, `getOutboundRoutes` L88/L204)
-4. [ ] `CesiumGameActivity.kt` currently instantiates the data source
+4. [x] `CesiumGameActivity.kt` currently instantiates the data source
       directly and calls `ensureDatabaseCopied`/`getAirportByIata`/
       `getRunwaysForAirport`/`getOutboundRoutes` (L87, 96, 197-264, 439).
       Inject `AirportRepository` here too (an Activity doing raw DB access
       is itself a layering violation — see Phase 5).
-5. [ ] Wire `AirportRepository` through whatever DI/manual-construction
+5. [x] Wire `AirportRepository` through whatever DI/manual-construction
       pattern the ViewModels already use for `FlightLogRepository`, so the
       pattern is consistent across the app.
-6. [ ] Build, run, sanity-check onboarding search, hub load, route search,
+6. [x] Build, run, sanity-check onboarding search, hub load, route search,
       check-in, and account stats all still work.
 
 ---
@@ -69,30 +69,30 @@ file → `CesiumRSLibrary.renderRoutes` → prune cache" is copy-pasted in
 `InFlightViewModel.kt` L204-223. This is the root cause of the old
 "silent map render failure" bug (fixed three times or zero times).
 
-1. [ ] Create `engine/headless/CesiumHeadlessMapRenderer.kt` — a single
+1. [x] Create `engine/headless/CesiumHeadlessMapRenderer.kt` — a single
       class that owns: taking an origin airport + up to 12 routes, deleting
       a stale output file, calling `CesiumRSLibrary.renderRoutes`, pruning
       the cache, and returning success/failure + the resulting path (or a
       typed error instead of silently swallowing it — this is also where
       bug-list item "silent failure leaves blank Hub" gets fixed for good).
-2. [ ] Move `ui/viewmodel/CacheUtils.kt` → `engine/headless/MapImageCache.kt`
+2. [x] Move `ui/viewmodel/CacheUtils.kt` → `engine/headless/MapImageCache.kt`
       (it's cache-file pruning for rendered map images, not a ViewModel
       concern — used only by the new renderer).
-3. [ ] Replace the three duplicated blocks in `HubViewModel`,
+3. [x] Replace the three duplicated blocks in `HubViewModel`,
       `OnboardingViewModel`, `InFlightViewModel` with calls to
       `CesiumHeadlessMapRenderer`.
-4. [ ] Rename `data/repository/CesiumRSLibrary.kt` →
+4. [x] Rename `data/repository/CesiumRSLibrary.kt` →
       `engine/headless/CesiumHeadlessJnaBindings.kt` (it's the raw JNA
       bindings, not a "repository" — `CesiumHeadlessMapRenderer` is the
       only thing that should call it directly now).
-5. [ ] Rename `engine/CesiumBridge.kt` → `engine/live/CesiumLiveJniBridge.kt`
+5. [x] Rename `engine/CesiumBridge.kt` → `engine/live/CesiumLiveJniBridge.kt`
       (raw JNI bindings for the live rendering/telemetry loop, to sit
       clearly apart from the headless JNA path). Update its 4 call sites
       (`CesiumGameActivity.kt`, `CesiumEngineManager.kt`,
       `InFlightScreen.kt` L145, `InFlightViewModel.kt`).
-6. [ ] Move `engine/CesiumEngineManager.kt` → `engine/live/CesiumEngineManager.kt`
+6. [x] Move `engine/CesiumEngineManager.kt` → `engine/live/CesiumEngineManager.kt`
       to sit alongside the bridge it manages.
-7. [ ] Build, run, verify: Hub map renders on first load, onboarding
+7. [x] Build, run, verify: Hub map renders on first load, onboarding
       pre-render still works, destination map renders after a flight
       completes/skips.
 
@@ -160,9 +160,9 @@ doesn't tell you which screen it belongs to. Group by feature so
 
 ## Phase 5 — Remaining cleanup
 
-- [ ] Delete orphaned fixtures `app/flight_STR_FRA.json` and
+- [x] Delete orphaned fixtures `app/flight_STR_FRA.json` and
       `app/flight_STR_JFK.json` — confirmed zero references anywhere in
-      the repo.
+      the repo. (Done early, alongside Phase 1/2.)
 - [ ] Move DB access out of `CesiumGameActivity.kt` entirely if any
       remains after Phase 1 step 4 — an Activity should drive lifecycle/UI
       glue, not query the database.

@@ -1,4 +1,4 @@
-package com.example.focusflight.data.repository
+package com.example.focusflight.engine.headless
 
 import com.sun.jna.Structure
 import com.sun.jna.Library
@@ -23,10 +23,10 @@ open class HeadlessRoute : Structure() {
 }
 
 // Interface to load the shared library
-interface CesiumRSLibrary : Library {
+interface CesiumHeadlessJnaBindings : Library {
     companion object {
-        val INSTANCE: CesiumRSLibrary by lazy {
-            Native.load("cesium_rs", CesiumRSLibrary::class.java)
+        val INSTANCE: CesiumHeadlessJnaBindings by lazy {
+            Native.load("cesium_rs", CesiumHeadlessJnaBindings::class.java)
         }
 
         @Suppress("UNCHECKED_CAST")

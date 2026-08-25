@@ -5,9 +5,10 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.focusflight.data.model.Airport
 import com.example.focusflight.data.model.FlightRoute
-import com.example.focusflight.data.repository.FlightDatabaseHelper
+import com.example.focusflight.data.repository.AirportRepository
 import com.example.focusflight.data.repository.FlightLogRepository
 import com.example.focusflight.data.repository.PreferencesRepository
+import com.example.focusflight.engine.headless.CesiumHeadlessMapRenderer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -35,7 +36,7 @@ data class InFlightState(
 )
 
 class InFlightViewModel(
-    private val databaseHelper: FlightDatabaseHelper,
+    private val airportRepository: AirportRepository,
     private val preferencesRepository: PreferencesRepository,
     private val flightLogRepository: FlightLogRepository,
     private val cacheDir: java.io.File,
@@ -58,6 +59,7 @@ class InFlightViewModel(
 
     private var timerJob: Job? = null
     private val renderScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val mapRenderer = CesiumHeadlessMapRenderer(cacheDir)
 
     init {
         val totalSec = durationMin * 60L
@@ -78,14 +80,14 @@ class InFlightViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             val baseIata = preferencesRepository.getCurrentAirport()
             if (baseIata != null) {
-                val origin = databaseHelper.getAirportByIata(baseIata)
+                val origin = airportRepository.getAirportByIata(baseIata)
                 _originAirport.value = origin
                 
-                val dest = databaseHelper.getAirportByIata(destIata)
+                val dest = airportRepository.getAirportByIata(destIata)
                 _destAirport.value = dest
 
                 if (origin != null && dest != null) {
-                    val routes = databaseHelper.getOutboundRoutes(originIata = origin.iataCode, searchQuery = destIata)
+                    val routes = airportRepository.getOutboundRoutes(originIata = origin.iataCode, searchQuery = destIata)
                     val route = routes.find { it.destIata == destIata }
                     _routeDetails.value = route
 
@@ -119,7 +121,7 @@ class InFlightViewModel(
                         preferencesRepository.clearActiveFlightProgress(flightNumber)
                         preRenderDestinationMap()
                         saveFlightLog()
-                        com.example.focusflight.engine.CesiumBridge.nativeSetProgress(1.0)
+                        com.example.focusflight.engine.live.CesiumLiveJniBridge.nativeSetProgress(1.0)
                         state.copy(
                             timeRemainingSeconds = 0,
                             timeElapsedSeconds = state.totalDurationSeconds,
@@ -131,9 +133,9 @@ class InFlightViewModel(
                     } else {
                         val displayElapsedMs = newElapsedMs.coerceIn(0L, totalMs)
                         val newProgress = (displayElapsedMs.toFloat() / totalMs.toFloat()).coerceIn(0f, 1f)
-                        com.example.focusflight.engine.CesiumBridge.nativeSetProgress(newProgress.toDouble())
+                        com.example.focusflight.engine.live.CesiumLiveJniBridge.nativeSetProgress(newProgress.toDouble())
 
-                        val telemetry = com.example.focusflight.engine.CesiumBridge.nativeGetTelemetry()
+                        val telemetry = com.example.focusflight.engine.live.CesiumLiveJniBridge.nativeGetTelemetry()
                         val newElapsedSec = displayElapsedMs / 1000L
                         val newRemainingSec = state.totalDurationSeconds - newElapsedSec
 
@@ -182,7 +184,7 @@ class InFlightViewModel(
         preferencesRepository.clearActiveFlightProgress(flightNumber)
         preRenderDestinationMap()
         saveFlightLog()
-        com.example.focusflight.engine.CesiumBridge.nativeSetProgress(1.0)
+        com.example.focusflight.engine.live.CesiumLiveJniBridge.nativeSetProgress(1.0)
         _uiState.update { state ->
             state.copy(
                 timeRemainingSeconds = 0,
@@ -199,33 +201,20 @@ class InFlightViewModel(
 
     private fun preRenderDestinationMap() {
         renderJob = renderScope.launch {
-            try {
-                val dest = databaseHelper.getAirportByIata(destIata) ?: return@launch
-                val outboundRoutes = databaseHelper.getOutboundRoutes(dest.iataCode).filter { it.distanceKm <= 10000.0 }.shuffled().take(12)
-                val routesData = outboundRoutes.map { route ->
-                    Pair(Pair(dest.lat, dest.lon), Pair(route.destLat, route.destLon))
-                }
-
-                val outFile = java.io.File(cacheDir, "hub_route_map_${dest.iataCode}.png")
-                if (outFile.exists()) {
-                    outFile.delete()
-                }
-
-                android.util.Log.d("InFlightViewModel", "Pre-rendering map for destination ${dest.iataCode}...")
-                val success = com.example.focusflight.data.repository.CesiumRSLibrary.renderRoutes(
-                    width = 1080,
-                    height = 1320,
-                    routesData = routesData,
-                    outPath = outFile.absolutePath
-                )
-                if (success && outFile.exists()) {
-                    android.util.Log.d("InFlightViewModel", "Pre-rendering succeeded: ${outFile.absolutePath}")
-                    CacheUtils.pruneMapCache(cacheDir)
-                } else {
-                    android.util.Log.e("InFlightViewModel", "Pre-rendering failed.")
-                }
-            } catch (e: java.lang.Exception) {
-                android.util.Log.e("InFlightViewModel", "Error in pre-rendering destination map", e)
+            val dest = airportRepository.getAirportByIata(destIata) ?: return@launch
+            val outboundRoutes = airportRepository.getOutboundRoutes(dest.iataCode)
+            android.util.Log.d("InFlightViewModel", "Pre-rendering map for destination ${dest.iataCode}...")
+            val result = mapRenderer.renderRouteMap(
+                centerIata = dest.iataCode,
+                centerLat = dest.lat,
+                centerLon = dest.lon,
+                outboundRoutes = outboundRoutes
+            )
+            when (result) {
+                is CesiumHeadlessMapRenderer.Result.Success ->
+                    android.util.Log.d("InFlightViewModel", "Pre-rendering succeeded: ${result.path}")
+                is CesiumHeadlessMapRenderer.Result.Failure ->
+                    android.util.Log.e("InFlightViewModel", "Pre-rendering failed: ${result.message}")
             }
         }
     }
@@ -263,7 +252,7 @@ class InFlightViewModel(
 }
 
 class InFlightViewModelFactory(
-    private val databaseHelper: FlightDatabaseHelper,
+    private val airportRepository: AirportRepository,
     private val preferencesRepository: PreferencesRepository,
     private val flightLogRepository: FlightLogRepository,
     private val cacheDir: java.io.File,
@@ -274,7 +263,7 @@ class InFlightViewModelFactory(
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(InFlightViewModel::class.java)) {
-            return InFlightViewModel(databaseHelper, preferencesRepository, flightLogRepository, cacheDir, flightNumber, destIata, durationMin) as T
+            return InFlightViewModel(airportRepository, preferencesRepository, flightLogRepository, cacheDir, flightNumber, destIata, durationMin) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

@@ -6,7 +6,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.focusflight.data.model.Airport
 import com.example.focusflight.data.model.FlightRoute
-import com.example.focusflight.data.repository.FlightDatabaseHelper
+import com.example.focusflight.data.repository.AirportRepository
 import com.example.focusflight.data.repository.PreferencesRepository
 import com.example.focusflight.data.repository.UserRepository
 import com.example.focusflight.data.repository.FlightLogRepository
@@ -20,7 +20,7 @@ enum class SearchMode { TIME, AIRPORT }
 
 class FlightSearchViewModel(
     private val context: android.content.Context,
-    private val databaseHelper: FlightDatabaseHelper,
+    private val airportRepository: AirportRepository,
     private val preferencesRepository: PreferencesRepository,
     private val userRepository: UserRepository,
     private val flightLogRepository: FlightLogRepository
@@ -79,10 +79,10 @@ class FlightSearchViewModel(
                     visitedIatas.add(homeIata)
                 }
                 val uniqueVisited = visitedIatas.distinct()
-                val visitedSet = databaseHelper.getCountriesForAirports(uniqueVisited)
+                val visitedSet = airportRepository.getCountriesForAirports(uniqueVisited)
                 visitedCountries.value = visitedSet
 
-                val worldMap = databaseHelper.getContinentCountryMap()
+                val worldMap = airportRepository.getContinentCountryMap()
                 val mapping = mutableMapOf<String, String>()
                 worldMap.forEach { (continent, countries) ->
                     countries.forEach { country ->
@@ -105,7 +105,7 @@ class FlightSearchViewModel(
             val baseIata = preferencesRepository.getCurrentAirport()
             Log.d("FlightSearchViewModel", "loadOrigin: baseIata=$baseIata")
             if (baseIata != null) {
-                val airport = databaseHelper.getAirportByIata(baseIata)
+                val airport = airportRepository.getAirportByIata(baseIata)
                 Log.d("FlightSearchViewModel", "loadOrigin: airport=${airport?.iataCode}")
                 _originAirport.value = airport
                 fetchRoutes()
@@ -183,18 +183,18 @@ class FlightSearchViewModel(
     private fun fetchRoutes() {
         val origin = _originAirport.value ?: return
         viewModelScope.launch(Dispatchers.IO) {
-            var fetched = databaseHelper.getOutboundRoutes(
+            var fetched = airportRepository.getOutboundRoutes(
                 originIata = origin.iataCode,
                 searchQuery = "",
                 sortBy = "Shortest"
             )
             if (fetched.isEmpty()) {
                 // Fallback to LHR if user's airport has no routes so the UI isn't empty
-                val fallbackAirport = databaseHelper.getAirportByIata("LHR")
+                val fallbackAirport = airportRepository.getAirportByIata("LHR")
                 if (fallbackAirport != null) {
                     _originAirport.value = fallbackAirport
                     preferencesRepository.setCurrentAirport("LHR")
-                    fetched = databaseHelper.getOutboundRoutes(
+                    fetched = airportRepository.getOutboundRoutes(
                         originIata = "LHR",
                         searchQuery = "",
                         sortBy = "Shortest"
@@ -229,7 +229,7 @@ class FlightSearchViewModel(
 
 class FlightSearchViewModelFactory(
     private val context: android.content.Context,
-    private val databaseHelper: FlightDatabaseHelper,
+    private val airportRepository: AirportRepository,
     private val preferencesRepository: PreferencesRepository,
     private val userRepository: UserRepository,
     private val flightLogRepository: FlightLogRepository
@@ -237,7 +237,7 @@ class FlightSearchViewModelFactory(
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(FlightSearchViewModel::class.java)) {
-            return FlightSearchViewModel(context, databaseHelper, preferencesRepository, userRepository, flightLogRepository) as T
+            return FlightSearchViewModel(context, airportRepository, preferencesRepository, userRepository, flightLogRepository) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }
