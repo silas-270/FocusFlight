@@ -18,7 +18,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
-import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.Flight
@@ -130,13 +129,16 @@ fun InFlightScreen(
     val routeDetails by viewModel.routeDetails.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
 
-    // Intercept back button during flight
+    var showSettings by remember { mutableStateOf(false) }
+    var showExitConfirm by remember { mutableStateOf(false) }
+
+    // Intercept back button during flight - pause and ask for confirmation instead
+    // of silently doing nothing or aborting the flight outright.
     BackHandler {
-        // Do nothing for now to prevent accidental flight abort.
-        // TODO: Show a modal asking if they really want to quit.
+        viewModel.pauseTimer()
+        showExitConfirm = true
     }
 
-    var showSettings by remember { mutableStateOf(false) }
     var sheetExpanded by remember { mutableStateOf(false) }
     var soundEnabled by remember { mutableStateOf(false) }
     var selectedCamera by rememberSaveable { mutableStateOf(1) } // Default to CHASE
@@ -384,14 +386,29 @@ fun InFlightScreen(
                         )
                     }
 
-                    // Settings gear button
+                    // Camera view button
                     IconButton(
                         onClick = { showSettings = true },
                         modifier = Modifier.size(40.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Outlined.Settings,
-                            contentDescription = "Flight Instruments",
+                            imageVector = Icons.Outlined.Flight,
+                            contentDescription = "Camera View",
+                            tint = OffWhite
+                        )
+                    }
+
+                    // Pause / leave flight button
+                    IconButton(
+                        onClick = {
+                            viewModel.pauseTimer()
+                            showExitConfirm = true
+                        },
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Pause,
+                            contentDescription = "Pause Flight",
                             tint = OffWhite
                         )
                     }
@@ -480,6 +497,91 @@ fun InFlightScreen(
             }
         }
     }
+    }
+
+    // --- Layer 2 Exit/Pause confirmation Dialog overlay ---
+    if (showExitConfirm) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.5f))
+                .clickable {
+                    showExitConfirm = false
+                    viewModel.startTimer()
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(horizontal = Spacing.Large)
+                    .fillMaxWidth()
+                    .background(DeepNavy, RoundedCornerShape(20.dp))
+                    .border(1.dp, Border, RoundedCornerShape(20.dp))
+                    .clickable(enabled = false) {} // absorb taps so they don't dismiss
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "LEAVE FLIGHT?",
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp
+                    ),
+                    color = OffWhite
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Your progress is saved. You can resume this flight later from the Hub.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Haze,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(24.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .background(Slate, RoundedCornerShape(12.dp))
+                            .clickable {
+                                showExitConfirm = false
+                                viewModel.startTimer()
+                            }
+                            .padding(vertical = 14.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "RESUME",
+                            color = OffWhite,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 13.sp
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .background(Amber, RoundedCornerShape(12.dp))
+                            .clickable {
+                                showExitConfirm = false
+                                onExitFlight()
+                            }
+                            .padding(vertical = 14.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "LEAVE",
+                            color = Midnight,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 13.sp
+                        )
+                    }
+                }
+            }
+        }
     }
 
     // --- Movie Style Countdown Overlay ---

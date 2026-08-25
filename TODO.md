@@ -20,8 +20,12 @@ what's next. Not urgent, but don't forget.
 
 ## Unbuilt features (not bugs — just not implemented)
 
-- [ ] `InFlightScreen.kt` — quit-confirmation modal before exiting a
-      flight (currently exits immediately, no confirmation).
+- [x] ~~`InFlightScreen.kt` — quit-confirmation modal before exiting a
+      flight~~ — fixed 2026-08-25: pause/leave button (replacing the old
+      settings-gear icon, now an airplane icon for camera view) opens a
+      "Leave Flight?" confirmation with Resume/Leave, wired into the
+      back-button handler too. Progress is already saved periodically so
+      Leave just navigates out.
 - [ ] `CesiumGameActivity.kt` — Settings navigation is a TODO stub; no
       Settings screen exists yet.
 
@@ -29,35 +33,6 @@ what's next. Not urgent, but don't forget.
 
 - [ ] Skip-flight button in `InFlightScreen` — debug affordance, remove
       before shipping.
-
-## Verification still needed
-
-- [x] The architecture cleanup was actually run and booted (2026-08-25, on
-      an emulator) — the app launches and renders real DB-backed data with
-      no crash. This also caught and fixed a real bug: the refactor
-      renamed `CesiumBridge` → `CesiumLiveJniBridge` (moved to
-      `engine.live`), but CesiumRS's `src/android_jni.rs` still exported
-      the old mangled JNI symbol names, so every `nativeXxx` call would
-      have crashed with `UnsatisfiedLinkError` on a real device too. Fixed
-      in CesiumRS by renaming all 9 `Java_com_example_focusflight_...`
-      exports to match the new package/class path.
-- [ ] Still only click-tested Onboarding. Do a full pass —
-      Hub → Search → Check-in → InFlight → Account — on a real device.
-
-## Test coverage
-
-Real unit tests now exist for the pieces touched by the cleanup
-(`LegacyFlightLogMigrator`, `selectRoutesToRender`, `FlightSortOrder`) —
-12 tests, `app/src/test`. Still no coverage for:
-- [ ] ViewModels (`HubViewModel`, `FlightSearchViewModel`, etc.) — would
-      need `kotlinx-coroutines-test` `runTest`/`TestDispatcher` wiring
-      around `viewModelScope`, and fakes for the Room DAOs/Flows they
-      collect.
-- [ ] `CesiumHeadlessMapRenderer`'s actual render path (the JNA call
-      itself is untestable without either faking `CesiumHeadlessJnaBindings`
-      behind an interface, or an instrumented test with the real native
-      lib).
-- [ ] No `androidTest` UI tests exist beyond the stock boilerplate.
 
 ## Later — big feature, only once everything above is settled
 
