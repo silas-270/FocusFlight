@@ -6,6 +6,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -18,6 +19,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.AirplanemodeActive
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
@@ -31,6 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
@@ -503,22 +506,27 @@ fun InFlightScreen(
 
     // --- Layer 2 Exit/Pause confirmation Dialog overlay ---
     if (showExitConfirm) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.5f))
-                .clickable {
-                    showExitConfirm = false
-                    viewModel.startTimer()
-                },
-            contentAlignment = Alignment.Center
-        ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            // Scrim and card are siblings (not nested) so a tap on the card can't
+            // also fall through to the scrim's dismiss handler underneath it.
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.5f))
+                    .clickable(
+                        indication = null,
+                        interactionSource = remember { MutableInteractionSource() }
+                    ) {
+                        showExitConfirm = false
+                        viewModel.startTimer()
+                    }
+            )
             Column(
                 modifier = Modifier
+                    .align(Alignment.Center)
                     .padding(horizontal = Spacing.Large)
                     .fillMaxWidth()
                     .background(DeepNavy, RoundedCornerShape(20.dp))
-                    .clickable(enabled = false) {} // absorb taps so they don't dismiss
                     .padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
@@ -595,12 +603,14 @@ fun InFlightScreen(
 private fun SlideToPauseControl(onSlideCompleted: () -> Unit) {
     val thumbSizeDp = 48.dp
     val trackHeightDp = 56.dp
+    val trackShape = RoundedCornerShape(12.dp)
+    val commitThreshold = 0.6f
 
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxWidth()
             .height(trackHeightDp)
-            .clip(RoundedCornerShape(trackHeightDp / 2))
+            .clip(trackShape)
             .background(Slate)
     ) {
         val density = LocalDensity.current
@@ -609,20 +619,39 @@ private fun SlideToPauseControl(onSlideCompleted: () -> Unit) {
         val maxOffsetPx = (trackWidthPx - thumbSizePx).coerceAtLeast(0f)
 
         var dragOffsetPx by remember { mutableFloatStateOf(0f) }
+        var dragging by remember { mutableStateOf(false) }
         var committed by remember { mutableStateOf(false) }
         val animatedOffsetPx by animateFloatAsState(
             targetValue = dragOffsetPx,
             label = "slideToPauseOffset"
         )
+        val thumbScale by animateFloatAsState(
+            targetValue = if (dragging) 1.08f else 1f,
+            label = "slideToPauseThumbScale"
+        )
         val progress = if (maxOffsetPx > 0f) (animatedOffsetPx / maxOffsetPx).coerceIn(0f, 1f) else 0f
+        val armed = progress >= commitThreshold
+
+        // Trailing fill behind the thumb, growing with drag progress.
+        Box(
+            modifier = Modifier
+                .fillMaxHeight()
+                .width(with(density) { (animatedOffsetPx + thumbSizePx / 2f).toDp() })
+                .clip(trackShape)
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(Amber.copy(alpha = 0.28f), Amber.copy(alpha = 0.12f))
+                    )
+                )
+        )
 
         Text(
-            text = "SLIDE TO PAUSE",
+            text = if (armed) "RELEASE TO PAUSE" else "SLIDE TO PAUSE",
             style = MaterialTheme.typography.labelMedium.copy(
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.sp
             ),
-            color = Haze.copy(alpha = 1f - progress),
+            color = Haze.copy(alpha = 1f - progress * 0.85f),
             modifier = Modifier.align(Alignment.Center)
         )
 
@@ -631,12 +660,18 @@ private fun SlideToPauseControl(onSlideCompleted: () -> Unit) {
                 .offset { IntOffset(animatedOffsetPx.roundToInt(), 0) }
                 .padding(4.dp)
                 .size(thumbSizeDp)
-                .clip(CircleShape)
-                .background(Amber)
+                .graphicsLayer {
+                    scaleX = thumbScale
+                    scaleY = thumbScale
+                }
+                .clip(RoundedCornerShape(10.dp))
+                .background(if (armed) Amber else OffWhite)
                 .pointerInput(Unit) {
                     detectHorizontalDragGestures(
+                        onDragStart = { dragging = true },
                         onDragEnd = {
-                            if (dragOffsetPx > maxOffsetPx * 0.6f) {
+                            dragging = false
+                            if (dragOffsetPx > maxOffsetPx * commitThreshold) {
                                 dragOffsetPx = maxOffsetPx
                                 if (!committed) {
                                     committed = true
@@ -645,6 +680,10 @@ private fun SlideToPauseControl(onSlideCompleted: () -> Unit) {
                             } else {
                                 dragOffsetPx = 0f
                             }
+                        },
+                        onDragCancel = {
+                            dragging = false
+                            dragOffsetPx = 0f
                         }
                     ) { change, dragAmount ->
                         change.consume()
@@ -654,10 +693,14 @@ private fun SlideToPauseControl(onSlideCompleted: () -> Unit) {
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                imageVector = Icons.Outlined.Pause,
+                imageVector = if (armed) {
+                    Icons.Outlined.Pause
+                } else {
+                    Icons.AutoMirrored.Outlined.KeyboardArrowRight
+                },
                 contentDescription = "Slide to pause",
                 tint = Midnight,
-                modifier = Modifier.size(20.dp)
+                modifier = Modifier.size(if (armed) 20.dp else 24.dp)
             )
         }
     }

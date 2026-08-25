@@ -131,6 +131,16 @@ class CesiumGameActivity : GameActivity() {
                         CesiumLiveJniBridge.nativeSetRenderingEnabled(shouldRender)
                     }
 
+                    // Portrait everywhere except InFlight, which allows free rotation.
+                    val isInFlight = currentRoute?.startsWith("in_flight/") == true
+                    LaunchedEffect(isInFlight) {
+                        requestedOrientation = if (isInFlight) {
+                            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                        } else {
+                            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                        }
+                    }
+
                     val bgColor = if (shouldRender) {
                         androidx.compose.ui.graphics.Color.Transparent
                     } else {
