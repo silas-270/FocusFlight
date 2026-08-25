@@ -40,7 +40,7 @@ import com.example.focusflight.ui.theme.Midnight
 import com.example.focusflight.ui.theme.OffWhite
 import com.example.focusflight.ui.theme.Spacing
 import com.example.focusflight.ui.viewmodel.account.AccountViewModel
-import com.example.focusflight.ui.viewmodel.account.FlightSortOrder
+import com.example.focusflight.data.model.FlightSortOrder
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

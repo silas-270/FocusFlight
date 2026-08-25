@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.focusflight.data.model.Airport
 import com.example.focusflight.data.model.FlightLog
+import com.example.focusflight.data.model.FlightStats
 import com.example.focusflight.data.repository.AirportRepository
 import com.example.focusflight.data.repository.FlightLogRepository
 import com.example.focusflight.data.repository.PreferencesRepository
@@ -16,12 +17,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.io.File
-
-data class FlightStats(
-    val totalFlights: Int = 0,
-    val totalMinutes: Int = 0,
-    val airportsVisited: Int = 0
-)
 
 class HubViewModel(
     private val airportRepository: AirportRepository,
