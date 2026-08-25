@@ -43,7 +43,7 @@ import com.example.focusflight.engine.live.CesiumLiveJniBridge
 import com.example.focusflight.ui.Screen
 import com.example.focusflight.ui.screens.ArrivalCelebrationScreen
 import com.example.focusflight.ui.screens.CheckInScreen
-import com.example.focusflight.ui.screens.FlightSearchScreen
+import com.example.focusflight.ui.screens.flightsearch.FlightSearchScreen
 import com.example.focusflight.ui.screens.InFlightScreen
 import com.example.focusflight.ui.screens.OnboardingScreen
 import com.example.focusflight.ui.theme.FocusFlightTheme
@@ -396,7 +396,7 @@ class CesiumGameActivity : GameActivity() {
                                     factory = AccountViewModelFactory(applicationContext, userRepository, flightLogRepository, airportRepository)
                                 )
                                 
-                                com.example.focusflight.ui.screens.AccountScreen(
+                                com.example.focusflight.ui.screens.account.AccountScreen(
                                     viewModel = viewModel,
                                     onBackClick = { navController.popBackStack() }
                                 )
