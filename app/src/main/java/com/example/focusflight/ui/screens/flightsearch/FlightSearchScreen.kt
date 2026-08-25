@@ -54,8 +54,8 @@ import com.example.focusflight.ui.theme.Midnight
 import com.example.focusflight.ui.theme.OffWhite
 import com.example.focusflight.ui.theme.Slate
 import com.example.focusflight.ui.theme.Spacing
-import com.example.focusflight.ui.viewmodel.FlightSearchViewModel
-import com.example.focusflight.ui.viewmodel.SearchMode
+import com.example.focusflight.ui.viewmodel.flightsearch.FlightSearchViewModel
+import com.example.focusflight.ui.viewmodel.flightsearch.SearchMode
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

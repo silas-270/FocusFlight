@@ -4,9 +4,9 @@ import androidx.paging.PagingSource
 import com.example.focusflight.data.local.FlightLogDao
 import com.example.focusflight.data.local.UserProfileDao
 import com.example.focusflight.data.model.FlightLog
-import com.example.focusflight.ui.viewmodel.FlightHighlights
-import com.example.focusflight.ui.viewmodel.FlightSortOrder
-import com.example.focusflight.ui.viewmodel.FlightStats
+import com.example.focusflight.ui.viewmodel.account.FlightHighlights
+import com.example.focusflight.ui.viewmodel.account.FlightSortOrder
+import com.example.focusflight.ui.viewmodel.hub.FlightStats
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 

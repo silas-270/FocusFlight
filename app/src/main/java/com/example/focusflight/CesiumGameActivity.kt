@@ -41,24 +41,24 @@ import com.example.focusflight.data.repository.PreferencesRepository
 import com.example.focusflight.data.repository.UserRepository
 import com.example.focusflight.engine.live.CesiumLiveJniBridge
 import com.example.focusflight.ui.Screen
-import com.example.focusflight.ui.screens.ArrivalCelebrationScreen
-import com.example.focusflight.ui.screens.CheckInScreen
+import com.example.focusflight.ui.screens.arrival.ArrivalCelebrationScreen
+import com.example.focusflight.ui.screens.checkin.CheckInScreen
 import com.example.focusflight.ui.screens.flightsearch.FlightSearchScreen
-import com.example.focusflight.ui.screens.InFlightScreen
-import com.example.focusflight.ui.screens.OnboardingScreen
+import com.example.focusflight.ui.screens.inflight.InFlightScreen
+import com.example.focusflight.ui.screens.onboarding.OnboardingScreen
 import com.example.focusflight.ui.theme.FocusFlightTheme
-import com.example.focusflight.ui.viewmodel.CheckInViewModel
-import com.example.focusflight.ui.viewmodel.CheckInViewModelFactory
-import com.example.focusflight.ui.viewmodel.FlightSearchViewModel
-import com.example.focusflight.ui.viewmodel.FlightSearchViewModelFactory
-import com.example.focusflight.ui.viewmodel.HubViewModel
-import com.example.focusflight.ui.viewmodel.HubViewModelFactory
-import com.example.focusflight.ui.viewmodel.AccountViewModel
-import com.example.focusflight.ui.viewmodel.AccountViewModelFactory
-import com.example.focusflight.ui.viewmodel.InFlightViewModel
-import com.example.focusflight.ui.viewmodel.InFlightViewModelFactory
-import com.example.focusflight.ui.viewmodel.OnboardingViewModel
-import com.example.focusflight.ui.viewmodel.OnboardingViewModelFactory
+import com.example.focusflight.ui.viewmodel.checkin.CheckInViewModel
+import com.example.focusflight.ui.viewmodel.checkin.CheckInViewModelFactory
+import com.example.focusflight.ui.viewmodel.flightsearch.FlightSearchViewModel
+import com.example.focusflight.ui.viewmodel.flightsearch.FlightSearchViewModelFactory
+import com.example.focusflight.ui.viewmodel.hub.HubViewModel
+import com.example.focusflight.ui.viewmodel.hub.HubViewModelFactory
+import com.example.focusflight.ui.viewmodel.account.AccountViewModel
+import com.example.focusflight.ui.viewmodel.account.AccountViewModelFactory
+import com.example.focusflight.ui.viewmodel.inflight.InFlightViewModel
+import com.example.focusflight.ui.viewmodel.inflight.InFlightViewModelFactory
+import com.example.focusflight.ui.viewmodel.onboarding.OnboardingViewModel
+import com.example.focusflight.ui.viewmodel.onboarding.OnboardingViewModelFactory
 import com.google.androidgamesdk.GameActivity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -187,7 +187,7 @@ class CesiumGameActivity : GameActivity() {
                                     factory = HubViewModelFactory(airportRepository, preferencesRepository, flightLogRepository, cacheDir)
                                 )
                                 val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
-                                com.example.focusflight.ui.screens.HubScreen(
+                                com.example.focusflight.ui.screens.hub.HubScreen(
                                     viewModel = viewModel,
                                     onBookFlightClick = {
                                         navController.navigate(Screen.FlightSearch.route)

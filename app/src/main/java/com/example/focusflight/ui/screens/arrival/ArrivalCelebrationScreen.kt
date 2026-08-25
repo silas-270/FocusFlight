@@ -1,4 +1,4 @@
-package com.example.focusflight.ui.screens
+package com.example.focusflight.ui.screens.arrival
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.*

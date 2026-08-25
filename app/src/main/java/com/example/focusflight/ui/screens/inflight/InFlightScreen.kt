@@ -1,4 +1,4 @@
-package com.example.focusflight.ui.screens
+package com.example.focusflight.ui.screens.inflight
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateContentSize
@@ -49,7 +49,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import com.example.focusflight.data.model.Airport
 import kotlinx.coroutines.delay
 import com.example.focusflight.ui.theme.*
-import com.example.focusflight.ui.viewmodel.InFlightViewModel
+import com.example.focusflight.ui.viewmodel.inflight.InFlightViewModel
 import androidx.compose.animation.core.*
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.drawText

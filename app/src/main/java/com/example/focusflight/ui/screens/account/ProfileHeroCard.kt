@@ -37,7 +37,7 @@ import com.example.focusflight.ui.theme.OffWhite
 import com.example.focusflight.ui.theme.Slate
 import com.example.focusflight.ui.theme.SoftAmber
 import com.example.focusflight.ui.theme.Spacing
-import com.example.focusflight.ui.viewmodel.AccountUiState
+import com.example.focusflight.ui.viewmodel.account.AccountUiState
 
 @Composable
 internal fun ProfileHeroCard(state: AccountUiState) {

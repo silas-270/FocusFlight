@@ -1,4 +1,4 @@
-package com.example.focusflight.ui.viewmodel
+package com.example.focusflight.ui.viewmodel.checkin
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider

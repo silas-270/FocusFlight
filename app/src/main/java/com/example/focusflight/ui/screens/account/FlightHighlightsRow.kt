@@ -37,7 +37,7 @@ import com.example.focusflight.ui.theme.DeepNavy
 import com.example.focusflight.ui.theme.Haze
 import com.example.focusflight.ui.theme.OffWhite
 import com.example.focusflight.ui.theme.SoftAmber
-import com.example.focusflight.ui.viewmodel.FlightHighlights
+import com.example.focusflight.ui.viewmodel.account.FlightHighlights
 
 @Composable
 internal fun FlightHighlightsRow(highlights: FlightHighlights) {

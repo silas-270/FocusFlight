@@ -33,7 +33,7 @@ import com.example.focusflight.ui.theme.Border
 import com.example.focusflight.ui.theme.DeepNavy
 import com.example.focusflight.ui.theme.OffWhite
 import com.example.focusflight.ui.theme.SoftAmber
-import com.example.focusflight.ui.viewmodel.FlightSortOrder
+import com.example.focusflight.ui.viewmodel.account.FlightSortOrder
 
 @Composable
 internal fun SortDropdown(

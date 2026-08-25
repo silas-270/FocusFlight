@@ -17,7 +17,7 @@ import androidx.compose.ui.unit.dp
 import com.example.focusflight.data.model.Airport
 import com.example.focusflight.data.model.FlightRoute
 import com.example.focusflight.ui.components.InteractiveWorldMap
-import com.example.focusflight.ui.viewmodel.FlightSearchViewModel
+import com.example.focusflight.ui.viewmodel.flightsearch.FlightSearchViewModel
 
 @Composable
 fun RouteMap(
