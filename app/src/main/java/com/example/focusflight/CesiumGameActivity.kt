@@ -35,6 +35,7 @@ import com.example.focusflight.data.local.airport.AirportRouteSqliteDataSource
 import com.example.focusflight.data.repository.AirportRepository
 import com.example.focusflight.data.repository.LocalAirportRepository
 import com.example.focusflight.data.repository.FlightLogRepository
+import com.example.focusflight.data.repository.LegacyFlightLogMigrator
 import com.example.focusflight.data.repository.LocalFlightLogRepository
 import com.example.focusflight.data.repository.LocalUserRepository
 import com.example.focusflight.data.repository.PreferencesRepository
@@ -358,49 +359,12 @@ class CesiumGameActivity : GameActivity() {
 
     private fun migrateFlightLogsIfNeeded() {
         val prefs = getSharedPreferences("focus_flight_prefs", MODE_PRIVATE)
-        val legacyLogs = prefs.getStringSet("flight_logs_set", null) ?: return
-        if (legacyLogs.isEmpty()) return
-
-        Log.d("Migration", "Migrating ${legacyLogs.size} flight logs from SharedPreferences to Room...")
-
+        val migrator = LegacyFlightLogMigrator(
+            prefs, userRepository, flightLogRepository, airportRepository,
+            fallbackHomeAirportIata = { preferencesRepository.getHomeAirport() }
+        )
         runBlocking(Dispatchers.IO) {
-            // Ensure a user profile exists for migration
-            var profile = userRepository.getProfile()
-            if (profile == null) {
-                val homeIata = preferencesRepository.getHomeAirport() ?: "STR"
-                profile = userRepository.createProfile(com.example.focusflight.data.model.UserProfile.generateRandomName(), homeIata)
-            }
-
-            for (entry in legacyLogs) {
-                try {
-                    val parts = entry.split("|")
-                    if (parts.size >= 4) {
-                        val origin = parts[0]
-                        val dest = parts[1]
-                        val duration = parts[2].toIntOrNull() ?: continue
-                        val flightNo = parts[3]
-
-                        // Look up distance from routes table, default to 0.0
-                        val routes = airportRepository.getOutboundRoutes(origin)
-                        val matchingRoute = routes.find { it.destIata == dest }
-                        val distanceKm = matchingRoute?.distanceKm ?: 0.0
-
-                        flightLogRepository.logFlight(
-                            flightNumber = flightNo,
-                            originIata = origin,
-                            destIata = dest,
-                            durationMin = duration,
-                            distanceKm = distanceKm
-                        )
-                    }
-                } catch (e: Exception) {
-                    Log.e("Migration", "Failed to migrate flight log entry: $entry", e)
-                }
-            }
+            migrator.migrateIfNeeded()
         }
-
-        // Clear migrated data
-        prefs.edit().remove("flight_logs_set").apply()
-        Log.d("Migration", "Migration complete. Cleared legacy flight_logs_set.")
     }
 }

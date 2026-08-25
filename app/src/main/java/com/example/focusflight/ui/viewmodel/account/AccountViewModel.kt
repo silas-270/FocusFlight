@@ -7,7 +7,9 @@ import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.paging.PagingData
 import androidx.paging.cachedIn
+import com.example.focusflight.data.model.FlightHighlights
 import com.example.focusflight.data.model.FlightLog
+import com.example.focusflight.data.model.FlightSortOrder
 import com.example.focusflight.data.repository.AirportRepository
 import com.example.focusflight.data.repository.FlightLogRepository
 import com.example.focusflight.data.repository.UserRepository
@@ -23,21 +25,6 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-
-enum class FlightSortOrder(val displayName: String) {
-    DATE_DESC("Newest First"),
-    DATE_ASC("Oldest First"),
-    DISTANCE_DESC("Longest Distance"),
-    DISTANCE_ASC("Shortest Distance"),
-    DURATION_DESC("Longest Duration")
-}
-
-data class FlightHighlights(
-    val longestFlight: FlightLog? = null,
-    val mostVisitedIata: String? = null,
-    val mostVisitedCount: Int = 0,
-    val equatorRatio: Double = 0.0
-)
 
 data class ContinentStats(
     val continentCode: String,

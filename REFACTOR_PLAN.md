@@ -151,14 +151,13 @@ doesn't tell you which screen it belongs to. Group by feature so
       code (that's what they actually are — no change needed there beyond
       what Phase 3 decided for `SectionHeader`, which stayed in
       `ui/screens/account/` since nothing else references it).
-- [x] `data/model/` — left as-is: `Airport`, `FlightRoute`, `Runway`,
-      `FlightLog`, `UserProfile` are all genuinely cross-feature and stay
-      shared. (Noted but out of scope: `FlightHighlights`/`FlightSortOrder`/
-      `FlightStats`/`AccountUiState`/`ContinentStats`/`SearchMode` are UI
-      state types that `data/repository/FlightLogRepository.kt` and
-      `LocalFlightLogRepository.kt` import from `ui/viewmodel/account` and
-      `ui/viewmodel/hub` — a pre-existing data-layer-depends-on-UI-layer
-      violation, unrelated to this restructuring; worth its own follow-up.)
+- [x] `data/model/` — `Airport`, `FlightRoute`, `Runway`, `FlightLog`,
+      `UserProfile` stay shared, plus (as a 2026-08-25 follow-up)
+      `FlightHighlights`, `FlightSortOrder`, and `FlightStats` moved here
+      too (from `ui/viewmodel/account` and `ui/viewmodel/hub`), fixing the
+      data-layer-depends-on-UI-layer violation flagged above.
+      `AccountUiState`/`ContinentStats`/`SearchMode` are genuine UI state
+      and correctly stayed in their ViewModels.
 - [x] No `settings.gradle.kts` changes needed — package-per-directory in
       Kotlin made every import update mechanical (verified via grep, zero
       stale `ui.viewmodel.<OldFlatPath>` references left).

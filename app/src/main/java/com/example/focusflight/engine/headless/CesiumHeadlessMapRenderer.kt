@@ -33,10 +33,7 @@ class CesiumHeadlessMapRenderer(private val cacheDir: File) {
             return Result.Success(outFile.absolutePath, fromCache = true)
         }
 
-        val routesData = outboundRoutes
-            .filter { it.distanceKm <= 10000.0 }
-            .shuffled()
-            .take(12)
+        val routesData = selectRoutesToRender(outboundRoutes)
             .map { route -> Pair(Pair(centerLat, centerLon), Pair(route.destLat, route.destLon)) }
 
         if (outFile.exists()) {
@@ -68,5 +65,20 @@ class CesiumHeadlessMapRenderer(private val cacheDir: File) {
 
     companion object {
         private const val TAG = "CesiumHeadlessMapRenderer"
+        internal const val MAX_DISTANCE_KM = 10000.0
+        internal const val MAX_ROUTES = 12
     }
 }
+
+/**
+ * Picks which outbound routes get drawn on a rendered map: routes within
+ * [CesiumHeadlessMapRenderer.MAX_DISTANCE_KM], capped at
+ * [CesiumHeadlessMapRenderer.MAX_ROUTES] and shuffled so repeated renders
+ * for a busy hub don't always show the same subset. Pulled out as a pure
+ * function so the selection logic is testable without the native renderer.
+ */
+internal fun selectRoutesToRender(routes: List<FlightRoute>): List<FlightRoute> =
+    routes
+        .filter { it.distanceKm <= CesiumHeadlessMapRenderer.MAX_DISTANCE_KM }
+        .shuffled()
+        .take(CesiumHeadlessMapRenderer.MAX_ROUTES)
