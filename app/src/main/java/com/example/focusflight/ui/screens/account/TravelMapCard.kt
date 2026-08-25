@@ -16,7 +16,7 @@ import androidx.compose.ui.unit.dp
 import com.example.focusflight.ui.components.InteractiveWorldMap
 import com.example.focusflight.ui.theme.DeepNavy
 import com.example.focusflight.ui.theme.Spacing
-import com.example.focusflight.ui.viewmodel.AccountUiState
+import com.example.focusflight.ui.viewmodel.account.AccountUiState
 
 @Composable
 internal fun TravelMapCard(state: AccountUiState) {

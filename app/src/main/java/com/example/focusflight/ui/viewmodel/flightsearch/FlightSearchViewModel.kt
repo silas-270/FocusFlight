@@ -1,4 +1,4 @@
-package com.example.focusflight.ui.viewmodel
+package com.example.focusflight.ui.viewmodel.flightsearch
 
 import android.util.Log
 import androidx.lifecycle.ViewModel

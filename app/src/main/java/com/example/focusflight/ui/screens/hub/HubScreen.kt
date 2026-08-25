@@ -1,4 +1,4 @@
-package com.example.focusflight.ui.screens
+package com.example.focusflight.ui.screens.hub
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
@@ -56,7 +56,7 @@ import com.example.focusflight.ui.theme.Midnight
 import com.example.focusflight.ui.theme.OffWhite
 import com.example.focusflight.ui.theme.Slate
 import com.example.focusflight.ui.theme.Spacing
-import com.example.focusflight.ui.viewmodel.HubViewModel
+import com.example.focusflight.ui.viewmodel.hub.HubViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

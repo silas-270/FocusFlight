@@ -1,4 +1,4 @@
-package com.example.focusflight.ui.screens
+package com.example.focusflight.ui.screens.onboarding
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.LinearEasing
@@ -92,7 +92,7 @@ import com.example.focusflight.ui.theme.OffWhite
 import com.example.focusflight.ui.theme.Slate
 import com.example.focusflight.ui.theme.SoftAmber
 import com.example.focusflight.ui.theme.Spacing
-import com.example.focusflight.ui.viewmodel.OnboardingViewModel
+import com.example.focusflight.ui.viewmodel.onboarding.OnboardingViewModel
 
 
 @Composable

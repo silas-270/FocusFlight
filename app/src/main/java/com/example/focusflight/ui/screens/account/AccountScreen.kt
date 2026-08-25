@@ -39,8 +39,8 @@ import com.example.focusflight.ui.theme.Amber
 import com.example.focusflight.ui.theme.Midnight
 import com.example.focusflight.ui.theme.OffWhite
 import com.example.focusflight.ui.theme.Spacing
-import com.example.focusflight.ui.viewmodel.AccountViewModel
-import com.example.focusflight.ui.viewmodel.FlightSortOrder
+import com.example.focusflight.ui.viewmodel.account.AccountViewModel
+import com.example.focusflight.ui.viewmodel.account.FlightSortOrder
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

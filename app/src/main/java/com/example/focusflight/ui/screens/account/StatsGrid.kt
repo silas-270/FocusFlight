@@ -33,7 +33,7 @@ import com.example.focusflight.ui.theme.Haze
 import com.example.focusflight.ui.theme.OffWhite
 import com.example.focusflight.ui.theme.Slate
 import com.example.focusflight.ui.theme.Spacing
-import com.example.focusflight.ui.viewmodel.AccountUiState
+import com.example.focusflight.ui.viewmodel.account.AccountUiState
 import java.util.Locale
 
 @Composable

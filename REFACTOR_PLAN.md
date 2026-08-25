@@ -140,24 +140,31 @@ files, `ui/viewmodel` has 8) — already at the point where a filename alone
 doesn't tell you which screen it belongs to. Group by feature so
 `path + name` is unambiguous, matching the split from Phase 3.
 
-- [ ] `ui/screens/hub/HubScreen.kt` + `ui/viewmodel/hub/HubViewModel.kt`
-- [ ] `ui/screens/onboarding/OnboardingScreen.kt` + `ui/viewmodel/onboarding/OnboardingViewModel.kt`
-- [ ] `ui/screens/flightsearch/*` (from Phase 3) + `ui/viewmodel/flightsearch/FlightSearchViewModel.kt`
-- [ ] `ui/screens/checkin/CheckInScreen.kt` + `ui/viewmodel/checkin/CheckInViewModel.kt`
-- [ ] `ui/screens/inflight/InFlightScreen.kt` + `ui/viewmodel/inflight/InFlightViewModel.kt`
-- [ ] `ui/screens/arrival/ArrivalCelebrationScreen.kt`
-- [ ] `ui/screens/account/*` (from Phase 3) + `ui/viewmodel/account/AccountViewModel.kt`
-- [ ] Leave `ui/components/`, `ui/map/`, `ui/theme/` as cross-feature shared
+- [x] `ui/screens/hub/HubScreen.kt` + `ui/viewmodel/hub/HubViewModel.kt`
+- [x] `ui/screens/onboarding/OnboardingScreen.kt` + `ui/viewmodel/onboarding/OnboardingViewModel.kt`
+- [x] `ui/screens/flightsearch/*` (from Phase 3) + `ui/viewmodel/flightsearch/FlightSearchViewModel.kt`
+- [x] `ui/screens/checkin/CheckInScreen.kt` + `ui/viewmodel/checkin/CheckInViewModel.kt`
+- [x] `ui/screens/inflight/InFlightScreen.kt` + `ui/viewmodel/inflight/InFlightViewModel.kt`
+- [x] `ui/screens/arrival/ArrivalCelebrationScreen.kt`
+- [x] `ui/screens/account/*` (from Phase 3) + `ui/viewmodel/account/AccountViewModel.kt`
+- [x] Leave `ui/components/`, `ui/map/`, `ui/theme/` as cross-feature shared
       code (that's what they actually are — no change needed there beyond
-      what Phase 3 decides for `SectionHeader`).
-- [ ] `data/model/` — check whether these are all genuinely shared, or
-      whether any (e.g. anything Account-specific) should move nearer its
-      feature; keep shared domain models (`Airport`, `FlightRoute`,
-      `Runway`, `FlightLog`, `UserProfile`) in `data/model/` since they're
-      used across features.
-- [ ] Update `settings.gradle.kts`/imports as needed (should be mechanical
-      given Kotlin package-per-directory).
-- [ ] Build, run, full smoke test of every screen in the nav graph.
+      what Phase 3 decided for `SectionHeader`, which stayed in
+      `ui/screens/account/` since nothing else references it).
+- [x] `data/model/` — left as-is: `Airport`, `FlightRoute`, `Runway`,
+      `FlightLog`, `UserProfile` are all genuinely cross-feature and stay
+      shared. (Noted but out of scope: `FlightHighlights`/`FlightSortOrder`/
+      `FlightStats`/`AccountUiState`/`ContinentStats`/`SearchMode` are UI
+      state types that `data/repository/FlightLogRepository.kt` and
+      `LocalFlightLogRepository.kt` import from `ui/viewmodel/account` and
+      `ui/viewmodel/hub` — a pre-existing data-layer-depends-on-UI-layer
+      violation, unrelated to this restructuring; worth its own follow-up.)
+- [x] No `settings.gradle.kts` changes needed — package-per-directory in
+      Kotlin made every import update mechanical (verified via grep, zero
+      stale `ui.viewmodel.<OldFlatPath>` references left).
+- [x] `compileDebugKotlin` clean (verified 2026-08-25). Full on-device smoke
+      test of every screen still needs a manual pass — no
+      device/emulator available in this environment.
 
 ---
 

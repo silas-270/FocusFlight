@@ -34,7 +34,7 @@ import com.example.focusflight.ui.theme.Haze
 import com.example.focusflight.ui.theme.OffWhite
 import com.example.focusflight.ui.theme.Slate
 import com.example.focusflight.ui.theme.Spacing
-import com.example.focusflight.ui.viewmodel.ContinentStats
+import com.example.focusflight.ui.viewmodel.account.ContinentStats
 
 private val continentNames = mapOf(
     "AF" to "Africa",
