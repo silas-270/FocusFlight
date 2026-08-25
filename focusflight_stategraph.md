@@ -100,7 +100,7 @@ stateDiagram-v2
 ### HubViewModel (Homescreen)
 - **`currentAirport`**: Set by `loadData()` reading from Preferences
 - **`flightStats`**: Set by `loadData()`
-- **`routeMapPath`** (Homescreen Background Image): Set by `generateRouteMap()` which invokes `CesiumRSLibrary.renderRoutes()` and outputs a cached `.png` image path.
+- **`routeMapPath`** (Homescreen Background Image): Set by `generateRouteMap()` which delegates to `CesiumHeadlessMapRenderer.renderRouteMap()` and outputs a cached `.png` image path.
 - **`isRendering`**: Toggled during `generateRouteMap()`
 
 ### OnboardingViewModel
@@ -129,22 +129,23 @@ stateDiagram-v2
 
 ## 5. File System & Cache States
 
-### Map Caching (`CacheUtils` & `CesiumRSLibrary`)
-The application generates route map images using a native Rust engine headless renderer, saving the output to the device's internal cache directory.
+### Map Caching (`engine/headless/CesiumHeadlessMapRenderer` & `MapImageCache`)
+The application generates route map images using a native Rust engine headless renderer, saving the output to the device's internal cache directory. `CesiumHeadlessMapRenderer` is the single owner of this fetch-routes → render → prune-cache sequence (it wraps the raw JNA bindings in `CesiumHeadlessJnaBindings`); all three call sites below just call it.
 
 - **State Creation**:
-  - `HubViewModel.generateRouteMap()` checks for an existing pre-rendered map file (`hub_route_map_{IATA}.png`). If absent, it invokes `CesiumRSLibrary.renderRoutes()` to generate one and saves it to the cache directory.
-  - `OnboardingViewModel.preRenderMap()` does the same for the selected home airport during onboarding.
-  - `InFlightViewModel.preRenderDestinationMap()` does the same for the destination airport upon flight completion or skip.
-  
-- **State Pruning (`CacheUtils.pruneMapCache`)**:
-  - To prevent excessive storage use, `pruneMapCache(cacheDir, maxFiles = 5)` is triggered immediately after a new map is successfully generated or loaded.
+  - `HubViewModel.generateRouteMap()` calls `CesiumHeadlessMapRenderer.renderRouteMap()` with `reuseCachedFile = true`, so an existing pre-rendered map file (`hub_route_map_{IATA}.png`) is reused instantly instead of re-rendering.
+  - `OnboardingViewModel.preRenderMap()` does the same for the selected home airport during onboarding (always re-renders).
+  - `InFlightViewModel.preRenderDestinationMap()` does the same for the destination airport upon flight completion or skip (always re-renders).
+
+- **State Pruning (`MapImageCache.pruneMapCache`)**:
+  - To prevent excessive storage use, `pruneMapCache(cacheDir, maxFiles = 5)` is triggered by `CesiumHeadlessMapRenderer` immediately after a new map is successfully generated or an existing one is reused.
   - It sorts the map cache files by `lastModified` and deletes the oldest files until the total count is $\le$ `maxFiles`.
 
-### Database Initialization (`FlightDatabaseHelper`)
+### Database Initialization (`data/local/airport/AirportRouteSqliteDataSource`, behind `AirportRepository`)
 - **Initial Setup State**:
-  - On first run (triggered via `CesiumGameActivity.onCreate`), `databaseHelper.ensureDatabaseCopied()` executes. 
+  - On first run (triggered via `CesiumGameActivity.onCreate`), `airportRepository.ensureDatabaseCopied()` executes.
   - It checks if the `flights.db` file exists in the app's databases directory. If it doesn't, it actively copies the pre-populated SQLite database from the app's `assets/` folder to the active local storage.
+  - All airport/route/runway queries (from ViewModels and `CesiumGameActivity`) go through the `AirportRepository` interface, not the SQLite data source directly.
 
 ## 6. Ephemeral UI & Animation States (Jetpack Compose)
 

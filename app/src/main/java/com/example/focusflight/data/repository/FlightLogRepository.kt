@@ -2,9 +2,9 @@ package com.example.focusflight.data.repository
 
 import androidx.paging.PagingSource
 import com.example.focusflight.data.model.FlightLog
-import com.example.focusflight.ui.viewmodel.FlightHighlights
-import com.example.focusflight.ui.viewmodel.FlightSortOrder
-import com.example.focusflight.ui.viewmodel.FlightStats
+import com.example.focusflight.data.model.FlightHighlights
+import com.example.focusflight.data.model.FlightSortOrder
+import com.example.focusflight.data.model.FlightStats
 import kotlinx.coroutines.flow.Flow
 
 interface FlightLogRepository {
