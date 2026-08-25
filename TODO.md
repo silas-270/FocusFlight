@@ -12,11 +12,11 @@ what's next. Not urgent, but don't forget.
 
 ## Build hygiene
 
-- [ ] `app/build.gradle.kts`'s `cargoNdkBuild` task hardcodes two absolute
-      local machine paths for the CesiumRS checkout
-      (`/home/silas270/CesiumRS`, `c:/Users/kamme/Desktop/CesiumRS`) —
-      only builds on those two specific machines. Move to an env var or
-      `local.properties` entry.
+- [x] ~~`app/build.gradle.kts`'s `cargoNdkBuild` task hardcodes two absolute
+      local machine paths~~ — fixed 2026-08-25: NDK/cargo/CesiumRS paths now
+      resolve from `ANDROID_HOME`/`ANDROID_NDK_HOME`/`CESIUM_RS_HOME` and
+      `user.home`, with the old hardcoded paths only as a last-resort
+      fallback.
 
 ## Unbuilt features (not bugs — just not implemented)
 
@@ -32,13 +32,17 @@ what's next. Not urgent, but don't forget.
 
 ## Verification still needed
 
-- [ ] Nothing from the architecture cleanup (repository layer, map
-      renderer consolidation, file/package restructuring) has been run on
-      a real device/emulator — this dev environment has no display and no
-      CesiumRS native checkout. Confirmed via clean `compileDebugKotlin`
-      and passing unit tests only. Do a manual click-through of
-      Hub → Search → Check-in → InFlight → Account before trusting it
-      fully.
+- [x] The architecture cleanup was actually run and booted (2026-08-25, on
+      an emulator) — the app launches and renders real DB-backed data with
+      no crash. This also caught and fixed a real bug: the refactor
+      renamed `CesiumBridge` → `CesiumLiveJniBridge` (moved to
+      `engine.live`), but CesiumRS's `src/android_jni.rs` still exported
+      the old mangled JNI symbol names, so every `nativeXxx` call would
+      have crashed with `UnsatisfiedLinkError` on a real device too. Fixed
+      in CesiumRS by renaming all 9 `Java_com_example_focusflight_...`
+      exports to match the new package/class path.
+- [ ] Still only click-tested Onboarding. Do a full pass —
+      Hub → Search → Check-in → InFlight → Account — on a real device.
 
 ## Test coverage
 
