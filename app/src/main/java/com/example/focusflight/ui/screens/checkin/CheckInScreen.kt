@@ -273,7 +273,7 @@ fun CheckInScreen(
                         )
                         val distanceKm = routeDetails?.distanceKm ?: 0.0
                         Text(
-                            text = "%,d km".format(distanceKm.toInt()),
+                            text = com.example.focusflight.util.formatMiles(distanceKm),
                             style = MaterialTheme.typography.bodyLarge.copy(
                                 fontFamily = FontFamily.Monospace,
                                 fontWeight = FontWeight.Bold

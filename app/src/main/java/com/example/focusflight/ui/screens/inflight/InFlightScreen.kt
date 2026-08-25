@@ -26,10 +26,16 @@ import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.Flight
+import androidx.compose.material.icons.outlined.Speed
+import androidx.compose.material.icons.outlined.Height
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.Straighten
+import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -38,6 +44,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -49,6 +56,7 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -58,12 +66,21 @@ import com.example.focusflight.data.model.Airport
 import kotlinx.coroutines.delay
 import com.example.focusflight.ui.theme.*
 import com.example.focusflight.ui.viewmodel.inflight.InFlightViewModel
+import com.example.focusflight.util.AirportClock
+import com.example.focusflight.util.airportClock
+import com.example.focusflight.util.formatFeet
+import com.example.focusflight.util.formatMiles
+import com.example.focusflight.util.formatMph
+import com.example.focusflight.util.kmhToMph
+import com.example.focusflight.util.localDateOf
+import com.example.focusflight.util.metersToFeet
 import androidx.compose.animation.core.*
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
+import android.content.res.Configuration
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioTrack
@@ -207,7 +224,7 @@ fun InFlightScreen(
             val density = androidx.compose.ui.platform.LocalDensity.current
             Box(
                 modifier = Modifier
-                    .padding(top = 12.dp, bottom = 16.dp)
+                    .padding(top = 12.dp)
                     .width(80.dp)
                     .height(4.dp)
                     .background(Border, RoundedCornerShape(2.dp))
@@ -216,6 +233,26 @@ fun InFlightScreen(
         sheetPeekHeight = 104.dp,
         containerColor = Color.Transparent, // Restored so globe is visible
         sheetContent = {
+            val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+            val altitudeFt = metersToFeet(uiState.altitudeMeters.toDouble()).roundToInt()
+            val speedMph = kmhToMph(uiState.speedKmh)
+            val distanceLeftKm = routeDetails?.distanceKm?.let { it * (1f - uiState.progress) } ?: 0.0
+
+            // Wall-clock departure/arrival, approximated per-airport from longitude
+            // since no real timezone database is bundled. Captured once so it stays
+            // stable across recompositions instead of drifting with "now".
+            val departureEpochMs = remember { System.currentTimeMillis() - uiState.timeElapsedMs.coerceAtLeast(0) }
+            val arrivalEpochMs = departureEpochMs + uiState.totalDurationSeconds * 1000
+            val departureClock = originAirport?.let { origin ->
+                val departureDate = localDateOf(departureEpochMs, origin.lon, origin.lat, origin.isoCountry)
+                airportClock(departureEpochMs, origin.lon, origin.lat, origin.isoCountry, departureDate)
+            }
+            val arrivalClock = destAirport?.let { dest ->
+                val departureDate = originAirport?.let { localDateOf(departureEpochMs, it.lon, it.lat, it.isoCountry) }
+                    ?: localDateOf(departureEpochMs, dest.lon, dest.lat, dest.isoCountry)
+                airportClock(arrivalEpochMs, dest.lon, dest.lat, dest.isoCountry, departureDate)
+            }
+
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -223,30 +260,74 @@ fun InFlightScreen(
                     .padding(bottom = 30.dp)
             ) {
                 // --- Collapsed Info Summary (Always Visible in peek mode) ---
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                // Both branches share the same fixed-height, center-aligned Box so the
+                // peek content is vertically centered in the sheet's peek window
+                // identically in either orientation. The nav-bar inset is subtracted
+                // since on gesture-nav devices it eats into the bottom of the nominal
+                // peekHeight (104dp) without actually being visible/usable space. The
+                // drag handle above this Box only has top padding now (see
+                // sheetDragHandle), so simply centering within the remaining height
+                // below it already centers within the whole peek card.
+                val navBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+                val peekDragHandleHeight = 16.dp
+                val peekContentHeight = (104.dp - peekDragHandleHeight - navBarInset).coerceAtLeast(24.dp)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(peekContentHeight),
+                    contentAlignment = Alignment.Center
                 ) {
-                    // Left: Ground Speed
-                    Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.Start) {
-                        Text(text = "GROUND SPEED", style = MaterialTheme.typography.labelSmall, color = Haze)
-                        Text(
-                            text = "${uiState.speedKmh} km/h",
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = FontFamily.Monospace
-                            ),
-                            color = OffWhite
-                        )
-                    }
+                    if (isLandscape) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Left: Ground Speed
+                            Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.Start) {
+                                Text(text = "GROUND SPEED", style = MaterialTheme.typography.labelSmall, color = Haze)
+                                Text(
+                                    text = formatMph(uiState.speedKmh),
+                                    style = MaterialTheme.typography.titleMedium.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        fontFamily = FontFamily.Monospace
+                                    ),
+                                    color = OffWhite
+                                )
+                            }
 
-                    // Center: Time Remaining (Stronger Visual)
-                    Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(text = "REMAINING", style = MaterialTheme.typography.labelSmall, color = Haze)
+                            // Center: Time Remaining (Stronger Visual)
+                            Text(
+                                text = formatRemainingTime(uiState.timeRemainingSeconds),
+                                style = MaterialTheme.typography.displaySmall.copy(
+                                    fontWeight = FontWeight.Black,
+                                    fontFamily = FontFamily.Monospace,
+                                    letterSpacing = 2.sp
+                                ),
+                                color = Amber,
+                                modifier = Modifier.weight(1f),
+                                textAlign = TextAlign.Center
+                            )
+
+                            // Right: Altitude
+                            Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
+                                Text(text = "ALTITUDE", style = MaterialTheme.typography.labelSmall, color = Haze)
+                                Text(
+                                    text = formatFeet(uiState.altitudeMeters),
+                                    style = MaterialTheme.typography.titleMedium.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        fontFamily = FontFamily.Monospace
+                                    ),
+                                    color = OffWhite
+                                )
+                            }
+                        }
+                    } else {
+                        // Portrait: speed/altitude move into the expanded panel below, so the
+                        // always-visible peek is just the one number that matters at a glance.
                         Text(
                             text = formatRemainingTime(uiState.timeRemainingSeconds),
-                            style = MaterialTheme.typography.headlineMedium.copy(
+                            style = MaterialTheme.typography.displaySmall.copy(
                                 fontWeight = FontWeight.Black,
                                 fontFamily = FontFamily.Monospace,
                                 letterSpacing = 2.sp
@@ -254,92 +335,87 @@ fun InFlightScreen(
                             color = Amber
                         )
                     }
-
-                    // Right: Altitude
-                    Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
-                        Text(text = "ALTITUDE", style = MaterialTheme.typography.labelSmall, color = Haze)
-                        Text(
-                            text = "${uiState.altitudeMeters} m",
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = FontFamily.Monospace
-                            ),
-                            color = OffWhite
-                        )
-                    }
                 }
 
                 // --- Expanded Info Panel ---
-                Spacer(modifier = Modifier.height(30.dp))
                 HorizontalDivider(color = Border, thickness = 1.dp)
                 Spacer(modifier = Modifier.height(30.dp))
 
-                // Route Details Header
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "${originAirport?.iataCode ?: "---"} ──✈── ${destAirport?.iataCode ?: "---"}",
-                        style = MaterialTheme.typography.headlineSmall.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace
-                        ),
-                        color = OffWhite
-                    )
-                    Text(
-                        text = viewModel.flightNumber,
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace
-                        ),
-                        color = Amber
-                    )
+                if (isLandscape) {
+                    // Wide screen: route hero + flight-time bar on the left, instrument
+                    // cluster on the right. Rather than stretching either side to match
+                    // the other (which just inserts gaps), the instrument faces are
+                    // sized to a fixed height tuned to equal the left column's height.
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.Large)
+                    ) {
+                        Column(
+                            modifier = Modifier.weight(1.2f),
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            FlightRouteHero(
+                                originIata = originAirport?.iataCode ?: "---",
+                                destIata = destAirport?.iataCode ?: "---",
+                                departureClock = departureClock,
+                                arrivalClock = arrivalClock,
+                                progress = uiState.progress,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            FlightTimeBar(
+                                elapsedSec = uiState.timeElapsedSeconds,
+                                totalSec = uiState.totalDurationSeconds,
+                                distanceLeftKm = distanceLeftKm,
+                                totalDistanceKm = routeDetails?.distanceKm ?: 0.0,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .width(1.dp)
+                                .background(Border)
+                        )
+
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            AltitudeGauge(altitudeFt = altitudeFt, faceHeight = LandscapeInstrumentFaceHeight, modifier = Modifier.weight(1f))
+                            SpeedInstrument(speedMph = speedMph, faceHeight = LandscapeInstrumentFaceHeight, modifier = Modifier.weight(1f))
+                        }
+                    }
+                } else {
+                    // Portrait: everything stacked, speed/altitude reclaimed here as instruments.
+                    Column {
+                        FlightRouteHero(
+                            originIata = originAirport?.iataCode ?: "---",
+                            destIata = destAirport?.iataCode ?: "---",
+                            departureClock = departureClock,
+                            arrivalClock = arrivalClock,
+                            progress = uiState.progress,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Spacer(modifier = Modifier.height(24.dp))
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                            AltitudeGauge(altitudeFt = altitudeFt, modifier = Modifier.weight(1f))
+                            SpeedInstrument(speedMph = speedMph, modifier = Modifier.weight(1f))
+                        }
+
+                        Spacer(modifier = Modifier.height(20.dp))
+
+                        FlightTimeBar(
+                            elapsedSec = uiState.timeElapsedSeconds,
+                            totalSec = uiState.totalDurationSeconds,
+                            distanceLeftKm = distanceLeftKm,
+                            totalDistanceKm = routeDetails?.distanceKm ?: 0.0,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                 }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Linear flight progress track bar
-                LinearProgressIndicator(
-                    progress = { uiState.progress },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(6.dp),
-                    color = Amber,
-                    trackColor = Border,
-                    strokeCap = StrokeCap.Round
-                )
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                // Flight telemetry statistics block
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    TelemetryBlock("ELAPSED", formatRemainingTime(uiState.timeElapsedSeconds))
-                    TelemetryBlock("TOTAL", "${viewModel.durationMin} MIN")
-                    TelemetryBlock("ALTITUDE", "${uiState.altitudeMeters} M")
-                }
-
-                Spacer(modifier = Modifier.height(20.dp))
-
-                val distanceLeft = routeDetails?.distanceKm?.let { dist ->
-                    (dist * (1f - uiState.progress)).roundToInt()
-                } ?: 0
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    TelemetryBlock("DIST LEFT", "$distanceLeft KM")
-                    val formattedLat = "%.4f° %s".format(kotlin.math.abs(uiState.currentLat), if (uiState.currentLat >= 0) "N" else "S")
-                    val formattedLon = "%.4f° %s".format(kotlin.math.abs(uiState.currentLon), if (uiState.currentLon >= 0) "E" else "W")
-                    TelemetryBlock("LATITUDE", formattedLat)
-                    TelemetryBlock("LONGITUDE", formattedLon)
-                }
-
             }
         }
     ) { paddingValues ->
@@ -786,19 +862,384 @@ private fun TelemetryText(label: String, value: String) {
     }
 }
 
+// --- Route hero: just the two airport codes bridged by a progress track, styled as
+// the same kind of widget as the instrument cards below it. The travelling plane
+// tilts nose-up on departure, levels off for cruise, and noses down on approach. ---
 @Composable
-private fun TelemetryBlock(label: String, value: String) {
-    Column(modifier = Modifier.width(96.dp)) {
-        Text(text = label, style = MaterialTheme.typography.labelSmall, color = Haze)
-        Spacer(modifier = Modifier.height(2.dp))
+private fun FlightRouteHero(
+    originIata: String,
+    destIata: String,
+    departureClock: AirportClock?,
+    arrivalClock: AirportClock?,
+    progress: Float,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .background(Slate.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
+            .padding(18.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(horizontalAlignment = Alignment.Start) {
+            Text(
+                text = originIata,
+                style = MaterialTheme.typography.headlineMedium.copy(
+                    fontWeight = FontWeight.Black,
+                    fontFamily = FontFamily.Monospace
+                ),
+                color = OffWhite
+            )
+            if (departureClock != null) {
+                Text(
+                    text = departureClock.label,
+                    style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
+                    color = Haze
+                )
+            }
+        }
+
+        RouteProgressTrack(
+            progress = progress,
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = 14.dp)
+        )
+
+        Column(horizontalAlignment = Alignment.End) {
+            Text(
+                text = destIata,
+                style = MaterialTheme.typography.headlineMedium.copy(
+                    fontWeight = FontWeight.Black,
+                    fontFamily = FontFamily.Monospace
+                ),
+                color = OffWhite
+            )
+            if (arrivalClock != null) {
+                Text(
+                    text = if (arrivalClock.dayOffset != 0) {
+                        "${arrivalClock.label} ${if (arrivalClock.dayOffset > 0) "+" else ""}${arrivalClock.dayOffset}"
+                    } else {
+                        arrivalClock.label
+                    },
+                    style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
+                    color = Haze
+                )
+            }
+        }
+    }
+}
+
+// --- Dashed route line with a plane travelling along it, amber ahead of the
+// aircraft (flown distance), dashed grey behind (remaining). The plane's pitch
+// reflects the flight phase: nose-up climbing out, level at cruise, nose-down
+// on approach. ---
+@Composable
+private fun RouteProgressTrack(progress: Float, modifier: Modifier = Modifier) {
+    BoxWithConstraints(modifier = modifier.height(28.dp)) {
+        val density = LocalDensity.current
+        val trackWidthPx = with(density) { maxWidth.toPx() }
+        val clampedProgress = progress.coerceIn(0f, 1f)
+
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val y = size.height / 2
+            val flownEndX = size.width * clampedProgress
+            drawLine(
+                color = Amber,
+                start = Offset(0f, y),
+                end = Offset(flownEndX, y),
+                strokeWidth = 3.dp.toPx(),
+                cap = StrokeCap.Round
+            )
+            drawLine(
+                color = Border,
+                start = Offset(flownEndX, y),
+                end = Offset(size.width, y),
+                strokeWidth = 3.dp.toPx(),
+                cap = StrokeCap.Round,
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 8f), 0f)
+            )
+        }
+
+        val planeOffsetDp = with(density) { (trackWidthPx * clampedProgress).toDp() }
+        val planePitch = when {
+            clampedProgress < 0.08f -> 45f  // climbing out, nose up
+            clampedProgress > 0.9f -> 135f  // on approach, nose down
+            else -> 90f                     // level cruise
+        }
+        val animatedPitch by animateFloatAsState(targetValue = planePitch, label = "planePitch")
+        Icon(
+            imageVector = Icons.Outlined.Flight,
+            contentDescription = null,
+            tint = Amber,
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .offset(x = (planeOffsetDp - 12.dp).coerceAtLeast(0.dp))
+                .size(24.dp)
+                .graphicsLayer { rotationZ = animatedPitch }
+        )
+    }
+}
+
+// Shared frame for the two instrument cards so they always match in size: a face
+// that fills the card's width (so its margin matches the card's own padding on
+// every side) at a given height, a spacer, then an icon+label caption underneath.
+private val InstrumentFaceHeight = 108.dp
+private val LandscapeInstrumentFaceHeight = 124.dp
+
+@Composable
+private fun InstrumentCard(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    modifier: Modifier = Modifier,
+    faceHeight: Dp = InstrumentFaceHeight,
+    face: @Composable BoxScope.() -> Unit
+) {
+    Column(
+        modifier = modifier
+            .background(Slate.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
+            .padding(12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(faceHeight)
+                .clip(RoundedCornerShape(12.dp))
+                .background(Midnight.copy(alpha = 0.35f)),
+            contentAlignment = Alignment.Center,
+            content = face
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(imageVector = icon, contentDescription = null, tint = Amber, modifier = Modifier.size(12.dp))
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.5.sp),
+                color = Haze
+            )
+        }
+    }
+}
+
+// --- Altimeter tape: a vertical scrolling ruler of altitude values, like a real
+// primary flight display. The current reading sits fixed at the centre, enlarged,
+// amber, with a caret pointing at it; the rest of the tape scrolls past behind it. ---
+@Composable
+private fun AltitudeGauge(altitudeFt: Int, modifier: Modifier = Modifier, faceHeight: Dp = InstrumentFaceHeight) {
+    val stepFt = 500
+    val exactIndex = altitudeFt / stepFt.toFloat()
+    val animatedIndex by animateFloatAsState(targetValue = exactIndex, label = "altitudeTape")
+    val density = LocalDensity.current
+    val rowHeightDp = 22.dp
+    val rowHeightPx = with(density) { rowHeightDp.toPx() }
+
+    InstrumentCard(label = "ALTITUDE", icon = Icons.Outlined.Height, modifier = modifier, faceHeight = faceHeight) {
+        val baseIdx = kotlin.math.floor(animatedIndex).toInt()
+        for (offset in -3..3) {
+            val idx = baseIdx + offset
+            val offsetSteps = animatedIndex - idx
+            val isCenter = kotlin.math.abs(offsetSteps) < 0.5f
+            val distanceFromCenter = kotlin.math.abs(offsetSteps)
+            val sizeFraction = (distanceFromCenter / 3f).coerceIn(0f, 1f)
+            val fontSizeSp = 19f - 8f * sizeFraction
+            val rowAlpha = (1f - distanceFromCenter / 2.4f).coerceIn(0f, 1f)
+
+            Text(
+                text = if (isCenter) {
+                    String.format(java.util.Locale.US, "%,d ft", altitudeFt)
+                } else {
+                    String.format(java.util.Locale.US, "%,d", idx * stepFt)
+                },
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontSize = fontSizeSp.sp,
+                    fontWeight = if (isCenter) FontWeight.Bold else FontWeight.Normal,
+                    fontFamily = FontFamily.Monospace
+                ),
+                color = if (isCenter) Amber else Haze.copy(alpha = rowAlpha),
+                maxLines = 1,
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .offset { IntOffset(0, (offsetSteps * rowHeightPx).roundToInt()) }
+            )
+        }
+
+        // Fade the tape toward the top/bottom edges, like a picker wheel losing focus.
+        // Uses the face's own background color so the fade blends in rather than
+        // reading as a separate dark shadow.
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Midnight.copy(alpha = 0.35f),
+                            Color.Transparent,
+                            Color.Transparent,
+                            Midnight.copy(alpha = 0.35f)
+                        )
+                    )
+                )
+        )
+
+        Icon(
+            imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+            contentDescription = null,
+            tint = Amber,
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .size(16.dp)
+        )
+    }
+}
+
+// --- Speedometer: a plane that vibrates as speed climbs, with amber wind streaks
+// racing past behind it, instead of a static "SPEED" figure. ---
+@Composable
+private fun SpeedInstrument(speedMph: Int, modifier: Modifier = Modifier, faceHeight: Dp = InstrumentFaceHeight) {
+    val maxSpeedMph = 600f
+    val intensity = (speedMph / maxSpeedMph).coerceIn(0f, 1f)
+
+    val infiniteTransition = rememberInfiniteTransition(label = "speedFx")
+    val streamPhase by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(
+                durationMillis = (1400 - (intensity * 900)).toInt().coerceAtLeast(300),
+                easing = LinearEasing
+            )
+        ),
+        label = "streamPhase"
+    )
+    val jitter by infiniteTransition.animateFloat(
+        initialValue = -1f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 180, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "jitter"
+    )
+    val laneSeeds = remember { List(5) { kotlin.random.Random(it * 91 + 7).nextFloat() } }
+
+    InstrumentCard(label = "SPEED", icon = Icons.Outlined.Speed, modifier = modifier, faceHeight = faceHeight) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            if (intensity > 0.02f) {
+                laneSeeds.forEachIndexed { index, seed ->
+                    val laneY = size.height * (0.2f + 0.6f * (index / (laneSeeds.size - 1f)))
+                    val phase = (streamPhase + seed) % 1f
+                    val x = size.width * (1f - phase)
+                    val len = 10.dp.toPx() + 16.dp.toPx() * intensity
+                    drawLine(
+                        color = Amber.copy(alpha = 0.25f + 0.35f * intensity),
+                        start = Offset(x, laneY),
+                        end = Offset((x - len).coerceAtLeast(0f), laneY),
+                        strokeWidth = 2.dp.toPx(),
+                        cap = StrokeCap.Round
+                    )
+                }
+            }
+        }
+
+        Icon(
+            imageVector = Icons.Outlined.Flight,
+            contentDescription = null,
+            tint = OffWhite,
+            modifier = Modifier
+                .align(BiasAlignment(0f, -0.44f))
+                .size(28.dp)
+                .graphicsLayer {
+                    rotationZ = 90f
+                    translationX = jitter * 5f * intensity
+                    translationY = jitter * 3f * intensity
+                }
+        )
+
         Text(
-            text = value,
-            style = MaterialTheme.typography.bodyLarge.copy(
+            text = "$speedMph MPH",
+            style = MaterialTheme.typography.titleSmall.copy(
                 fontWeight = FontWeight.Bold,
                 fontFamily = FontFamily.Monospace
             ),
-            color = OffWhite
+            color = Amber,
+            modifier = Modifier.align(BiasAlignment(0f, 0.47f))
         )
+    }
+}
+
+// --- Flight time as a fuel-gauge-style fill bar; tap it to swap the readout for
+// miles left / total miles, with a small swap glyph hinting it's interactive. ---
+@Composable
+private fun FlightTimeBar(
+    elapsedSec: Long,
+    totalSec: Long,
+    distanceLeftKm: Double,
+    totalDistanceKm: Double,
+    modifier: Modifier = Modifier
+) {
+    var showDistance by remember { mutableStateOf(false) }
+    val fraction = if (totalSec > 0) (elapsedSec.toFloat() / totalSec.toFloat()).coerceIn(0f, 1f) else 0f
+    val animatedFraction by animateFloatAsState(targetValue = fraction, label = "flightTimeBar")
+
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(Slate.copy(alpha = 0.5f))
+            .clickable { showDistance = !showDistance }
+            .padding(16.dp)
+    ) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = if (showDistance) Icons.Outlined.Straighten else Icons.Outlined.Schedule,
+                    contentDescription = null,
+                    tint = Amber,
+                    modifier = Modifier.size(14.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = if (showDistance) "DISTANCE" else "FLIGHT TIME",
+                    style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.5.sp),
+                    color = Haze
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Icon(
+                    imageVector = Icons.Outlined.SwapHoriz,
+                    contentDescription = "Tap to switch units",
+                    tint = Haze.copy(alpha = 0.6f),
+                    modifier = Modifier.size(13.dp)
+                )
+            }
+            Text(
+                text = if (showDistance) {
+                    "${formatMiles(distanceLeftKm)} / ${formatMiles(totalDistanceKm)}"
+                } else {
+                    "${formatRemainingTime(elapsedSec)} / ${formatRemainingTime(totalSec)}"
+                },
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace
+                ),
+                color = OffWhite
+            )
+        }
+        Spacer(modifier = Modifier.height(10.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(14.dp)
+                .clip(RoundedCornerShape(7.dp))
+                .background(Midnight.copy(alpha = 0.5f))
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth(animatedFraction)
+                    .clip(RoundedCornerShape(7.dp))
+                    .background(Brush.horizontalGradient(listOf(Amber.copy(alpha = 0.7f), Amber)))
+            )
+        }
     }
 }
 

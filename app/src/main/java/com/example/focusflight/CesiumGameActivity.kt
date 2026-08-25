@@ -308,7 +308,6 @@ class CesiumGameActivity : GameActivity() {
                                         }
                                     },
                                     onExitFlight = {
-                                        preferencesRepository.clearActiveFlightContext()
                                         navController.navigate(Screen.Hub.route) {
                                             popUpTo(Screen.Hub.route) { inclusive = true }
                                         }

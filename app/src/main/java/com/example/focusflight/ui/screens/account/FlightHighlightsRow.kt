@@ -93,7 +93,7 @@ private fun LongestFlightCard(flight: FlightLog?, modifier: Modifier = Modifier)
             if (flight != null) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = "%,.0f km".format(flight.distanceKm),
+                        text = com.example.focusflight.util.formatMiles(flight.distanceKm),
                         style = MaterialTheme.typography.displaySmall.copy(
                             fontWeight = FontWeight.Bold,
                             fontFamily = FontFamily.Monospace

@@ -46,7 +46,7 @@ internal fun LogbookEntry(flight: FlightLog, entryNumber: Int) {
     val hoursInt = flight.durationMin / 60
     val minutesInt = flight.durationMin % 60
     val durationStr = String.format(Locale.US, "%02dh%02dm", hoursInt, minutesInt)
-    val distanceStr = "%,d km".format(flight.distanceKm.toInt())
+    val distanceStr = com.example.focusflight.util.formatMiles(flight.distanceKm)
 
     // ── Paper palette ──────────────────────────────────────────────────────
     val parchment      = Color(0xFFF5E6C0)   // aged cream
