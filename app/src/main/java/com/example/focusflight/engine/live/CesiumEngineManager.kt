@@ -1,4 +1,4 @@
-package com.example.focusflight.engine
+package com.example.focusflight.engine.live
 
 import android.app.Activity
 import androidx.lifecycle.DefaultLifecycleObserver
@@ -25,7 +25,7 @@ class CesiumEngineManager : DefaultLifecycleObserver {
      * which is driven by the shouldRender flag in Compose.
      */
     override fun onStart(owner: LifecycleOwner) {
-        CesiumBridge.nativeSetSuspended(false)
+        CesiumLiveJniBridge.nativeSetSuspended(false)
     }
 
     /**
@@ -33,7 +33,7 @@ class CesiumEngineManager : DefaultLifecycleObserver {
      * burning CPU/GPU cycles in the background.
      */
     override fun onStop(owner: LifecycleOwner) {
-        CesiumBridge.nativeSetSuspended(true)
+        CesiumLiveJniBridge.nativeSetSuspended(true)
     }
 
     /**
@@ -53,7 +53,7 @@ class CesiumEngineManager : DefaultLifecycleObserver {
     override fun onDestroy(owner: LifecycleOwner) {
         val activity = owner as? Activity ?: return
         if (!activity.isChangingConfigurations) {
-            CesiumBridge.nativeDestroyEngine()
+            CesiumLiveJniBridge.nativeDestroyEngine()
         }
     }
 }

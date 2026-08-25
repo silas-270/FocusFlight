@@ -6,10 +6,10 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.focusflight.data.model.Airport
 import com.example.focusflight.data.model.FlightLog
-import com.example.focusflight.data.repository.CesiumRSLibrary
-import com.example.focusflight.data.repository.FlightDatabaseHelper
+import com.example.focusflight.data.repository.AirportRepository
 import com.example.focusflight.data.repository.FlightLogRepository
 import com.example.focusflight.data.repository.PreferencesRepository
+import com.example.focusflight.engine.headless.CesiumHeadlessMapRenderer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -24,7 +24,7 @@ data class FlightStats(
 )
 
 class HubViewModel(
-    private val databaseHelper: FlightDatabaseHelper,
+    private val airportRepository: AirportRepository,
     private val preferencesRepository: PreferencesRepository,
     private val flightLogRepository: FlightLogRepository,
     private val cacheDir: File
@@ -51,6 +51,8 @@ class HubViewModel(
     private val _mapRenderError = MutableStateFlow<String?>(null)
     val mapRenderError: StateFlow<String?> = _mapRenderError.asStateFlow()
 
+    private val mapRenderer = CesiumHeadlessMapRenderer(cacheDir)
+
     init {
         loadData()
     }
@@ -59,7 +61,7 @@ class HubViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             val baseIata = preferencesRepository.getCurrentAirport()
             if (baseIata != null) {
-                val airport = databaseHelper.getAirportByIata(baseIata)
+                val airport = airportRepository.getAirportByIata(baseIata)
                 _currentAirport.value = airport
                 
                 _activeFlightContext.value = preferencesRepository.getActiveFlightContext()
@@ -88,51 +90,20 @@ class HubViewModel(
     private fun generateRouteMap(origin: Airport) {
         _mapRenderError.value = null
         viewModelScope.launch(Dispatchers.IO) {
-            val outFile = File(cacheDir, "hub_route_map_${origin.iataCode}.png")
-            // Check if pre-rendered or cached image is present
-            if (outFile.exists() && outFile.length() > 0) {
-                Log.d("HubViewModel", "Cached route map found for ${origin.iataCode}. Loading instantly: ${outFile.absolutePath}")
-                outFile.setLastModified(System.currentTimeMillis())
-                _routeMapPath.value = outFile.absolutePath
-                CacheUtils.pruneMapCache(cacheDir)
-                return@launch
-            }
-
             _isRendering.value = true
             try {
-                // Fetch up to 12 actual destination airports for routes display
-                val outboundRoutes = databaseHelper.getOutboundRoutes(origin.iataCode).filter { it.distanceKm <= 10000.0 }.shuffled().take(12)
-                val routesData = outboundRoutes.map { route ->
-                    Pair(Pair(origin.lat, origin.lon), Pair(route.destLat, route.destLon))
-                }
-
-                if (outFile.exists()) {
-                    outFile.delete()
-                }
-
-                Log.d("HubViewModel", "Triggering route rendering for ${routesData.size} routes...")
-                val success = CesiumRSLibrary.renderRoutes(
-                    width = 1080,
-                    height = 1320,
-                    routesData = routesData,
-                    outPath = outFile.absolutePath
+                val outboundRoutes = airportRepository.getOutboundRoutes(origin.iataCode)
+                val result = mapRenderer.renderRouteMap(
+                    centerIata = origin.iataCode,
+                    centerLat = origin.lat,
+                    centerLon = origin.lon,
+                    outboundRoutes = outboundRoutes,
+                    reuseCachedFile = true
                 )
-
-                if (success && outFile.exists()) {
-                    Log.d("HubViewModel", "Route rendering succeeded: ${outFile.absolutePath}")
-                    _routeMapPath.value = outFile.absolutePath
-                    CacheUtils.pruneMapCache(cacheDir)
-                } else {
-                    Log.e("HubViewModel", "Route rendering failed or file not created.")
-                    // TODO (Architecture Review): Investigate underlying JNI memory pressure/Vulkan OOM
-                    // causing CesiumRSLibrary.renderRoutes to fail silently under load.
-                    // This error state is a graceful degradation patch, but the root cause in C++/Rust remains.
-                    _mapRenderError.value = "Failed to render map."
+                when (result) {
+                    is CesiumHeadlessMapRenderer.Result.Success -> _routeMapPath.value = result.path
+                    is CesiumHeadlessMapRenderer.Result.Failure -> _mapRenderError.value = result.message
                 }
-            } catch (e: Exception) {
-                Log.e("HubViewModel", "Error in route rendering", e)
-                // TODO (Architecture Review): Investigate underlying JNI memory pressure/Vulkan OOM
-                _mapRenderError.value = "Failed to render map."
             } finally {
                 _isRendering.value = false
             }
@@ -148,7 +119,7 @@ class HubViewModel(
 }
 
 class HubViewModelFactory(
-    private val databaseHelper: FlightDatabaseHelper,
+    private val airportRepository: AirportRepository,
     private val preferencesRepository: PreferencesRepository,
     private val flightLogRepository: FlightLogRepository,
     private val cacheDir: File
@@ -156,7 +127,7 @@ class HubViewModelFactory(
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(HubViewModel::class.java)) {
-            return HubViewModel(databaseHelper, preferencesRepository, flightLogRepository, cacheDir) as T
+            return HubViewModel(airportRepository, preferencesRepository, flightLogRepository, cacheDir) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

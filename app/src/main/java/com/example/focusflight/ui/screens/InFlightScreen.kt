@@ -142,7 +142,7 @@ fun InFlightScreen(
     var selectedCamera by rememberSaveable { mutableStateOf(1) } // Default to CHASE
 
     LaunchedEffect(selectedCamera) {
-        com.example.focusflight.engine.CesiumBridge.nativeSetCameraMode(selectedCamera)
+        com.example.focusflight.engine.live.CesiumLiveJniBridge.nativeSetCameraMode(selectedCamera)
     }
 
     val soundManager = remember { EngineSoundManager() }

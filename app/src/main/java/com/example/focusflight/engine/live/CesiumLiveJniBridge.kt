@@ -1,6 +1,6 @@
-package com.example.focusflight.engine
+package com.example.focusflight.engine.live
 
-object CesiumBridge {
+object CesiumLiveJniBridge {
     init {
         System.loadLibrary("cesium_rs")
     }

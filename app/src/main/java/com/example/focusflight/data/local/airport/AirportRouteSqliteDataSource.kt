@@ -1,4 +1,4 @@
-package com.example.focusflight.data.repository
+package com.example.focusflight.data.local.airport
 
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
@@ -9,10 +9,10 @@ import com.example.focusflight.data.model.Runway
 import java.io.FileOutputStream
 import java.io.IOException
 
-class FlightDatabaseHelper(private val context: Context) {
+class AirportRouteSqliteDataSource(private val context: Context) {
 
     companion object {
-        private const val TAG = "FlightDatabaseHelper"
+        private const val TAG = "AirportRouteSqliteDataSource"
         private const val DATABASE_NAME = "flights.db"
     }
 

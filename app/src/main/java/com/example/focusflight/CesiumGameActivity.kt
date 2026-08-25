@@ -10,7 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.ExperimentalComposeUiApi
-import com.example.focusflight.engine.CesiumEngineManager
+import com.example.focusflight.engine.live.CesiumEngineManager
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.platform.ComposeView
@@ -31,13 +31,15 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.focusflight.data.local.AppDatabase
-import com.example.focusflight.data.repository.FlightDatabaseHelper
+import com.example.focusflight.data.local.airport.AirportRouteSqliteDataSource
+import com.example.focusflight.data.repository.AirportRepository
+import com.example.focusflight.data.repository.LocalAirportRepository
 import com.example.focusflight.data.repository.FlightLogRepository
 import com.example.focusflight.data.repository.LocalFlightLogRepository
 import com.example.focusflight.data.repository.LocalUserRepository
 import com.example.focusflight.data.repository.PreferencesRepository
 import com.example.focusflight.data.repository.UserRepository
-import com.example.focusflight.engine.CesiumBridge
+import com.example.focusflight.engine.live.CesiumLiveJniBridge
 import com.example.focusflight.ui.Screen
 import com.example.focusflight.ui.screens.ArrivalCelebrationScreen
 import com.example.focusflight.ui.screens.CheckInScreen
@@ -65,7 +67,7 @@ import kotlinx.coroutines.withContext
 
 class CesiumGameActivity : GameActivity() {
 
-    private lateinit var databaseHelper: FlightDatabaseHelper
+    private lateinit var airportRepository: AirportRepository
     private lateinit var preferencesRepository: PreferencesRepository
     private lateinit var userRepository: UserRepository
     private lateinit var flightLogRepository: FlightLogRepository
@@ -84,7 +86,7 @@ class CesiumGameActivity : GameActivity() {
         }
 
         // Initialize database helper and preferences repository
-        databaseHelper = FlightDatabaseHelper(applicationContext)
+        airportRepository = LocalAirportRepository(AirportRouteSqliteDataSource(applicationContext))
         preferencesRepository = PreferencesRepository(applicationContext)
 
         // Initialize Room database and repositories
@@ -93,7 +95,7 @@ class CesiumGameActivity : GameActivity() {
         flightLogRepository = LocalFlightLogRepository(appDatabase.flightLogDao(), appDatabase.userProfileDao())
 
         // Copy reference database asset on first run
-        databaseHelper.ensureDatabaseCopied()
+        airportRepository.ensureDatabaseCopied()
 
         // Migrate SharedPreferences flight logs to Room (one-time)
         migrateFlightLogsIfNeeded()
@@ -122,7 +124,7 @@ class CesiumGameActivity : GameActivity() {
                     // Rendering enable/disable is route-scoped (only on flight screens).
                     // Suspend/resume (winit sleep/wake) is lifecycle-scoped via CesiumEngineManager.
                     LaunchedEffect(shouldRender) {
-                        CesiumBridge.nativeSetRenderingEnabled(shouldRender)
+                        CesiumLiveJniBridge.nativeSetRenderingEnabled(shouldRender)
                     }
 
                     val bgColor = if (shouldRender) {
@@ -167,7 +169,7 @@ class CesiumGameActivity : GameActivity() {
                             // ── Onboarding ──
                             composable(Screen.Onboarding.route) {
                                 val viewModel: OnboardingViewModel = viewModel(
-                                    factory = OnboardingViewModelFactory(databaseHelper, preferencesRepository, userRepository, cacheDir)
+                                    factory = OnboardingViewModelFactory(airportRepository, preferencesRepository, userRepository, cacheDir)
                                 )
                                 OnboardingScreen(
                                     viewModel = viewModel,
@@ -182,7 +184,7 @@ class CesiumGameActivity : GameActivity() {
                             // ── Hub ──
                             composable(Screen.Hub.route) {
                                 val viewModel: HubViewModel = viewModel(
-                                    factory = HubViewModelFactory(databaseHelper, preferencesRepository, flightLogRepository, cacheDir)
+                                    factory = HubViewModelFactory(airportRepository, preferencesRepository, flightLogRepository, cacheDir)
                                 )
                                 val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
                                 com.example.focusflight.ui.screens.HubScreen(
@@ -194,12 +196,12 @@ class CesiumGameActivity : GameActivity() {
                                         coroutineScope.launch {
                                             withContext(Dispatchers.IO) {
                                                 val originIata = preferencesRepository.getCurrentAirport() ?: "STR"
-                                                val origin = databaseHelper.getAirportByIata(originIata)
-                                                val dest = databaseHelper.getAirportByIata(destIata)
+                                                val origin = airportRepository.getAirportByIata(originIata)
+                                                val dest = airportRepository.getAirportByIata(destIata)
                                                 
                                                 if (origin != null && dest != null) {
-                                                    val originRunway = databaseHelper.getRunwaysForAirport(origin.id).maxByOrNull { it.lengthFt }
-                                                    val destRunway = databaseHelper.getRunwaysForAirport(dest.id).maxByOrNull { it.lengthFt }
+                                                    val originRunway = airportRepository.getRunwaysForAirport(origin.id).maxByOrNull { it.lengthFt }
+                                                    val destRunway = airportRepository.getRunwaysForAirport(dest.id).maxByOrNull { it.lengthFt }
                                                     val allRunways = listOfNotNull(originRunway, destRunway)
 
                                                     val airportIds = allRunways.map { it.airportId }.toIntArray()
@@ -212,14 +214,14 @@ class CesiumGameActivity : GameActivity() {
                                                     val heLat = allRunways.map { it.heLat }.toDoubleArray()
                                                     val heLon = allRunways.map { it.heLon }.toDoubleArray()
 
-                                                    CesiumBridge.nativeSetRunways(
+                                                    CesiumLiveJniBridge.nativeSetRunways(
                                                         airportIds, lengthFt, widthFt, leHeading, leLat, leLon,
                                                         heHeading, heLat, heLon
                                                     )
-                                                    CesiumBridge.nativeSetPendingFlight(
+                                                    CesiumLiveJniBridge.nativeSetPendingFlight(
                                                         origin.lon, origin.lat, dest.lon, dest.lat, (durationMin * 60 * 1000).toLong()
                                                     )
-                                                    CesiumBridge.nativeLoadPendingFlight()
+                                                    CesiumLiveJniBridge.nativeLoadPendingFlight()
                                                 }
 
                                                 withContext(Dispatchers.Main) {
@@ -240,7 +242,7 @@ class CesiumGameActivity : GameActivity() {
                             // ── Flight Search ──
                             composable(Screen.FlightSearch.route) {
                                 val viewModel: FlightSearchViewModel = viewModel(
-                                    factory = FlightSearchViewModelFactory(applicationContext, databaseHelper, preferencesRepository, userRepository, flightLogRepository)
+                                    factory = FlightSearchViewModelFactory(applicationContext, airportRepository, preferencesRepository, userRepository, flightLogRepository)
                                 )
                                 val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
 
@@ -253,15 +255,15 @@ class CesiumGameActivity : GameActivity() {
                                         coroutineScope.launch {
                                             withContext(Dispatchers.IO) {
                                                 val originIata = preferencesRepository.getCurrentAirport() ?: "STR"
-                                                val origin = databaseHelper.getAirportByIata(originIata)
-                                                val dest = databaseHelper.getAirportByIata(route.destIata)
+                                                val origin = airportRepository.getAirportByIata(originIata)
+                                                val dest = airportRepository.getAirportByIata(route.destIata)
 
                                                 val flightNo = "FF-${kotlin.math.abs(route.destIata.hashCode()) % 1000 + 100}"
                                                 val durationMin = route.flightTimeMin
 
                                                 if (origin != null && dest != null) {
-                                                    val originRunway = databaseHelper.getRunwaysForAirport(origin.id).maxByOrNull { it.lengthFt }
-                                                    val destRunway = databaseHelper.getRunwaysForAirport(dest.id).maxByOrNull { it.lengthFt }
+                                                    val originRunway = airportRepository.getRunwaysForAirport(origin.id).maxByOrNull { it.lengthFt }
+                                                    val destRunway = airportRepository.getRunwaysForAirport(dest.id).maxByOrNull { it.lengthFt }
                                                     val allRunways = listOfNotNull(originRunway, destRunway)
 
                                                     val airportIds = allRunways.map { it.airportId }.toIntArray()
@@ -274,15 +276,15 @@ class CesiumGameActivity : GameActivity() {
                                                     val heLat = allRunways.map { it.heLat }.toDoubleArray()
                                                     val heLon = allRunways.map { it.heLon }.toDoubleArray()
 
-                                                    CesiumBridge.nativeSetRunways(
+                                                    CesiumLiveJniBridge.nativeSetRunways(
                                                         airportIds, lengthFt, widthFt, leHeading, leLat, leLon,
                                                         heHeading, heLat, heLon
                                                     )
                                                     android.util.Log.e("LUANDA_DEBUG", "Kotlin origin from DB: ${origin.iataCode} - lon: ${origin.lon}, lat: ${origin.lat}")
-                                                    CesiumBridge.nativeSetPendingFlight(
+                                                    CesiumLiveJniBridge.nativeSetPendingFlight(
                                                         origin.lon, origin.lat, dest.lon, dest.lat, (durationMin * 60 * 1000).toLong()
                                                     )
-                                                    CesiumBridge.nativeLoadPendingFlight()
+                                                    CesiumLiveJniBridge.nativeLoadPendingFlight()
                                                 }
 
                                                 withContext(Dispatchers.Main) {
@@ -308,7 +310,7 @@ class CesiumGameActivity : GameActivity() {
                                 val durationMin = backStackEntry.arguments?.getInt("durationMin") ?: 0
 
                                 val viewModel: CheckInViewModel = viewModel(
-                                    factory = CheckInViewModelFactory(databaseHelper, preferencesRepository, destIata, flightNo)
+                                    factory = CheckInViewModelFactory(airportRepository, preferencesRepository, destIata, flightNo)
                                 )
 
                                 CheckInScreen(
@@ -340,7 +342,7 @@ class CesiumGameActivity : GameActivity() {
                                 val durationMin = backStackEntry.arguments?.getInt("durationMin") ?: 0
 
                                 val viewModel: InFlightViewModel = viewModel(
-                                    factory = InFlightViewModelFactory(databaseHelper, preferencesRepository, flightLogRepository, cacheDir, flightNo, destIata, durationMin)
+                                    factory = InFlightViewModelFactory(airportRepository, preferencesRepository, flightLogRepository, cacheDir, flightNo, destIata, durationMin)
                                 )
 
                                 InFlightScreen(
@@ -391,7 +393,7 @@ class CesiumGameActivity : GameActivity() {
                             // ── Account / Passport ──
                             composable(Screen.Account.route) {
                                 val viewModel: AccountViewModel = viewModel(
-                                    factory = AccountViewModelFactory(applicationContext, userRepository, flightLogRepository, databaseHelper)
+                                    factory = AccountViewModelFactory(applicationContext, userRepository, flightLogRepository, airportRepository)
                                 )
                                 
                                 com.example.focusflight.ui.screens.AccountScreen(
@@ -436,7 +438,7 @@ class CesiumGameActivity : GameActivity() {
                         val flightNo = parts[3]
 
                         // Look up distance from routes table, default to 0.0
-                        val routes = databaseHelper.getOutboundRoutes(origin)
+                        val routes = airportRepository.getOutboundRoutes(origin)
                         val matchingRoute = routes.find { it.destIata == dest }
                         val distanceKm = matchingRoute?.distanceKm ?: 0.0
 

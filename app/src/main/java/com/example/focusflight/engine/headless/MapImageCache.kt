@@ -1,9 +1,9 @@
-package com.example.focusflight.ui.viewmodel
+package com.example.focusflight.engine.headless
 
 import android.util.Log
 import java.io.File
 
-object CacheUtils {
+object MapImageCache {
     /**
      * Scans the cache directory for pre-rendered airport route maps
      * and prunes the oldest files if the limit is exceeded.
@@ -23,12 +23,12 @@ object CacheUtils {
                     val fileToDelete = sortedFiles[i]
                     if (fileToDelete.exists()) {
                         val deleted = fileToDelete.delete()
-                        Log.d("CacheUtils", "Pruned old route map cache file: ${fileToDelete.name} (success: $deleted)")
+                        Log.d("MapImageCache", "Pruned old route map cache file: ${fileToDelete.name} (success: $deleted)")
                     }
                 }
             }
         } catch (e: Exception) {
-            Log.e("CacheUtils", "Error pruning map cache", e)
+            Log.e("MapImageCache", "Error pruning map cache", e)
         }
     }
 }

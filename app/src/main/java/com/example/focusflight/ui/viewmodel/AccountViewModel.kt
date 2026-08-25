@@ -8,7 +8,7 @@ import androidx.paging.PagingConfig
 import androidx.paging.PagingData
 import androidx.paging.cachedIn
 import com.example.focusflight.data.model.FlightLog
-import com.example.focusflight.data.repository.FlightDatabaseHelper
+import com.example.focusflight.data.repository.AirportRepository
 import com.example.focusflight.data.repository.FlightLogRepository
 import com.example.focusflight.data.repository.UserRepository
 import kotlinx.coroutines.Dispatchers
@@ -81,7 +81,7 @@ class AccountViewModel(
     private val context: android.content.Context,
     private val userRepository: UserRepository,
     private val flightLogRepository: FlightLogRepository,
-    private val databaseHelper: FlightDatabaseHelper
+    private val airportRepository: AirportRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AccountUiState())
@@ -148,10 +148,10 @@ class AccountViewModel(
                 val uniqueVisitedIatas = visitedIatas.distinct()
                 
                 // 4. Translate IATAs to Countries (SQLite)
-                val visitedCountries = databaseHelper.getCountriesForAirports(uniqueVisitedIatas)
+                val visitedCountries = airportRepository.getCountriesForAirports(uniqueVisitedIatas)
                 
                 // 5. Get World Geography Data (SQLite)
-                val worldMap = databaseHelper.getContinentCountryMap()
+                val worldMap = airportRepository.getContinentCountryMap()
                 
                 // 6. Reverse map country to continent
                 val countryToContinent = mutableMapOf<String, String>()
@@ -217,12 +217,12 @@ class AccountViewModelFactory(
     private val context: android.content.Context,
     private val userRepository: UserRepository,
     private val flightLogRepository: FlightLogRepository,
-    private val databaseHelper: FlightDatabaseHelper
+    private val airportRepository: AirportRepository
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(AccountViewModel::class.java)) {
-            return AccountViewModel(context, userRepository, flightLogRepository, databaseHelper) as T
+            return AccountViewModel(context, userRepository, flightLogRepository, airportRepository) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }
