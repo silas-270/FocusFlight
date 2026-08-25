@@ -173,19 +173,30 @@ doesn't tell you which screen it belongs to. Group by feature so
 - [x] Delete orphaned fixtures `app/flight_STR_FRA.json` and
       `app/flight_STR_JFK.json` — confirmed zero references anywhere in
       the repo. (Done early, alongside Phase 1/2.)
-- [ ] Move DB access out of `CesiumGameActivity.kt` entirely if any
+- [x] Move DB access out of `CesiumGameActivity.kt` entirely if any
       remains after Phase 1 step 4 — an Activity should drive lifecycle/UI
-      glue, not query the database.
-- [ ] Re-skim `focusflight_stategraph.md` after Phases 1-4 land and update
-      any section that now describes the old structure (e.g. state
-      ownership descriptions referencing the old file layout).
-- [ ] Fix the three inline TODOs found earlier while files are already
-      open for related work (skip only if out of scope for this pass):
-      - `InFlightScreen.kt` — quit-confirmation modal
-      - `CesiumGameActivity.kt` — Settings navigation stub
-      - `HubViewModel.kt` (now in `ui/viewmodel/hub/`) — the "silent
-        failure" TODO should already be resolved by Phase 2's typed
-        error handling; delete the TODO comment once confirmed.
+      glue, not query the database. Extracted `engine/live/PendingFlightLoader.kt`,
+      which also de-duplicated the runway-array-building JNI setup that was
+      copy-pasted between `onResumeFlightClick` and `onRouteConfirm`
+      (and dropped a stray `LUANDA_DEBUG` log left over from the NBJ
+      runway bug investigation). Only `ensureDatabaseCopied()` (startup)
+      and one `getOutboundRoutes()` call (one-time SharedPreferences→Room
+      migration) still call `airportRepository` directly from the
+      Activity — both legitimate Activity-scoped init work, not per-screen
+      business logic.
+- [x] Re-skim `focusflight_stategraph.md` after Phases 1-4 land and update
+      any section that now describes the old structure. Updated the map
+      caching and database initialization sections to reference
+      `CesiumHeadlessMapRenderer`/`MapImageCache`/`AirportRepository`
+      instead of the removed `CesiumRSLibrary`/`CacheUtils`/
+      `FlightDatabaseHelper` names.
+- [x] The three inline TODOs — reviewed, left as-is: `InFlightScreen.kt`'s
+      quit-confirmation modal and `CesiumGameActivity.kt`'s Settings nav
+      stub are unimplemented *features* (no Settings screen exists yet),
+      not architecture debt, so implementing them belongs in a real
+      feature pass, not this restructuring. `HubViewModel.kt`'s "silent
+      failure" TODO no longer exists — Phase 2 replaced that whole block
+      with `CesiumHeadlessMapRenderer`'s typed `Result.Failure`.
 - [ ] `app/build.gradle.kts`'s `cargoNdkBuild` task hardcodes two absolute
       local machine paths for the CesiumRS checkout — not part of the
       naming/architecture cleanup, but flag it for a follow-up (e.g. an
