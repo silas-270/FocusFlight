@@ -7,7 +7,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -16,6 +18,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.AirplanemodeActive
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Explore
@@ -33,13 +36,16 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -386,30 +392,20 @@ fun InFlightScreen(
                         )
                     }
 
-                    // Camera view button
-                    IconButton(
-                        onClick = { showSettings = true },
-                        modifier = Modifier.size(40.dp)
+                    // Flight settings button (camera view + pause/leave slider)
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(DeepNavy)
+                            .clickable { showSettings = true },
+                        contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Outlined.Flight,
-                            contentDescription = "Camera View",
-                            tint = OffWhite
-                        )
-                    }
-
-                    // Pause / leave flight button
-                    IconButton(
-                        onClick = {
-                            viewModel.pauseTimer()
-                            showExitConfirm = true
-                        },
-                        modifier = Modifier.size(40.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Pause,
-                            contentDescription = "Pause Flight",
-                            tint = OffWhite
+                            imageVector = Icons.Outlined.AirplanemodeActive,
+                            contentDescription = "Flight Settings",
+                            tint = OffWhite,
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                 }
@@ -440,14 +436,14 @@ fun InFlightScreen(
         )
 
         // Modal content positioned below top bar
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 80.dp)
                 .padding(horizontal = Spacing.Large)
-                .background(DeepNavy, RoundedCornerShape(16.dp))
-                .border(1.dp, Border, RoundedCornerShape(16.dp))
-                .padding(16.dp)
+                .background(DeepNavy, RoundedCornerShape(20.dp))
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -464,11 +460,9 @@ fun InFlightScreen(
                     Column(
                         modifier = Modifier
                             .weight(1f)
-                            .background(if (isActive) DeepNavy else Slate, RoundedCornerShape(12.dp))
-                            .border(
-                                width = if (isActive) 2.dp else 1.dp,
-                                color = if (isActive) Amber else Border,
-                                shape = RoundedCornerShape(12.dp)
+                            .background(
+                                if (isActive) Amber.copy(alpha = 0.15f) else Slate,
+                                RoundedCornerShape(12.dp)
                             )
                             .clickable {
                                 selectedCamera = camMode
@@ -495,6 +489,14 @@ fun InFlightScreen(
                     }
                 }
             }
+
+            SlideToPauseControl(
+                onSlideCompleted = {
+                    showSettings = false
+                    viewModel.pauseTimer()
+                    showExitConfirm = true
+                }
+            )
         }
     }
     }
@@ -516,7 +518,6 @@ fun InFlightScreen(
                     .padding(horizontal = Spacing.Large)
                     .fillMaxWidth()
                     .background(DeepNavy, RoundedCornerShape(20.dp))
-                    .border(1.dp, Border, RoundedCornerShape(20.dp))
                     .clickable(enabled = false) {} // absorb taps so they don't dismiss
                     .padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
@@ -587,6 +588,78 @@ fun InFlightScreen(
     // --- Movie Style Countdown Overlay ---
     if (uiState.timeElapsedMs < 0) {
         MovieCountdown(uiState.timeElapsedMs)
+    }
+}
+
+@Composable
+private fun SlideToPauseControl(onSlideCompleted: () -> Unit) {
+    val thumbSizeDp = 48.dp
+    val trackHeightDp = 56.dp
+
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(trackHeightDp)
+            .clip(RoundedCornerShape(trackHeightDp / 2))
+            .background(Slate)
+    ) {
+        val density = LocalDensity.current
+        val trackWidthPx = with(density) { maxWidth.toPx() }
+        val thumbSizePx = with(density) { thumbSizeDp.toPx() }
+        val maxOffsetPx = (trackWidthPx - thumbSizePx).coerceAtLeast(0f)
+
+        var dragOffsetPx by remember { mutableFloatStateOf(0f) }
+        var committed by remember { mutableStateOf(false) }
+        val animatedOffsetPx by animateFloatAsState(
+            targetValue = dragOffsetPx,
+            label = "slideToPauseOffset"
+        )
+        val progress = if (maxOffsetPx > 0f) (animatedOffsetPx / maxOffsetPx).coerceIn(0f, 1f) else 0f
+
+        Text(
+            text = "SLIDE TO PAUSE",
+            style = MaterialTheme.typography.labelMedium.copy(
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp
+            ),
+            color = Haze.copy(alpha = 1f - progress),
+            modifier = Modifier.align(Alignment.Center)
+        )
+
+        Box(
+            modifier = Modifier
+                .offset { IntOffset(animatedOffsetPx.roundToInt(), 0) }
+                .padding(4.dp)
+                .size(thumbSizeDp)
+                .clip(CircleShape)
+                .background(Amber)
+                .pointerInput(Unit) {
+                    detectHorizontalDragGestures(
+                        onDragEnd = {
+                            if (dragOffsetPx > maxOffsetPx * 0.6f) {
+                                dragOffsetPx = maxOffsetPx
+                                if (!committed) {
+                                    committed = true
+                                    onSlideCompleted()
+                                }
+                            } else {
+                                dragOffsetPx = 0f
+                            }
+                        }
+                    ) { change, dragAmount ->
+                        change.consume()
+                        dragOffsetPx = (dragOffsetPx + dragAmount).coerceIn(0f, maxOffsetPx)
+                    }
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.Pause,
+                contentDescription = "Slide to pause",
+                tint = Midnight,
+                modifier = Modifier.size(20.dp)
+            )
+        }
     }
 }
 
