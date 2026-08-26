@@ -26,8 +26,11 @@ what's next. Not urgent, but don't forget.
       "Leave Flight?" confirmation with Resume/Leave, wired into the
       back-button handler too. Progress is already saved periodically so
       Leave just navigates out.
-- [ ] `CesiumGameActivity.kt` — Settings navigation is a TODO stub; no
-      Settings screen exists yet.
+- [x] ~~`CesiumGameActivity.kt` — Settings navigation is a TODO stub; no
+      Settings screen exists yet.~~ — decided 2026-08-26: no Settings
+      screen planned. Removed the gear icon from HubScreen entirely;
+      the Account icon now sits in its place on the right, styled like
+      the in-flight flight-settings button (40dp DeepNavy rounded box).
 
 ## Debug/scaffolding to remove
 

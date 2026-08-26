@@ -25,14 +25,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.FlightTakeoff
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Person
-import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
@@ -43,6 +41,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -64,8 +63,7 @@ fun HubScreen(
     viewModel: HubViewModel,
     onBookFlightClick: () -> Unit,
     onResumeFlightClick: (flightNo: String, destIata: String, durationMin: Int) -> Unit,
-    onPassportClick: () -> Unit,
-    onSettingsClick: () -> Unit
+    onPassportClick: () -> Unit
 ) {
     val currentAirport by viewModel.currentAirport.collectAsState()
     val stats by viewModel.flightStats.collectAsState()
@@ -298,32 +296,23 @@ fun HubScreen(
                     .fillMaxWidth()
                     .windowInsetsPadding(WindowInsets.statusBars)
                     .padding(start = Spacing.Large, end = Spacing.Large, top = Spacing.Large, bottom = Spacing.Medium),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Profile Avatar (No background container)
-                IconButton(
-                    onClick = onPassportClick,
-                    modifier = Modifier.size(24.dp)
+                // Account
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(DeepNavy)
+                        .clickable { onPassportClick() },
+                    contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.Person,
-                        contentDescription = "Profile",
+                        contentDescription = "Account",
                         tint = OffWhite,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
-
-                // Settings Gear
-                IconButton(
-                    onClick = onSettingsClick,
-                    modifier = Modifier.size(24.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Settings,
-                        contentDescription = "Settings",
-                        tint = OffWhite,
-                        modifier = Modifier.fillMaxSize()
+                        modifier = Modifier.size(20.dp)
                     )
                 }
             }

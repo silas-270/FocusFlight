@@ -32,7 +32,11 @@ data class InFlightState(
     val altitudeMeters: Int = 10600,
     val currentLat: Double = 0.0,
     val currentLon: Double = 0.0,
-    val progress: Float = 0.0f
+    val progress: Float = 0.0f,
+    /** Camera mode (0=Free/1=Tracking/2=Cockpit) restored from a saved flight, if any — lets
+     *  the camera-view picker UI reflect it instead of defaulting to Chase. Null for a
+     *  brand-new flight, which keeps resetting to the default as before. */
+    val restoredCameraMode: Int? = null
 )
 
 class InFlightViewModel(
@@ -65,15 +69,45 @@ class InFlightViewModel(
         val totalSec = durationMin * 60L
         val savedProgress = preferencesRepository.getActiveFlightProgress(flightNumber)
         val initialElapsedMs = savedProgress ?: -3000L
+        val savedCamera = preferencesRepository.getActiveFlightCamera(flightNumber)
 
         _uiState.value = InFlightState(
             timeRemainingSeconds = totalSec - (initialElapsedMs.coerceAtLeast(0L) / 1000L),
             timeElapsedMs = initialElapsedMs, // 3 second start hold if not saved
             totalDurationSeconds = totalSec,
-            timeElapsedSeconds = initialElapsedMs.coerceAtLeast(0L) / 1000L
+            timeElapsedSeconds = initialElapsedMs.coerceAtLeast(0L) / 1000L,
+            restoredCameraMode = savedCamera?.mode
         )
         loadFlightDetails()
         startTimer()
+
+        // Only present when resuming a flight that was previously saved with a camera pose —
+        // a brand-new flight never has one, so the engine's own default framing applies
+        // unchanged. Mode is set first so it's already correct by the time the pose lands.
+        if (savedCamera != null) {
+            com.example.focusflight.engine.live.CesiumLiveJniBridge.nativeSetCameraMode(savedCamera.mode)
+            com.example.focusflight.engine.live.CesiumLiveJniBridge.nativeSetCameraPose(
+                savedCamera.x, savedCamera.y, savedCamera.z,
+                savedCamera.qx, savedCamera.qy, savedCamera.qz, savedCamera.qw
+            )
+        }
+    }
+
+    /** Snapshots the live camera and persists it for this flight, so resuming later restores
+     *  the same mode/position/rotation instead of the default framing. Call on the way out
+     *  (e.g. ON_STOP), not on a timer — this only needs to be current when the user leaves. */
+    fun saveCameraState() {
+        val pose = com.example.focusflight.engine.live.CesiumLiveJniBridge.nativeGetCameraPose()
+        if (pose.size >= 8) {
+            preferencesRepository.saveActiveFlightCamera(
+                flightNumber,
+                com.example.focusflight.data.repository.CameraPose(
+                    mode = pose[0].toInt(),
+                    x = pose[1], y = pose[2], z = pose[3],
+                    qx = pose[4], qy = pose[5], qz = pose[6], qw = pose[7]
+                )
+            )
+        }
     }
 
     private fun loadFlightDetails() {
@@ -119,6 +153,7 @@ class InFlightViewModel(
                         timerJob = null
                         preferencesRepository.setCurrentAirport(destIata)
                         preferencesRepository.clearActiveFlightProgress(flightNumber)
+                        preferencesRepository.clearActiveFlightCamera(flightNumber)
                         preRenderDestinationMap()
                         saveFlightLog()
                         com.example.focusflight.engine.live.CesiumLiveJniBridge.nativeSetProgress(1.0)
@@ -182,6 +217,7 @@ class InFlightViewModel(
         timerJob = null
         preferencesRepository.setCurrentAirport(destIata)
         preferencesRepository.clearActiveFlightProgress(flightNumber)
+        preferencesRepository.clearActiveFlightCamera(flightNumber)
         preRenderDestinationMap()
         saveFlightLog()
         com.example.focusflight.engine.live.CesiumLiveJniBridge.nativeSetProgress(1.0)

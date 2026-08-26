@@ -2,6 +2,19 @@ package com.example.focusflight.data.repository
 
 import android.content.Context
 
+/** A saved camera perspective: mode (0=Free/1=Tracking/2=Cockpit) plus position/rotation,
+ *  matching CesiumLiveJniBridge.nativeGetCameraPose()'s array layout. */
+data class CameraPose(
+    val mode: Int,
+    val x: Double,
+    val y: Double,
+    val z: Double,
+    val qx: Double,
+    val qy: Double,
+    val qz: Double,
+    val qw: Double
+)
+
 class PreferencesRepository(context: Context) {
     companion object {
         private const val PREFS_NAME = "focus_flight_prefs"
@@ -67,5 +80,36 @@ class PreferencesRepository(context: Context) {
 
     fun clearActiveFlightContext() {
         prefs.edit().remove("active_flight_context").apply()
+    }
+
+    fun saveActiveFlightCamera(flightNo: String, pose: CameraPose) {
+        val packed = listOf(
+            pose.mode, pose.x, pose.y, pose.z, pose.qx, pose.qy, pose.qz, pose.qw
+        ).joinToString("|")
+        prefs.edit().putString("active_flight_camera_$flightNo", packed).apply()
+    }
+
+    fun getActiveFlightCamera(flightNo: String): CameraPose? {
+        val str = prefs.getString("active_flight_camera_$flightNo", null) ?: return null
+        val parts = str.split("|")
+        if (parts.size != 8) return null
+        return try {
+            CameraPose(
+                mode = parts[0].toInt(),
+                x = parts[1].toDouble(),
+                y = parts[2].toDouble(),
+                z = parts[3].toDouble(),
+                qx = parts[4].toDouble(),
+                qy = parts[5].toDouble(),
+                qz = parts[6].toDouble(),
+                qw = parts[7].toDouble()
+            )
+        } catch (e: NumberFormatException) {
+            null
+        }
+    }
+
+    fun clearActiveFlightCamera(flightNo: String) {
+        prefs.edit().remove("active_flight_camera_$flightNo").apply()
     }
 }

@@ -217,9 +217,6 @@ class CesiumGameActivity : GameActivity() {
                                     },
                                     onPassportClick = {
                                         navController.navigate(Screen.Account.route)
-                                    },
-                                    onSettingsClick = {
-                                        // TODO: Navigate to Settings
                                     }
                                 )
                             }
