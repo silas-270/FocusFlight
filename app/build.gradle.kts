@@ -79,7 +79,10 @@ tasks.register("cargoNdkBuild") {
         targets.forEach { (rustTarget, androidAbi) ->
             println("Building Rust library for target: $rustTarget (ABI: $androidAbi)...")
             
-            val builder = ProcessBuilder(cargoBin, "ndk", "--target", rustTarget, "build", "--lib", "--release", "--no-default-features")
+            // debug_panel (not the full "testing" default) pulls in egui just far enough to
+            // draw the city-label pills; app.rs skips the actual debug-sliders window on
+            // Android, so this doesn't put any dev UI in front of the real app.
+            val builder = ProcessBuilder(cargoBin, "ndk", "--target", rustTarget, "build", "--lib", "--release", "--no-default-features", "--features", "debug_panel")
             builder.directory(File(absoluteRustPath))
             
             builder.environment()["ANDROID_NDK_HOME"] = ndkDir

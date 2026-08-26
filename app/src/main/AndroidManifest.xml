@@ -18,7 +18,7 @@
             android:name=".CesiumGameActivity"
             android:theme="@style/Theme.CesiumTheme"
             android:configChanges="orientation|screenSize|keyboardHidden"
-            android:screenOrientation="portrait"
+            android:screenOrientation="fullSensor"
             android:exported="true">
             <meta-data
                 android:name="android.app.lib_name"

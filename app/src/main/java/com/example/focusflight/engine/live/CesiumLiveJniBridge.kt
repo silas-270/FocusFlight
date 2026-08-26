@@ -17,7 +17,24 @@ object CesiumLiveJniBridge {
 
     external fun nativeSetCameraMode(mode: Int)
 
+    external fun nativeSetMapStyle(style: Int)
+
     external fun nativeGetTelemetry(): DoubleArray
+
+    /** [mode (0=Free/1=Tracking/2=Cockpit), pos.x, pos.y, pos.z, ori.x, ori.y, ori.z, ori.w] */
+    external fun nativeGetCameraPose(): DoubleArray
+
+    /** Applies a saved position/rotation the next time the view resets. Call
+     *  nativeSetCameraMode first so the mode itself is already correct when this lands. */
+    external fun nativeSetCameraPose(
+        x: Double,
+        y: Double,
+        z: Double,
+        qx: Double,
+        qy: Double,
+        qz: Double,
+        qw: Double
+    )
 
     external fun nativeSetRenderingEnabled(enabled: Boolean)
 
