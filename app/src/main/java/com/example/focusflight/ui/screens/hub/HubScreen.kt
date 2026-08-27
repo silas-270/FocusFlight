@@ -41,6 +41,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberBottomSheetScaffoldState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -52,9 +53,12 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import coil3.compose.AsyncImage
 import com.example.focusflight.data.repository.ActiveFlightContext
 import com.example.focusflight.ui.theme.Amber
@@ -83,6 +87,26 @@ fun HubScreen(
     val stats by viewModel.flightStats.collectAsState()
     val recentFlights by viewModel.recentFlights.collectAsState()
     val routeMapPath by viewModel.routeMapPath.collectAsState()
+
+    // Hub's ViewModel (and its data) is loaded once in init, but the Hub's own back-stack entry
+    // survives a popBackStack() from Account/Passport - so returning from there after using
+    // story-mode.md's return-home teleport (a direct currentAirport write, no flight/session)
+    // needs an explicit refresh, or the globe/greeting would keep showing the pre-teleport
+    // airport until the next full Hub recreation. ON_START (not just first composition) fires
+    // both on initial entry and on returning to this screen - same lifecycle-observer pattern
+    // InFlightScreen already uses for its own pause/resume handling.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_START) {
+                viewModel.refresh()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     val scaffoldState = rememberBottomSheetScaffoldState()
     val isExpanded = scaffoldState.bottomSheetState.currentValue == SheetValue.Expanded

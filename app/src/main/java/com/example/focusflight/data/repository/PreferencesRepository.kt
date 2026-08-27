@@ -83,6 +83,12 @@ class PreferencesRepository(context: Context) {
         private const val KEY_ONBOARDING_COMPLETED = "onboarding_completed"
         private const val KEY_HOME_AIRPORT = "home_airport_iata"
         private const val KEY_CURRENT_AIRPORT = "current_airport_iata"
+
+        // docs/design/story-mode.md's two distinct home-base cooldowns (see HomeBaseCooldown) -
+        // deliberately two separate keys, not one, since the two actions' cooldowns reset
+        // independently of each other.
+        private const val KEY_LAST_RETURN_HOME_AT = "last_return_home_at"
+        private const val KEY_LAST_HOME_BASE_CHANGED_AT = "last_home_base_changed_at"
     }
 
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -111,7 +117,27 @@ class PreferencesRepository(context: Context) {
         prefs.edit().putString(KEY_CURRENT_AIRPORT, iata).apply()
     }
 
+    /** Epoch millis of the last return-home teleport, or null if it's never been used - see
+     *  [com.example.focusflight.data.model.HomeBaseCooldown]'s 7-day cooldown check. */
+    fun getLastReturnHomeAt(): Long? =
+        if (prefs.contains(KEY_LAST_RETURN_HOME_AT)) prefs.getLong(KEY_LAST_RETURN_HOME_AT, 0L) else null
 
+    fun setLastReturnHomeAt(timestampMs: Long) {
+        prefs.edit().putLong(KEY_LAST_RETURN_HOME_AT, timestampMs).apply()
+    }
+
+    /** Epoch millis of the last home-base change - seeded to 31 days before onboarding at
+     *  onboarding time (see `OnboardingViewModel.saveHomeAirport()`), so it's never actually null
+     *  in practice, but callers should still treat a genuinely missing value as "always eligible"
+     *  like [HomeBaseCooldown.isEligible] does, rather than assuming it's always present. Gates
+     *  the separate 30-day change-home-base cooldown - never conflated with
+     *  [getLastReturnHomeAt]'s 7-day one. */
+    fun getLastHomeBaseChangedAt(): Long? =
+        if (prefs.contains(KEY_LAST_HOME_BASE_CHANGED_AT)) prefs.getLong(KEY_LAST_HOME_BASE_CHANGED_AT, 0L) else null
+
+    fun setLastHomeBaseChangedAt(timestampMs: Long) {
+        prefs.edit().putLong(KEY_LAST_HOME_BASE_CHANGED_AT, timestampMs).apply()
+    }
 
     fun saveActiveFlightProgress(flightNo: String, elapsedMs: Long) {
         prefs.edit().putLong("active_flight_$flightNo", elapsedMs).apply()

@@ -1,0 +1,271 @@
+package com.example.focusflight.ui.screens.account
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.EditLocationAlt
+import androidx.compose.material.icons.outlined.FlightLand
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.example.focusflight.data.model.Airport
+import com.example.focusflight.ui.components.ScrimCardModal
+import com.example.focusflight.ui.screens.flightsearch.OriginSearchPanel
+import com.example.focusflight.ui.theme.Amber
+import com.example.focusflight.ui.theme.Border
+import com.example.focusflight.ui.theme.DeepNavy
+import com.example.focusflight.ui.theme.Haze
+import com.example.focusflight.ui.theme.Midnight
+import com.example.focusflight.ui.theme.OffWhite
+import com.example.focusflight.ui.theme.Slate
+import com.example.focusflight.ui.theme.Spacing
+import com.example.focusflight.ui.viewmodel.account.AccountUiState
+
+/**
+ * Story Mode's home-base + return card (docs/design/story-mode.md) - lives on the Passport
+ * (Account) screen rather than the Hub's "modes" menu: the modes menu (see `HubScreen.kt`'s
+ * `ModeSelectMenuContent`) is for choosing what kind of *session* to fly next (Free Mode, a Route
+ * challenge) - return-home isn't a session at all, and changing home base is an identity/profile
+ * edit, not a mode choice. The Passport already displays `homeAirportIata` as a chip on
+ * [ProfileHeroCard], so this is the natural place a "home base" setting lives.
+ */
+@Composable
+internal fun HomeBaseCard(state: AccountUiState, onReturnHomeClick: () -> Unit, onChangeHomeBaseClick: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(DeepNavy)
+            .padding(Spacing.Medium)
+    ) {
+        HomeBaseActionRow(
+            icon = Icons.Outlined.FlightLand,
+            title = "RETURN HOME",
+            subtitle = if (state.returnHomeEligible) {
+                "Teleport instantly to ${state.homeAirportIata.ifBlank { "your home base" }}"
+            } else {
+                "Available in ${formatCooldownRemaining(state.returnHomeRemainingMillis)}"
+            },
+            enabled = state.returnHomeEligible,
+            onClick = onReturnHomeClick
+        )
+        Spacer(modifier = Modifier.height(Spacing.Small))
+        HomeBaseActionRow(
+            icon = Icons.Outlined.EditLocationAlt,
+            title = "CHANGE HOME BASE",
+            subtitle = if (state.changeHomeBaseEligible) {
+                "Pick a new home base airport"
+            } else {
+                "Available in ${formatCooldownRemaining(state.changeHomeBaseRemainingMillis)}"
+            },
+            enabled = state.changeHomeBaseEligible,
+            onClick = onChangeHomeBaseClick
+        )
+    }
+}
+
+/** N days / N hours, coarse enough for a settings-style subtitle - not a live countdown (see
+ *  AccountViewModel.refreshHomeBaseCooldowns's doc comment on why a ticking timer isn't needed). */
+private fun formatCooldownRemaining(millis: Long): String {
+    val totalHours = (millis / (60 * 60 * 1000L)).coerceAtLeast(0L)
+    val days = totalHours / 24
+    val hours = totalHours % 24
+    return when {
+        days > 0 && hours > 0 -> "${days}d ${hours}h"
+        days > 0 -> "${days}d"
+        totalHours > 0 -> "${totalHours}h"
+        else -> "under an hour"
+    }
+}
+
+@Composable
+private fun HomeBaseActionRow(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    val contentAlpha = if (enabled) 1f else 0.45f
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(Slate.copy(alpha = 0.4f))
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(Spacing.Medium),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(Midnight),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = Amber.copy(alpha = contentAlpha),
+                modifier = Modifier.size(18.dp)
+            )
+        }
+        Spacer(modifier = Modifier.width(Spacing.Medium))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelLarge.copy(
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp
+                ),
+                color = OffWhite.copy(alpha = contentAlpha)
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = Haze.copy(alpha = contentAlpha)
+            )
+        }
+    }
+}
+
+// ── Modals ───────────────────────────────────────────────────────────────────────────────
+
+@Composable
+internal fun ReturnHomeConfirmModal(
+    homeAirportIata: String,
+    currentAirportIata: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    ScrimCardModal(onScrimTap = onDismiss) {
+        Text(
+            text = "RETURN HOME?",
+            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
+            color = OffWhite
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = if (currentAirportIata.isNotBlank() && currentAirportIata != homeAirportIata) {
+                "You'll teleport instantly from $currentAirportIata to your home base, $homeAirportIata. " +
+                    "This isn't a real flight - no booking, no logbook entry. You can do this again in 7 days."
+            } else {
+                "You'll teleport instantly to your home base, $homeAirportIata. This isn't a real flight - " +
+                    "no booking, no logbook entry. You can do this again in 7 days."
+            },
+            style = MaterialTheme.typography.bodyMedium,
+            color = Haze
+        )
+        Spacer(modifier = Modifier.height(24.dp))
+        HomeBaseModalButtonRow(dismissText = "CANCEL", confirmText = "TELEPORT", onDismiss = onDismiss, onConfirm = onConfirm)
+    }
+}
+
+@Composable
+internal fun ChangeHomeBaseModal(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    results: List<Airport>,
+    onAirportSelect: (Airport) -> Unit,
+    onDismiss: () -> Unit
+) {
+    ScrimCardModal(onScrimTap = onDismiss) {
+        Text(
+            text = "CHANGE HOME BASE",
+            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
+            color = OffWhite
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "Pick a new home base airport. You won't be able to change it again for 30 days.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = Haze
+        )
+        Spacer(modifier = Modifier.height(Spacing.Medium))
+        Box(modifier = Modifier.height(280.dp)) {
+            OriginSearchPanel(
+                query = query,
+                onQueryChange = onQueryChange,
+                results = results,
+                onAirportSelect = onAirportSelect
+            )
+        }
+        Spacer(modifier = Modifier.height(Spacing.Medium))
+        HomeBaseModalButtonRow(dismissText = "CANCEL", confirmText = null, onDismiss = onDismiss, onConfirm = null)
+    }
+}
+
+/**
+ * Local copy of `QuestLogContent.kt`'s private `ModalButtonRow` (same look: a 1:1 weighted Slate/
+ * Amber pill pair). That function is private to its file and this phase is meant to stay isolated
+ * from the Challenges surface (per the phase brief), so this small, already-duplicated-once
+ * pattern is copied again rather than promoting it to a shared component - a minor, low-risk
+ * duplication, not a new convention.
+ */
+@Composable
+private fun HomeBaseModalButtonRow(
+    dismissText: String,
+    confirmText: String?,
+    onDismiss: () -> Unit,
+    onConfirm: (() -> Unit)?
+) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .clip(RoundedCornerShape(12.dp))
+                .background(Slate)
+                .clickable(onClick = onDismiss)
+                .padding(vertical = 14.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = dismissText,
+                color = OffWhite,
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace,
+                fontSize = 13.sp
+            )
+        }
+        if (confirmText != null && onConfirm != null) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Amber)
+                    .clickable(onClick = onConfirm)
+                    .padding(vertical = 14.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = confirmText,
+                    color = DeepNavy,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 13.sp
+                )
+            }
+        }
+    }
+}

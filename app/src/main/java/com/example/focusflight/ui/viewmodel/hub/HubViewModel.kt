@@ -53,6 +53,15 @@ class HubViewModel(
         loadData()
     }
 
+    /** Re-runs [loadData]. `init` only fires once per ViewModel instance, but the Hub's nav
+     *  back-stack entry (and this ViewModel with it) survives a `popBackStack()` from screens
+     *  like Account/Passport - so anything that can change `currentAirport` while Hub isn't the
+     *  active screen (e.g. story-mode.md's return-home teleport) needs an explicit re-fetch on
+     *  return, not just a fresh load on first creation. See HubScreen's ON_START observer. */
+    fun refresh() {
+        loadData()
+    }
+
     private fun loadData() {
         viewModelScope.launch(Dispatchers.IO) {
             val baseIata = preferencesRepository.getCurrentAirport()

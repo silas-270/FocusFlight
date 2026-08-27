@@ -9,24 +9,31 @@ import androidx.paging.PagingData
 import androidx.paging.cachedIn
 import com.example.focusflight.data.model.AchievementProgress
 import com.example.focusflight.data.model.AchievementStatus
+import com.example.focusflight.data.model.Airport
 import com.example.focusflight.data.model.Challenge
 import com.example.focusflight.data.model.ContinentStats
 import com.example.focusflight.data.model.FlightHighlights
 import com.example.focusflight.data.model.FlightLog
 import com.example.focusflight.data.model.FlightSortOrder
+import com.example.focusflight.data.model.HomeBaseCooldown
 import com.example.focusflight.data.repository.AirportRepository
 import com.example.focusflight.data.repository.ChallengeRepository
 import com.example.focusflight.data.repository.FlightLogRepository
+import com.example.focusflight.data.repository.PreferencesRepository
 import com.example.focusflight.data.repository.UserRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -65,20 +72,52 @@ data class AccountUiState(
     val behavioralAchievements: List<AchievementStatus> = emptyList(),
     val completedChallenges: List<Challenge> = emptyList(),
 
+    // Home base + return (docs/design/story-mode.md) - the two cooldown-gated actions, both
+    // computed once per loadData()/action call rather than ticking live every second; see
+    // AccountViewModel's doc comment on refreshHomeBaseCooldowns() for why that's an acceptable
+    // simplification here.
+    val currentAirportIata: String = "",
+    val returnHomeEligible: Boolean = true,
+    val returnHomeRemainingMillis: Long = 0L,
+    val changeHomeBaseEligible: Boolean = true,
+    val changeHomeBaseRemainingMillis: Long = 0L,
+
     val isLoading: Boolean = true
 )
 
-@OptIn(ExperimentalCoroutinesApi::class)
+@OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
 class AccountViewModel(
     private val context: android.content.Context,
     private val userRepository: UserRepository,
     private val flightLogRepository: FlightLogRepository,
     private val airportRepository: AirportRepository,
-    private val challengeRepository: ChallengeRepository
+    private val challengeRepository: ChallengeRepository,
+    private val preferencesRepository: PreferencesRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AccountUiState())
     val uiState: StateFlow<AccountUiState> = _uiState.asStateFlow()
+
+    // ── Change-home-base airport picker (docs/design/story-mode.md) ─────────────────────
+    // Structurally identical to FlightSearchViewModel's Free Mode origin picker
+    // (observeOriginSearch/onOriginSearchQueryChanged/selectOrigin) and OnboardingViewModel's
+    // debounced airport search - the third call site of the same "search any airport by free
+    // text" pattern, reusing OriginSearchPanel as the UI per the phase brief rather than building
+    // a new picker component.
+    private val _homeBaseSearchQuery = MutableStateFlow("")
+    val homeBaseSearchQuery: StateFlow<String> = _homeBaseSearchQuery.asStateFlow()
+
+    private val _homeBaseSearchResults = MutableStateFlow<List<Airport>>(emptyList())
+    val homeBaseSearchResults: StateFlow<List<Airport>> = _homeBaseSearchResults.asStateFlow()
+
+    fun onHomeBaseSearchQueryChanged(query: String) {
+        _homeBaseSearchQuery.value = query
+    }
+
+    private fun clearHomeBaseSearch() {
+        _homeBaseSearchQuery.value = ""
+        _homeBaseSearchResults.value = emptyList()
+    }
 
     private val dateFormat = SimpleDateFormat("MMM yyyy", Locale.US)
 
@@ -98,10 +137,92 @@ class AccountViewModel(
 
     init {
         loadData()
+        refreshHomeBaseCooldowns()
         // Off the UI thread, well before the user can scroll a fast fling down to the
         // logbook (see PaperGrainTexture's doc comment).
         viewModelScope.launch(Dispatchers.Default) {
             com.example.focusflight.ui.screens.account.PaperGrainTexture.warm()
+        }
+        viewModelScope.launch {
+            _homeBaseSearchQuery
+                .debounce(300)
+                .collectLatest { query ->
+                    _homeBaseSearchResults.value = if (query.trim().length >= 2) {
+                        withContext(Dispatchers.IO) { airportRepository.searchAirports(query) }
+                    } else {
+                        emptyList()
+                    }
+                }
+        }
+    }
+
+    /**
+     * Recomputes both home-base cooldowns' eligibility/remaining-time against "now". Called once
+     * at load and again right after [returnHome]/[changeHomeBase] so the UI reflects the new
+     * cooldown immediately post-action. Deliberately *not* re-evaluated on a live ticking timer -
+     * nothing in docs/design/story-mode.md calls for a second-by-second countdown, and the Account
+     * screen is realistically reopened (recreating this ViewModel) long before a multi-day
+     * cooldown display would visibly go stale.
+     */
+    private fun refreshHomeBaseCooldowns() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val now = System.currentTimeMillis()
+            val lastReturnHome = preferencesRepository.getLastReturnHomeAt()
+            val lastHomeBaseChanged = preferencesRepository.getLastHomeBaseChangedAt()
+            _uiState.update { state ->
+                state.copy(
+                    currentAirportIata = preferencesRepository.getCurrentAirport().orEmpty(),
+                    returnHomeEligible = HomeBaseCooldown.isEligible(now, lastReturnHome, HomeBaseCooldown.RETURN_HOME_COOLDOWN_DAYS),
+                    returnHomeRemainingMillis = HomeBaseCooldown.remainingMillis(now, lastReturnHome, HomeBaseCooldown.RETURN_HOME_COOLDOWN_DAYS),
+                    changeHomeBaseEligible = HomeBaseCooldown.isEligible(now, lastHomeBaseChanged, HomeBaseCooldown.CHANGE_HOME_BASE_COOLDOWN_DAYS),
+                    changeHomeBaseRemainingMillis = HomeBaseCooldown.remainingMillis(now, lastHomeBaseChanged, HomeBaseCooldown.CHANGE_HOME_BASE_COOLDOWN_DAYS)
+                )
+            }
+        }
+    }
+
+    /**
+     * Return-home teleport (docs/design/story-mode.md) - a direct state mutation, deliberately
+     * NOT routed through Screen.FlightSearch/CheckIn/InFlight: no booking flow, no timer/session,
+     * no FlightLog row, no FlightMode tag. Just an instant cut of `currentAirport` to the home
+     * base, gated by the 7-day cooldown checked again here (not just at the UI-disabled-state
+     * layer) so a stale/racy UI state can't bypass it.
+     */
+    fun returnHome() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val now = System.currentTimeMillis()
+            val lastReturnHome = preferencesRepository.getLastReturnHomeAt()
+            if (!HomeBaseCooldown.isEligible(now, lastReturnHome, HomeBaseCooldown.RETURN_HOME_COOLDOWN_DAYS)) return@launch
+            val homeIata = preferencesRepository.getHomeAirport() ?: return@launch
+
+            preferencesRepository.setCurrentAirport(homeIata)
+            preferencesRepository.setLastReturnHomeAt(now)
+            refreshHomeBaseCooldowns()
+        }
+    }
+
+    /**
+     * Change-home-base (docs/design/story-mode.md), gated by its own separate 30-day cooldown -
+     * never the same clock as [returnHome]'s 7-day one. Updates both stores that carry the home
+     * airport today, the same pair `OnboardingViewModel.saveHomeAirport()` writes at onboarding:
+     * `PreferencesRepository` (origin-lock/return-home read from here) and the Room `UserProfile`
+     * row (the Passport header's display value, via `userRepository.updateHomeAirport`).
+     */
+    fun changeHomeBase(airport: Airport) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val now = System.currentTimeMillis()
+            val lastChanged = preferencesRepository.getLastHomeBaseChangedAt()
+            if (!HomeBaseCooldown.isEligible(now, lastChanged, HomeBaseCooldown.CHANGE_HOME_BASE_COOLDOWN_DAYS)) return@launch
+
+            preferencesRepository.setHomeAirport(airport.iataCode)
+            preferencesRepository.setLastHomeBaseChangedAt(now)
+            try {
+                userRepository.updateHomeAirport(airport.iataCode)
+            } catch (e: Exception) {
+                android.util.Log.e("AccountViewModel", "Failed to update home airport", e)
+            }
+            clearHomeBaseSearch()
+            refreshHomeBaseCooldowns()
         }
     }
 
@@ -200,12 +321,13 @@ class AccountViewModelFactory(
     private val userRepository: UserRepository,
     private val flightLogRepository: FlightLogRepository,
     private val airportRepository: AirportRepository,
-    private val challengeRepository: ChallengeRepository
+    private val challengeRepository: ChallengeRepository,
+    private val preferencesRepository: PreferencesRepository
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(AccountViewModel::class.java)) {
-            return AccountViewModel(context, userRepository, flightLogRepository, airportRepository, challengeRepository) as T
+            return AccountViewModel(context, userRepository, flightLogRepository, airportRepository, challengeRepository, preferencesRepository) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

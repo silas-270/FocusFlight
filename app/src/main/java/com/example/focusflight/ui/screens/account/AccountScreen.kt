@@ -15,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.AirplanemodeActive
 import androidx.compose.material.icons.outlined.EmojiEvents
+import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.StarHalf
 import androidx.compose.material3.CircularProgressIndicator
@@ -29,7 +30,9 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -66,6 +69,15 @@ fun AccountScreen(
         buildMonthHeaderLabels(uiState.flightHistory, uiState.sortOrder)
     }
 
+    // Home base + return (docs/design/story-mode.md) - two ScrimCardModal overlays, shown as
+    // siblings of the Scaffold below (not nested inside it) so they draw on top of the whole
+    // screen, same reasoning as every other ScrimCardModal use in this codebase.
+    var showReturnHomeModal by remember { mutableStateOf(false) }
+    var showChangeHomeBaseModal by remember { mutableStateOf(false) }
+    val homeBaseSearchQuery by viewModel.homeBaseSearchQuery.collectAsState()
+    val homeBaseSearchResults by viewModel.homeBaseSearchResults.collectAsState()
+
+    Box(modifier = Modifier.fillMaxSize()) {
     Scaffold(
         topBar = {
             TopAppBar(
@@ -119,6 +131,19 @@ fun AccountScreen(
             ) {
                 // ── Hero Profile Card ─────────────────────────────────────────
                 item { ProfileHeroCard(uiState) }
+
+                // ── Home base + return (docs/design/story-mode.md) ────────────
+                // Right below the hero card, which already surfaces homeAirportIata as a chip -
+                // see HomeBaseSection.kt's doc comment for why the Passport (not the Hub's modes
+                // menu) is this feature's home.
+                item { SectionHeader(icon = Icons.Outlined.Home, title = "HOME BASE") }
+                item {
+                    HomeBaseCard(
+                        state = uiState,
+                        onReturnHomeClick = { showReturnHomeModal = true },
+                        onChangeHomeBaseClick = { showChangeHomeBaseModal = true }
+                    )
+                }
 
                 // ── Stats Row (2x2 Grid) ──────────────────────────────────────
                 item { StatsGrid2x2(uiState) }
@@ -225,6 +250,32 @@ fun AccountScreen(
                 }
             }
         }
+    }
+
+    if (showReturnHomeModal) {
+        ReturnHomeConfirmModal(
+            homeAirportIata = uiState.homeAirportIata,
+            currentAirportIata = uiState.currentAirportIata,
+            onConfirm = {
+                viewModel.returnHome()
+                showReturnHomeModal = false
+            },
+            onDismiss = { showReturnHomeModal = false }
+        )
+    }
+
+    if (showChangeHomeBaseModal) {
+        ChangeHomeBaseModal(
+            query = homeBaseSearchQuery,
+            onQueryChange = { viewModel.onHomeBaseSearchQueryChanged(it) },
+            results = homeBaseSearchResults,
+            onAirportSelect = {
+                viewModel.changeHomeBase(it)
+                showChangeHomeBaseModal = false
+            },
+            onDismiss = { showChangeHomeBaseModal = false }
+        )
+    }
     }
 }
 
