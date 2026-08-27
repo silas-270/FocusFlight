@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asComposePath
@@ -14,10 +15,67 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.asAndroidPath
+import androidx.compose.ui.graphics.graphicsLayer
 import com.example.focusflight.data.model.Airport
 import com.example.focusflight.data.model.FlightRoute
 import com.example.focusflight.ui.map.CountryPath
 import com.example.focusflight.ui.map.RobinsonProjection
+
+// One merged outline per fill/stroke bucket instead of ~1000 individual country
+// sub-paths. Compose Canvas issues drawPath as an immediate Skia call, so drawing
+// every country separately (fill pass + border pass) was the ~65ms main-thread
+// stall seen on first composition of the Travel Map card (profiled via
+// `adb shell dumpsys gfxinfo` while opening the Account screen). Merging same-color
+// countries into one android.graphics.Path via addPath collapses that to a handful
+// of drawPath calls with identical visual output.
+private class MergedMapPaths(
+    val visitedFill: androidx.compose.ui.graphics.Path,
+    val unvisitedFill: androidx.compose.ui.graphics.Path,
+    val completedStroke: androidx.compose.ui.graphics.Path,
+    val visitedStroke: androidx.compose.ui.graphics.Path,
+    val unvisitedStroke: androidx.compose.ui.graphics.Path
+)
+
+private fun buildMergedMapPaths(
+    mapPaths: List<CountryPath>,
+    visitedCountries: Set<String>,
+    countryToContinent: Map<String, String>,
+    completedContinents: Set<String>
+): MergedMapPaths {
+    val visitedFill = Path()
+    val unvisitedFill = Path()
+    val completedStroke = Path()
+    val visitedStroke = Path()
+    val unvisitedStroke = Path()
+
+    mapPaths.forEach { countryPath ->
+        val countryCode = countryPath.countryCode
+        val isVisited = visitedCountries.contains(countryCode)
+        val continent = countryToContinent[countryCode]
+        val isContinentCompleted = continent != null && completedContinents.contains(continent)
+
+        val fillTarget = if (isVisited) visitedFill else unvisitedFill
+        val strokeTarget = when {
+            isContinentCompleted -> completedStroke
+            isVisited -> visitedStroke
+            else -> unvisitedStroke
+        }
+
+        countryPath.paths.forEach { path ->
+            val androidPath = path.asAndroidPath()
+            fillTarget.addPath(androidPath)
+            strokeTarget.addPath(androidPath)
+        }
+    }
+
+    return MergedMapPaths(
+        visitedFill = visitedFill.asComposePath(),
+        unvisitedFill = unvisitedFill.asComposePath(),
+        completedStroke = completedStroke.asComposePath(),
+        visitedStroke = visitedStroke.asComposePath(),
+        unvisitedStroke = unvisitedStroke.asComposePath()
+    )
+}
 
 @Composable
 fun InteractiveWorldMap(
@@ -31,12 +89,25 @@ fun InteractiveWorldMap(
     selectedRoute: FlightRoute? = null,
     animationProgress: Float = 0f
 ) {
+    val merged = remember(mapPaths, visitedCountries, countryToContinent, completedContinents) {
+        buildMergedMapPaths(mapPaths, visitedCountries, countryToContinent, completedContinents)
+    }
+
     Box(
         modifier = modifier
             .background(Color(0xFF0F172A)) // Slate 900 background
             .aspectRatio(784.077f / 458.627f) // Keep SVG aspect ratio
     ) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
+        Canvas(
+            modifier = Modifier
+                .fillMaxSize()
+                // Own graphics layer: the map is ~1000 drawPath calls (a fill pass plus a
+                // border pass over every country) but its content is static. With its own
+                // render node the display list is recorded once and merely re-positioned
+                // while the profile list scrolls, instead of re-executing every path on
+                // each frame — which was costing frames over budget during scrolling.
+                .graphicsLayer { }
+        ) {
             if (mapPaths.isEmpty()) return@Canvas
 
             val mapWidth = 784.077f
@@ -52,51 +123,26 @@ fun InteractiveWorldMap(
             translate(left = offsetX, top = offsetY) {
                 scale(scale = scale, pivot = androidx.compose.ui.geometry.Offset.Zero) {
                     translate(left = -30.767f, top = -241.591f) {
-                        // 1. Draw all country fills
-                        mapPaths.forEach { countryPath ->
-                            val countryCode = countryPath.countryCode
-                            val isVisited = visitedCountries.contains(countryCode)
-                            
-                            val fillColor = if (isVisited) {
-                                Color(0xFFF59E0B) // Amber / Orange
-                            } else {
-                                Color(0xFF1E293B) // Slate 800 (dark unvisited)
-                            }
+                        // 1. Draw all country fills (one merged path per fill color)
+                        drawPath(path = merged.unvisitedFill, color = Color(0xFF1E293B)) // Slate 800
+                        drawPath(path = merged.visitedFill, color = Color(0xFFF59E0B)) // Amber / Orange
 
-                            countryPath.paths.forEach { path ->
-                                drawPath(
-                                    path = path,
-                                    color = fillColor
-                                )
-                            }
-                        }
-
-                        // 2. Draw country borders/outlines
-                        mapPaths.forEach { countryPath ->
-                            val countryCode = countryPath.countryCode
-                            val isVisited = visitedCountries.contains(countryCode)
-                            val continent = countryToContinent[countryCode]
-                            val isContinentCompleted = continent != null && completedContinents.contains(continent)
-
-                            val strokeColor = when {
-                                isContinentCompleted -> Color(0xFF10B981) // Emerald / Green for completed continents
-                                isVisited -> Color(0xFFCBD5E1) // Silver / Slate 300 for visited
-                                else -> Color(0xFF94A3B8) // Muted Silver / Slate 400 for unvisited
-                            }
-
-                            val strokeWidth = when {
-                                isContinentCompleted -> 1.8f / scale // Thicker green outline
-                                else -> 0.7f / scale // Slightly thicker standard border
-                            }
-
-                            countryPath.paths.forEach { path ->
-                                drawPath(
-                                    path = path,
-                                    color = strokeColor,
-                                    style = Stroke(width = strokeWidth)
-                                )
-                            }
-                        }
+                        // 2. Draw country borders/outlines (one merged path per stroke bucket)
+                        drawPath(
+                            path = merged.unvisitedStroke,
+                            color = Color(0xFF94A3B8), // Muted Silver / Slate 400 for unvisited
+                            style = Stroke(width = 0.7f / scale)
+                        )
+                        drawPath(
+                            path = merged.visitedStroke,
+                            color = Color(0xFFCBD5E1), // Silver / Slate 300 for visited
+                            style = Stroke(width = 0.7f / scale)
+                        )
+                        drawPath(
+                            path = merged.completedStroke,
+                            color = Color(0xFF10B981), // Emerald / Green for completed continents
+                            style = Stroke(width = 1.8f / scale) // Thicker green outline
+                        )
 
                         // 3. Draw routes if origin is present
                         originAirport?.let { origin ->
