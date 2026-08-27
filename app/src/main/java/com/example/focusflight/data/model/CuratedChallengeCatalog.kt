@@ -1,7 +1,7 @@
 package com.example.focusflight.data.model
 
 /**
- * A curated challenge template a player can start (from the Phase 3b quest log, not built yet) -
+ * A curated challenge template a player can start (from the Hub's quest log) -
  * name/description/definition, but no instance state: `ChallengeRepository.startCuratedChallenge`
  * assigns an id, position pointer (Route), and zeroed progress when it instantiates a [Challenge]
  * row from one of these. A handful of real examples per type, per docs/design/challenges.md's

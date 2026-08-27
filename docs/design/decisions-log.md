@@ -3,6 +3,42 @@
 Running log, newest first. One entry per decision, with the "why" —
 so future-us (or a future session) doesn't have to re-litigate it.
 
+## 2026-08-27 — Implementation complete
+
+All five feature files (core-loop, story-mode, free-mode, challenges,
+achievements) are now built, in 7 sequential commits: a dedup refactor
+(`d1f8d70`), mode-tag plumbing (`e0e5003`), Free Mode (`940a1b6`),
+Challenges backend (`0c41e41`), Challenges UI + landing sequencing
+(`877704c`), Achievements (`784371d`), and Story Mode's home-base+
+return (`ff5ae25`). Every commit was independently verified (build +
+full test suite, including the native Cesium build) and reviewed
+against its own diff before being committed — not just against the
+implementing agent's self-report.
+
+Each phase's own commit message has the detailed "what changed and
+why." Worth recording here, in one place, what's *accepted as a known
+v1 limitation* rather than a bug to chase further right now:
+
+- **Route challenge progress can legitimately decrease** (the
+  straight-line-distance proxy formula) and **dead ends have no exit
+  but abandon** — both called out as accepted limitations back when
+  `challenges.md` was written, unchanged by implementation. Revisit
+  once there's real usage data.
+- **The Hub's displayed state was stale after `popBackStack()` from
+  Account/Passport** following a return-home teleport (a direct state
+  mutation with no session/nav round-trip to force a fresh Hub
+  reload) — this was a real gap, not an accepted one, found and fixed
+  during the final phase's review, not shipped as a known issue. See
+  `ff5ae25`.
+- **Streaks** remains shelved, exactly as decided originally — not
+  touched by this implementation pass.
+
+Not done as part of this pass, deliberately: pushing these commits to
+`origin/main` (all local only), and flipping the design docs' status
+badges from 🟢 decided to anything else — that's a call for whoever
+reviews this to make explicitly, not something to change quietly as a
+side effect of writing the code.
+
 ## 2026-08-27
 
 - **`codebase-map.md` added** after two read-only exploration passes
