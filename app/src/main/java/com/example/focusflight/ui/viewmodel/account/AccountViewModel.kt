@@ -7,11 +7,15 @@ import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.paging.PagingData
 import androidx.paging.cachedIn
+import com.example.focusflight.data.model.AchievementProgress
+import com.example.focusflight.data.model.AchievementStatus
+import com.example.focusflight.data.model.Challenge
 import com.example.focusflight.data.model.ContinentStats
 import com.example.focusflight.data.model.FlightHighlights
 import com.example.focusflight.data.model.FlightLog
 import com.example.focusflight.data.model.FlightSortOrder
 import com.example.focusflight.data.repository.AirportRepository
+import com.example.focusflight.data.repository.ChallengeRepository
 import com.example.focusflight.data.repository.FlightLogRepository
 import com.example.focusflight.data.repository.UserRepository
 import kotlinx.coroutines.Dispatchers
@@ -52,7 +56,15 @@ data class AccountUiState(
     // Highlights Card Data
     val highlights: FlightHighlights = FlightHighlights(),
     val sortOrder: FlightSortOrder = FlightSortOrder.DATE_DESC,
-    
+
+    // Achievements Data (docs/design/achievements.md) - computed reactively from flightHistory/
+    // geography above, not persisted (see AchievementProgress's doc comment). Story Mode only,
+    // except completedChallenges which is achievements.md's one confirmed cross-mode exception.
+    val geographicAchievements: List<AchievementStatus> = emptyList(),
+    val distanceAchievements: List<AchievementStatus> = emptyList(),
+    val behavioralAchievements: List<AchievementStatus> = emptyList(),
+    val completedChallenges: List<Challenge> = emptyList(),
+
     val isLoading: Boolean = true
 )
 
@@ -61,7 +73,8 @@ class AccountViewModel(
     private val context: android.content.Context,
     private val userRepository: UserRepository,
     private val flightLogRepository: FlightLogRepository,
-    private val airportRepository: AirportRepository
+    private val airportRepository: AirportRepository,
+    private val challengeRepository: ChallengeRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AccountUiState())
@@ -129,6 +142,19 @@ class AccountViewModel(
                 // 4. Derive visited countries / continent breakdown (shared with FlightSearchViewModel)
                 val geography = airportRepository.getVisitedGeography(history, homeIata)
 
+                // 5. Achievements (docs/design/achievements.md) - computed on-demand from the
+                // same STORY-scoped geography + full flight history every other card above already
+                // uses, not from any new persisted state. `history` is unfiltered (every mode),
+                // but AchievementProgress.evaluateDistance/evaluateBehavioral filter to STORY
+                // internally themselves, mirroring getVisitedGeography's own filtering.
+                val achievements = AchievementProgress.evaluateAll(geography, history)
+
+                // 6. Completed-challenges log (achievements.md's cross-mode exception) - a flat
+                // log, refetched alongside flightHistory since every landing (any mode) writes a
+                // flight_log row, so this flow re-emitting is a reasonable-enough freshness signal
+                // without a dedicated Flow from ChallengeRepository.
+                val completedChallenges = challengeRepository.listCompletedChallenges()
+
                 _uiState.update { state ->
                     state.copy(
                         totalFlights = stats.totalFlights,
@@ -141,6 +167,10 @@ class AccountViewModel(
                         countryToContinent = geography.countryToContinent,
                         mapPaths = mapPaths,
                         highlights = highlights,
+                        geographicAchievements = achievements.geographic,
+                        distanceAchievements = achievements.distance,
+                        behavioralAchievements = achievements.behavioral,
+                        completedChallenges = completedChallenges,
                         isLoading = false
                     )
                 }
@@ -169,12 +199,13 @@ class AccountViewModelFactory(
     private val context: android.content.Context,
     private val userRepository: UserRepository,
     private val flightLogRepository: FlightLogRepository,
-    private val airportRepository: AirportRepository
+    private val airportRepository: AirportRepository,
+    private val challengeRepository: ChallengeRepository
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(AccountViewModel::class.java)) {
-            return AccountViewModel(context, userRepository, flightLogRepository, airportRepository) as T
+            return AccountViewModel(context, userRepository, flightLogRepository, airportRepository, challengeRepository) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

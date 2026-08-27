@@ -10,9 +10,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.AirplanemodeActive
+import androidx.compose.material.icons.outlined.EmojiEvents
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.StarHalf
 import androidx.compose.material3.CircularProgressIndicator
@@ -132,6 +134,40 @@ fun AccountScreen(
                 item { SectionHeader(icon = Icons.Outlined.StarHalf, title = "FLIGHT HIGHLIGHTS") }
                 item { FlightHighlightsRow(uiState.highlights) }
 
+                // ── Achievements (docs/design/achievements.md) ────────────────
+                // Four category types: three progress-bar categories rendered via AchievementsCard
+                // (every achievement always visible with progress shown, never mystery/"???" -
+                // achievements.md's "Reveal style"), plus the Challenges-completed flat log (the
+                // one confirmed cross-mode exception - see ChallengeCompletionEntry).
+                item { SectionHeader(icon = Icons.Outlined.EmojiEvents, title = "ACHIEVEMENTS") }
+                item { AchievementSubsectionLabel("GEOGRAPHIC") }
+                item { AchievementsCard(uiState.geographicAchievements) }
+                item { AchievementSubsectionLabel("DISTANCE MILESTONES") }
+                item { AchievementsCard(uiState.distanceAchievements) }
+                item { AchievementSubsectionLabel("BEHAVIORAL") }
+                item { AchievementsCard(uiState.behavioralAchievements) }
+
+                item { AchievementSubsectionLabel("CHALLENGES COMPLETED") }
+                if (uiState.completedChallenges.isEmpty()) {
+                    item {
+                        Text(
+                            text = "No challenges completed yet.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Haze
+                        )
+                    }
+                } else {
+                    itemsIndexed(
+                        items = uiState.completedChallenges,
+                        key = { index, challenge -> "completed_challenge_${challenge.id}_$index" }
+                    ) { index, challenge ->
+                        ChallengeCompletionEntry(
+                            challenge = challenge,
+                            entryNumber = uiState.completedChallenges.size - index
+                        )
+                    }
+                }
+
                 // ── Flight History Header + Sorting Bar ───────────────────────
                 item {
                     Row(
@@ -190,6 +226,22 @@ fun AccountScreen(
             }
         }
     }
+}
+
+/** A lighter-weight sub-heading than [SectionHeader] - no icon, no Amber - for the three
+ *  progress-bar achievement categories and the completed-challenges log nested under the single
+ *  "ACHIEVEMENTS" [SectionHeader], so they read as subsections of one section rather than three
+ *  more top-level sections at the same visual weight as FLIGHT HISTORY etc. */
+@Composable
+private fun AchievementSubsectionLabel(title: String) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.labelMedium.copy(
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.5.sp
+        ),
+        color = Haze
+    )
 }
 
 @Composable

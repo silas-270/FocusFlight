@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -95,27 +96,34 @@ internal object PaperGrainTexture {
     }
 }
 
-@Composable
-internal fun LogbookEntry(flight: FlightLog, entryNumber: Int) {
-    val dateStr = remember(flight.completedAt) {
-        SimpleDateFormat("dd MMM yyyy", Locale.US).format(Date(flight.completedAt))
-    }
-    val hoursInt = flight.durationMin / 60
-    val minutesInt = flight.durationMin % 60
-    val durationStr = String.format(Locale.US, "%02dh%02dm", hoursInt, minutesInt)
-    val distanceStr = com.example.focusflight.util.formatMiles(flight.distanceKm)
+// ── Shared paper palette (used by both LogPaperCard's own drawing and callers' content) ────
+internal val LogbookInkDark   = Color(0xFF1A1208)   // near-black ink
+internal val LogbookInkMid    = Color(0xFF6B5033)   // warm sepia mid-tone
+internal val LogbookInkFaint  = Color(0xFFB09870)   // faded sepia labels
+internal val LogbookMarginRed = Color(0xFFCC1C1C)   // bright red margin / rubber-stamp color
 
-    // ── Paper palette ──────────────────────────────────────────────────────
+/**
+ * The logbook's paper-card chrome — parchment texture, ruled lines, red margin line, and the
+ * numbered margin stamp — factored out of what was originally [LogbookEntry]'s entire body so a
+ * second log (the Achievements screen's "Challenges completed" log, modeled on this one per
+ * docs/design/achievements.md) can render as the same physical logbook instead of re-implementing
+ * this Canvas work or inventing a second visual language. [content] fills the row to the right of
+ * the margin stamp, e.g. [LogbookEntry]'s three data rows or `ChallengeCompletionEntry`'s own.
+ */
+@Composable
+internal fun LogPaperCard(
+    entryNumber: Int,
+    modifier: Modifier = Modifier,
+    content: @Composable RowScope.() -> Unit
+) {
+    // ── Paper palette (local to the Canvas drawing below) ──────────────────
     val parchment      = Color(0xFFF5E6C0)   // aged cream
     val parchmentDark  = Color(0xFFEDD89A)   // slightly more yellowed patch
     val ruleBlue       = Color(0xFF8EB4D4).copy(alpha = 0.55f)   // classic ink-blue lines
-    val marginRed      = Color(0xFFCC1C1C)   // bright red margin
-    val inkDark        = Color(0xFF1A1208)   // near-black ink
-    val inkMid         = Color(0xFF6B5033)   // warm sepia mid-tone
-    val inkFaint       = Color(0xFFB09870)   // faded sepia labels
+    val marginRed      = LogbookMarginRed
 
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
     ) {
@@ -204,89 +212,109 @@ internal fun LogbookEntry(flight: FlightLog, entryNumber: Int) {
 
             Spacer(Modifier.width(10.dp))
 
-            // ── Main data columns ──
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+            content()
+        }
+    }
+}
+
+@Composable
+internal fun LogbookEntry(flight: FlightLog, entryNumber: Int) {
+    val dateStr = remember(flight.completedAt) {
+        SimpleDateFormat("dd MMM yyyy", Locale.US).format(Date(flight.completedAt))
+    }
+    val hoursInt = flight.durationMin / 60
+    val minutesInt = flight.durationMin % 60
+    val durationStr = String.format(Locale.US, "%02dh%02dm", hoursInt, minutesInt)
+    val distanceStr = com.example.focusflight.util.formatMiles(flight.distanceKm)
+
+    val inkDark   = LogbookInkDark
+    val inkMid    = LogbookInkMid
+    val inkFaint  = LogbookInkFaint
+    val marginRed = LogbookMarginRed
+
+    LogPaperCard(entryNumber = entryNumber) {
+        // ── Main data columns ──
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            // Row 1: DATE on left, flight number stamp on right
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                // Row 1: DATE on left, flight number stamp on right
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                Text(
+                    text = dateStr.uppercase(),
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 9.sp,
+                        letterSpacing = 1.2.sp
+                    ),
+                    color = inkFaint
+                )
+                // Flight number — rubber-stamp style
+                Box(
+                    modifier = Modifier
+                        .border(1.dp, marginRed.copy(alpha = 0.55f), RoundedCornerShape(3.dp))
+                        .padding(horizontal = 5.dp, vertical = 1.dp)
                 ) {
                     Text(
-                        text = dateStr.uppercase(),
+                        text = flight.flightNumber,
                         style = MaterialTheme.typography.labelSmall.copy(
                             fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold,
                             fontSize = 9.sp,
-                            letterSpacing = 1.2.sp
+                            letterSpacing = 0.8.sp
                         ),
-                        color = inkFaint
+                        color = marginRed.copy(alpha = 0.75f)
                     )
-                    // Flight number — rubber-stamp style
-                    Box(
-                        modifier = Modifier
-                            .border(1.dp, marginRed.copy(alpha = 0.55f), RoundedCornerShape(3.dp))
-                            .padding(horizontal = 5.dp, vertical = 1.dp)
-                    ) {
-                        Text(
-                            text = flight.flightNumber,
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontFamily = FontFamily.Monospace,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 9.sp,
-                                letterSpacing = 0.8.sp
-                            ),
-                            color = marginRed.copy(alpha = 0.75f)
-                        )
-                    }
                 }
+            }
 
-                // Row 2: ORIGIN ··✈·· DEST
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        text = flight.originIata,
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontFamily = FontFamily.Monospace,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp,
-                            letterSpacing = 1.5.sp
-                        ),
-                        color = inkDark
-                    )
-                    Text(
-                        text = "·  ·  ·  ✈  ·  ·  ·",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 8.sp,
-                            letterSpacing = 0.sp
-                        ),
-                        color = inkMid.copy(alpha = 0.45f)
-                    )
-                    Text(
-                        text = flight.destIata,
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontFamily = FontFamily.Monospace,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp,
-                            letterSpacing = 1.5.sp
-                        ),
-                        color = inkDark
-                    )
-                }
+            // Row 2: ORIGIN ··✈·· DEST
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = flight.originIata,
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        letterSpacing = 1.5.sp
+                    ),
+                    color = inkDark
+                )
+                Text(
+                    text = "·  ·  ·  ✈  ·  ·  ·",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 8.sp,
+                        letterSpacing = 0.sp
+                    ),
+                    color = inkMid.copy(alpha = 0.45f)
+                )
+                Text(
+                    text = flight.destIata,
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        letterSpacing = 1.5.sp
+                    ),
+                    color = inkDark
+                )
+            }
 
-                // Row 3: DIST | TIME
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    LogbookDataCell(label = "DIST", value = distanceStr, labelColor = inkFaint, valueColor = inkMid)
-                    LogbookDataCell(label = "TIME", value = durationStr, labelColor = inkFaint, valueColor = inkMid)
-                }
+            // Row 3: DIST | TIME
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                LogbookDataCell(label = "DIST", value = distanceStr, labelColor = inkFaint, valueColor = inkMid)
+                LogbookDataCell(label = "TIME", value = durationStr, labelColor = inkFaint, valueColor = inkMid)
             }
         }
     }

@@ -30,6 +30,16 @@ interface ChallengeRepository {
     fun listActiveChallengesFlow(): Flow<List<Challenge>>
     suspend fun getChallenge(id: Int): Challenge?
 
+    /**
+     * Every completed challenge (curated or custom, duplicates included for repeat completions of
+     * the same one), newest first - the data source for the Achievements screen's "Challenges
+     * completed" log (docs/design/achievements.md). Cross-mode exception per achievements.md's
+     * "Scope & isolation": this is the one place a CHALLENGE-tagged flight's effect (completing a
+     * Route challenge) or any mode's Distance/Set-completion crediting surfaces in Achievements,
+     * display/recognition only - it grants nothing Story-Mode-scoped.
+     */
+    suspend fun listCompletedChallenges(): List<Challenge>
+
     suspend fun startCuratedChallenge(catalogId: String): StartChallengeResult
     suspend fun startCustomRouteChallenge(originIata: String, destIata: String, name: String): StartChallengeResult
     suspend fun startCustomDistanceChallenge(targetDistanceKm: Double, name: String): StartChallengeResult

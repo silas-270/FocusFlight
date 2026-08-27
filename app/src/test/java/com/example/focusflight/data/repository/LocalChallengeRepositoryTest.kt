@@ -60,6 +60,11 @@ class LocalChallengeRepositoryTest {
 
         override suspend fun countByStatus(userId: Int, status: ChallengeStatus): Int =
             rows.values.count { it.userId == userId && it.status == status }
+
+        override suspend fun getByStatusOrderedByCompletedAt(userId: Int, status: ChallengeStatus): List<Challenge> =
+            rows.values
+                .filter { it.userId == userId && it.status == status }
+                .sortedByDescending { it.completedAt ?: 0L }
     }
 
     private class FakeUserProfileDao(private val profile: UserProfile) : UserProfileDao {
