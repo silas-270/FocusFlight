@@ -5,6 +5,7 @@ import com.example.focusflight.data.local.FlightLogDao
 import com.example.focusflight.data.local.UserProfileDao
 import com.example.focusflight.data.model.FlightLog
 import com.example.focusflight.data.model.FlightHighlights
+import com.example.focusflight.data.model.FlightMode
 import com.example.focusflight.data.model.FlightSortOrder
 import com.example.focusflight.data.model.FlightStats
 import kotlinx.coroutines.flow.Flow
@@ -25,7 +26,8 @@ class LocalFlightLogRepository(
         originIata: String,
         destIata: String,
         durationMin: Int,
-        distanceKm: Double
+        distanceKm: Double,
+        mode: FlightMode
     ): FlightLog {
         val userId = getUserId()
         val log = FlightLog(
@@ -35,7 +37,8 @@ class LocalFlightLogRepository(
             destIata = destIata,
             durationMin = durationMin,
             distanceKm = distanceKm,
-            completedAt = System.currentTimeMillis()
+            completedAt = System.currentTimeMillis(),
+            mode = mode
         )
         val id = flightLogDao.insertFlightLog(log)
         return log.copy(id = id.toInt())

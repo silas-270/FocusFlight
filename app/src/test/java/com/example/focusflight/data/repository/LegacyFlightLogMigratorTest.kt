@@ -4,6 +4,7 @@ import androidx.paging.PagingSource
 import com.example.focusflight.data.model.Airport
 import com.example.focusflight.data.model.FlightHighlights
 import com.example.focusflight.data.model.FlightLog
+import com.example.focusflight.data.model.FlightMode
 import com.example.focusflight.data.model.FlightRoute
 import com.example.focusflight.data.model.FlightSortOrder
 import com.example.focusflight.data.model.FlightStats
@@ -46,7 +47,8 @@ class LegacyFlightLogMigratorTest {
             originIata: String,
             destIata: String,
             durationMin: Int,
-            distanceKm: Double
+            distanceKm: Double,
+            mode: FlightMode
         ): FlightLog {
             val log = FlightLog(
                 id = loggedFlights.size,
@@ -56,7 +58,8 @@ class LegacyFlightLogMigratorTest {
                 destIata = destIata,
                 durationMin = durationMin,
                 distanceKm = distanceKm,
-                completedAt = 0L
+                completedAt = 0L,
+                mode = mode
             )
             loggedFlights.add(log)
             return log

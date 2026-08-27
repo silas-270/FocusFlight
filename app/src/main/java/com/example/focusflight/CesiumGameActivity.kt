@@ -32,6 +32,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.focusflight.data.local.AppDatabase
 import com.example.focusflight.data.local.airport.AirportRouteSqliteDataSource
+import com.example.focusflight.data.model.FlightMode
 import com.example.focusflight.data.repository.AirportRepository
 import com.example.focusflight.data.repository.LocalAirportRepository
 import com.example.focusflight.data.repository.FlightLogRepository
@@ -212,7 +213,8 @@ class CesiumGameActivity : GameActivity() {
                                             withContext(Dispatchers.IO) {
                                                 pendingFlightLoader.loadPendingFlight(originIata, destIata, durationMin)
                                             }
-                                            navController.navigate(Screen.InFlight.createRoute(flightNo, destIata, durationMin))
+                                            // Only STORY flights persist an active-flight context to resume today.
+                                            navController.navigate(Screen.InFlight.createRoute(flightNo, destIata, durationMin, FlightMode.STORY))
                                         }
                                     },
                                     onPassportClick = {
@@ -241,7 +243,10 @@ class CesiumGameActivity : GameActivity() {
                                             withContext(Dispatchers.IO) {
                                                 pendingFlightLoader.loadPendingFlight(originIata, route.destIata, durationMin)
                                             }
-                                            navController.navigate(Screen.CheckIn.createRoute(flightNo, route.destIata, durationMin))
+                                            // Flight Search only ever books a normal Story Mode flight today -
+                                            // Free Mode / Challenges (later phases) will have their own booking
+                                            // entry points that pass a different tag here.
+                                            navController.navigate(Screen.CheckIn.createRoute(flightNo, route.destIata, durationMin, FlightMode.STORY))
                                         }
                                     }
                                 )
@@ -253,12 +258,16 @@ class CesiumGameActivity : GameActivity() {
                                 arguments = listOf(
                                     navArgument("flightNo") { type = NavType.StringType },
                                     navArgument("destIata") { type = NavType.StringType },
-                                    navArgument("durationMin") { type = NavType.IntType }
+                                    navArgument("durationMin") { type = NavType.IntType },
+                                    navArgument("mode") { type = NavType.StringType }
                                 )
                             ) { backStackEntry ->
                                 val flightNo = backStackEntry.arguments?.getString("flightNo") ?: ""
                                 val destIata = backStackEntry.arguments?.getString("destIata") ?: ""
                                 val durationMin = backStackEntry.arguments?.getInt("durationMin") ?: 0
+                                val mode = backStackEntry.arguments?.getString("mode")
+                                    ?.let { runCatching { FlightMode.valueOf(it) }.getOrDefault(FlightMode.STORY) }
+                                    ?: FlightMode.STORY
 
                                 val viewModel: CheckInViewModel = viewModel(
                                     factory = CheckInViewModelFactory(airportRepository, preferencesRepository, destIata, flightNo)
@@ -272,7 +281,7 @@ class CesiumGameActivity : GameActivity() {
                                     onStartFlight = { fn, di, dm ->
                                         preferencesRepository.clearActiveFlightProgress(fn)
                                         preferencesRepository.saveActiveFlightContext(fn, di, dm)
-                                        navController.navigate(Screen.InFlight.createRoute(fn, di, dm)) {
+                                        navController.navigate(Screen.InFlight.createRoute(fn, di, dm, mode)) {
                                             popUpTo(Screen.CheckIn.route) { inclusive = true }
                                         }
                                     }
@@ -285,22 +294,26 @@ class CesiumGameActivity : GameActivity() {
                                 arguments = listOf(
                                     navArgument("flightNo") { type = NavType.StringType },
                                     navArgument("destIata") { type = NavType.StringType },
-                                    navArgument("durationMin") { type = NavType.IntType }
+                                    navArgument("durationMin") { type = NavType.IntType },
+                                    navArgument("mode") { type = NavType.StringType }
                                 )
                             ) { backStackEntry ->
                                 val flightNo = backStackEntry.arguments?.getString("flightNo") ?: ""
                                 val destIata = backStackEntry.arguments?.getString("destIata") ?: ""
                                 val durationMin = backStackEntry.arguments?.getInt("durationMin") ?: 0
+                                val mode = backStackEntry.arguments?.getString("mode")
+                                    ?.let { runCatching { FlightMode.valueOf(it) }.getOrDefault(FlightMode.STORY) }
+                                    ?: FlightMode.STORY
 
                                 val viewModel: InFlightViewModel = viewModel(
-                                    factory = InFlightViewModelFactory(airportRepository, preferencesRepository, flightLogRepository, cacheDir, flightNo, destIata, durationMin)
+                                    factory = InFlightViewModelFactory(airportRepository, preferencesRepository, flightLogRepository, cacheDir, flightNo, destIata, durationMin, mode)
                                 )
 
                                 InFlightScreen(
                                     viewModel = viewModel,
                                     onLandingCelebration = { rank ->
                                         preferencesRepository.clearActiveFlightContext()
-                                        navController.navigate(Screen.ArrivalCelebration.createRoute(flightNo, destIata, durationMin, rank)) {
+                                        navController.navigate(Screen.ArrivalCelebration.createRoute(flightNo, destIata, durationMin, rank, mode)) {
                                             popUpTo(Screen.InFlight.route) { inclusive = true }
                                         }
                                     },
@@ -319,13 +332,21 @@ class CesiumGameActivity : GameActivity() {
                                     navArgument("flightNo") { type = NavType.StringType },
                                     navArgument("destIata") { type = NavType.StringType },
                                     navArgument("durationMin") { type = NavType.IntType },
-                                    navArgument("rank") { type = NavType.StringType }
+                                    navArgument("rank") { type = NavType.StringType },
+                                    navArgument("mode") { type = NavType.StringType }
                                 )
                             ) { backStackEntry ->
                                 val flightNo = backStackEntry.arguments?.getString("flightNo") ?: ""
                                 val destIata = backStackEntry.arguments?.getString("destIata") ?: ""
                                 val durationMin = backStackEntry.arguments?.getInt("durationMin") ?: 0
                                 val rank = backStackEntry.arguments?.getString("rank") ?: ""
+                                // Threaded through for later phases (e.g. a challenge-progress
+                                // beat after the rank stamp, per mechanics.md's post-landing
+                                // pipeline step 5). Not consumed by this screen yet.
+                                @Suppress("UNUSED_VARIABLE")
+                                val mode = backStackEntry.arguments?.getString("mode")
+                                    ?.let { runCatching { FlightMode.valueOf(it) }.getOrDefault(FlightMode.STORY) }
+                                    ?: FlightMode.STORY
 
                                 ArrivalCelebrationScreen(
                                     flightNo = flightNo,
