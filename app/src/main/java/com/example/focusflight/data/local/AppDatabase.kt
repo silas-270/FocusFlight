@@ -7,18 +7,20 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.example.focusflight.data.model.Challenge
 import com.example.focusflight.data.model.FlightLog
 import com.example.focusflight.data.model.UserProfile
 
 @Database(
-    entities = [UserProfile::class, FlightLog::class],
-    version = 2,
+    entities = [UserProfile::class, FlightLog::class, Challenge::class],
+    version = 3,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun userProfileDao(): UserProfileDao
     abstract fun flightLogDao(): FlightLogDao
+    abstract fun challengeDao(): ChallengeDao
 
     companion object {
         @Volatile
@@ -35,6 +37,44 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** Adds the single challenges store (all three types, curated and custom alike) - see
+         *  Challenge/docs/design/challenges.md#persistence--route-scoping. Brand-new table, no
+         *  pre-existing rows to backfill, so every column is a plain NOT NULL/nullable per the
+         *  entity's own Kotlin type - no SQL-level DEFAULT is needed since Room always supplies
+         *  every column on insert. */
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `challenges` (
+                        `id` INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                        `user_id` INTEGER NOT NULL,
+                        `type` TEXT NOT NULL,
+                        `source` TEXT NOT NULL,
+                        `status` TEXT NOT NULL,
+                        `name` TEXT NOT NULL,
+                        `description` TEXT NOT NULL,
+                        `origin_iata` TEXT,
+                        `dest_iata` TEXT,
+                        `position_iata` TEXT,
+                        `route_progress_fraction` REAL NOT NULL,
+                        `set_catalog_id` TEXT,
+                        `set_member_kind` TEXT,
+                        `set_total_members` INTEGER NOT NULL,
+                        `set_visited_members` TEXT NOT NULL,
+                        `target_distance_km` REAL,
+                        `cumulative_distance_km` REAL NOT NULL,
+                        `started_at` INTEGER NOT NULL,
+                        `completed_at` INTEGER,
+                        FOREIGN KEY(`user_id`) REFERENCES `user_profile`(`id`) ON DELETE CASCADE
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_challenges_user_id` ON `challenges` (`user_id`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_challenges_user_id_status` ON `challenges` (`user_id`, `status`)")
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -42,7 +82,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "user_data.db"
                 )
-                    .addMigrations(MIGRATION_1_2)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                     .build()
                 INSTANCE = instance
                 instance

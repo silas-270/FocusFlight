@@ -7,8 +7,10 @@ import com.example.focusflight.data.model.Airport
 import com.example.focusflight.data.model.FlightMode
 import com.example.focusflight.data.model.FlightRoute
 import com.example.focusflight.data.repository.AirportRepository
+import com.example.focusflight.data.repository.ChallengeRepository
 import com.example.focusflight.data.repository.FlightLogRepository
 import com.example.focusflight.data.repository.PreferencesRepository
+import com.example.focusflight.data.repository.processLandingForChallenges
 import com.example.focusflight.engine.headless.CesiumHeadlessMapRenderer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -44,12 +46,18 @@ class InFlightViewModel(
     private val airportRepository: AirportRepository,
     private val preferencesRepository: PreferencesRepository,
     private val flightLogRepository: FlightLogRepository,
+    private val challengeRepository: ChallengeRepository,
     private val cacheDir: java.io.File,
     val flightNumber: String,
     val originIata: String,
     val destIata: String,
     val durationMin: Int,
-    val mode: FlightMode = FlightMode.STORY
+    val mode: FlightMode = FlightMode.STORY,
+    /** Which Route challenge this CHALLENGE-tagged session is scoped to (see
+     *  docs/design/challenges.md#persistence--route-scoping) - null for STORY/FREE, and
+     *  meaningless when [mode] isn't CHALLENGE. Threaded through the same nav-arg mechanism
+     *  Phase 2 used for [originIata] (see Screen.InFlight). */
+    val challengeId: Int? = null
 ) : ViewModel() {
 
     private val _originAirport = MutableStateFlow<Airport?>(null)
@@ -256,16 +264,20 @@ class InFlightViewModel(
     }
 
     // ── Post-landing pipeline step 4 (docs/design/mechanics.md) ─────────────────────────
-    // Every eligible flight (STORY or CHALLENGE - never FREE) is meant to be checked against
-    // all achievements and all active challenges here, then the result surfaced to
-    // InFlightScreen's landing sequence per mechanics.md's step 5. Intentionally a no-op stub:
-    // achievements and challenges don't exist yet (Phase 3/4 build them). This seam exists so
-    // those phases have exactly one place to add that check, rather than re-threading
-    // completeFlight() again.
+    // Every eligible flight (STORY or CHALLENGE - never FREE) is checked against all active
+    // challenges here, then (eventually) the result surfaced to InFlightScreen's landing
+    // sequence per mechanics.md's step 5. The challenge half is real as of Phase 3 - it delegates
+    // to processLandingForChallenges (a standalone, JNI-free function so it's unit-testable
+    // without instantiating this ViewModel - see ChallengeLandingTest). The achievement half
+    // stays a stub for Phase 4.
     private fun checkAchievementsAndChallenges() {
-        // TODO(Phase 3 - challenges, Phase 4 - achievements): if mode != FlightMode.FREE,
-        // evaluate this flight against active challenges / achievements and surface the result
-        // to the arrival flow. No-op today.
+        // TODO(Phase 4 - achievements): evaluate this flight against achievements too, and
+        // surface both results to the arrival flow (mechanics.md's step 5 sequencing). No-op
+        // for achievements today.
+        val distanceKm = _routeDetails.value?.distanceKm ?: 0.0
+        viewModelScope.launch(Dispatchers.IO) {
+            processLandingForChallenges(challengeRepository, mode, challengeId, destIata, distanceKm)
+        }
     }
 
     private var renderJob: kotlinx.coroutines.Job? = null
@@ -326,17 +338,19 @@ class InFlightViewModelFactory(
     private val airportRepository: AirportRepository,
     private val preferencesRepository: PreferencesRepository,
     private val flightLogRepository: FlightLogRepository,
+    private val challengeRepository: ChallengeRepository,
     private val cacheDir: java.io.File,
     private val flightNumber: String,
     private val originIata: String,
     private val destIata: String,
     private val durationMin: Int,
-    private val mode: FlightMode = FlightMode.STORY
+    private val mode: FlightMode = FlightMode.STORY,
+    private val challengeId: Int? = null
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(InFlightViewModel::class.java)) {
-            return InFlightViewModel(airportRepository, preferencesRepository, flightLogRepository, cacheDir, flightNumber, originIata, destIata, durationMin, mode) as T
+            return InFlightViewModel(airportRepository, preferencesRepository, flightLogRepository, challengeRepository, cacheDir, flightNumber, originIata, destIata, durationMin, mode, challengeId) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }
