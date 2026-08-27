@@ -5,25 +5,32 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.focusflight.data.model.Airport
+import com.example.focusflight.data.model.FlightMode
 import com.example.focusflight.data.model.FlightRoute
 import com.example.focusflight.data.repository.AirportRepository
 import com.example.focusflight.data.repository.PreferencesRepository
 import com.example.focusflight.data.repository.UserRepository
 import com.example.focusflight.data.repository.FlightLogRepository
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 enum class SearchMode { TIME, AIRPORT }
 
+@OptIn(FlowPreview::class)
 class FlightSearchViewModel(
     private val context: android.content.Context,
     private val airportRepository: AirportRepository,
     private val preferencesRepository: PreferencesRepository,
     private val userRepository: UserRepository,
-    private val flightLogRepository: FlightLogRepository
+    private val flightLogRepository: FlightLogRepository,
+    private val mode: FlightMode = FlightMode.STORY
 ) : ViewModel() {
 
     private val _originAirport = MutableStateFlow<Airport?>(null)
@@ -53,6 +60,21 @@ class FlightSearchViewModel(
     private val _airportSearchResults = MutableStateFlow<List<FlightRoute>>(emptyList())
     val airportSearchResults: StateFlow<List<FlightRoute>> = _airportSearchResults.asStateFlow()
 
+    // ── Free Mode origin picker ──────────────────────────────────────────────────────────
+    // Story Mode's origin is always `currentAirport` (origin-locked, per docs/design/story-mode.md)
+    // - loadOrigin() below still sources it exactly as before Phase 2, unchanged. Free Mode has
+    // no origin lock (docs/design/free-mode.md), so this is the "smallest addition" the design
+    // doc asks for: a second airport search, structurally identical to the existing destination
+    // search (onAirportSearchQueryChanged/airportSearchResults above), just over
+    // `airportRepository.searchAirports()` (any airport) instead of `getOutboundRoutes()` (routes
+    // from a fixed origin) - reusing OnboardingViewModel's debounced-search pattern since that's
+    // the other place in the app that already searches airports by free text, not by route.
+    private val _originSearchQuery = MutableStateFlow("")
+    val originSearchQuery: StateFlow<String> = _originSearchQuery.asStateFlow()
+
+    private val _originSearchResults = MutableStateFlow<List<Airport>>(emptyList())
+    val originSearchResults: StateFlow<List<Airport>> = _originSearchResults.asStateFlow()
+
     // World Map Data
     val mapPaths = MutableStateFlow<List<com.example.focusflight.ui.map.CountryPath>>(emptyList())
     val visitedCountries = MutableStateFlow<Set<String>>(emptySet())
@@ -60,8 +82,45 @@ class FlightSearchViewModel(
     val completedContinents = MutableStateFlow<Set<String>>(emptySet())
 
     init {
-        loadOrigin()
+        // STORY (default): origin is the existing origin-locked behavior, untouched.
+        // FREE: origin starts unset - the screen shows the origin picker until selectOrigin()
+        // is called, instead of ever reading currentAirport.
+        if (mode == FlightMode.STORY) {
+            loadOrigin()
+        } else {
+            observeOriginSearch()
+        }
         loadMapData()
+    }
+
+    private fun observeOriginSearch() {
+        viewModelScope.launch {
+            _originSearchQuery
+                .debounce(300)
+                .collectLatest { query ->
+                    if (query.trim().length >= 2) {
+                        _originSearchResults.value = withContext(Dispatchers.IO) {
+                            airportRepository.searchAirports(query)
+                        }
+                    } else {
+                        _originSearchResults.value = emptyList()
+                    }
+                }
+        }
+    }
+
+    fun onOriginSearchQueryChanged(query: String) {
+        _originSearchQuery.value = query
+    }
+
+    /** Free Mode only: the player's chosen origin, picked from [originSearchResults]. Kicks off
+     *  the same [fetchRoutes] every origin (Story or Free) uses to populate the destination
+     *  picker, so everything downstream of this point is identical between modes. */
+    fun selectOrigin(airport: Airport) {
+        _originAirport.value = airport
+        _originSearchQuery.value = ""
+        _originSearchResults.value = emptyList()
+        fetchRoutes()
     }
 
     private fun loadMapData() {
@@ -170,8 +229,14 @@ class FlightSearchViewModel(
                 searchQuery = "",
                 sortBy = "Shortest"
             )
-            if (fetched.isEmpty()) {
-                // Fallback to LHR if user's airport has no routes so the UI isn't empty
+            // STORY only: silently rehoming the player to LHR when their locked origin has no
+            // routes is a Story Mode convenience (their origin is a fixed value they didn't pick
+            // this session, so a total dead-end needs a way out). It writes `currentAirport` as
+            // a side effect, which must never happen for a FREE-tagged session (see the
+            // isolation matrix in docs/design/mechanics.md) - a Free Mode player who deliberately
+            // picked a routeless origin just sees the existing "No flights available" empty
+            // state instead, same as picking a duration with no matching routes today.
+            if (fetched.isEmpty() && mode == FlightMode.STORY) {
                 val fallbackAirport = airportRepository.getAirportByIata("LHR")
                 if (fallbackAirport != null) {
                     _originAirport.value = fallbackAirport
@@ -214,12 +279,13 @@ class FlightSearchViewModelFactory(
     private val airportRepository: AirportRepository,
     private val preferencesRepository: PreferencesRepository,
     private val userRepository: UserRepository,
-    private val flightLogRepository: FlightLogRepository
+    private val flightLogRepository: FlightLogRepository,
+    private val mode: FlightMode = FlightMode.STORY
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(FlightSearchViewModel::class.java)) {
-            return FlightSearchViewModel(context, airportRepository, preferencesRepository, userRepository, flightLogRepository) as T
+            return FlightSearchViewModel(context, airportRepository, preferencesRepository, userRepository, flightLogRepository, mode) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

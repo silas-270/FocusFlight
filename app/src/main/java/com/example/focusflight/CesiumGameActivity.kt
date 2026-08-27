@@ -205,48 +205,69 @@ class CesiumGameActivity : GameActivity() {
                                 com.example.focusflight.ui.screens.hub.HubScreen(
                                     viewModel = viewModel,
                                     onBookFlightClick = {
-                                        navController.navigate(Screen.FlightSearch.route)
+                                        navController.navigate(Screen.FlightSearch.createRoute())
                                     },
-                                    onResumeFlightClick = { flightNo, destIata, durationMin ->
+                                    onResumeFlightClick = { context ->
                                         coroutineScope.launch {
-                                            val originIata = preferencesRepository.getCurrentAirport() ?: "STR"
                                             withContext(Dispatchers.IO) {
-                                                pendingFlightLoader.loadPendingFlight(originIata, destIata, durationMin)
+                                                pendingFlightLoader.loadPendingFlight(context.originIata, context.destIata, context.durationMin)
                                             }
-                                            // Only STORY flights persist an active-flight context to resume today.
-                                            navController.navigate(Screen.InFlight.createRoute(flightNo, destIata, durationMin, FlightMode.STORY))
+                                            // Resumes with the mode/origin the flight was actually booked under -
+                                            // previously this hardcoded FlightMode.STORY, which would have silently
+                                            // mis-tagged a resumed Free Mode flight (see docs/design/codebase-map.md).
+                                            navController.navigate(
+                                                Screen.InFlight.createRoute(context.originIata, context.flightNumber, context.destIata, context.durationMin, context.mode)
+                                            )
                                         }
                                     },
                                     onPassportClick = {
                                         navController.navigate(Screen.Account.route)
+                                    },
+                                    onFreeModeClick = {
+                                        navController.navigate(Screen.FlightSearch.createRoute(FlightMode.FREE))
                                     }
                                 )
                             }
 
                             // ── Flight Search ──
-                            composable(Screen.FlightSearch.route) {
+                            composable(
+                                route = Screen.FlightSearch.route,
+                                arguments = listOf(
+                                    navArgument("mode") {
+                                        type = NavType.StringType
+                                        defaultValue = FlightMode.STORY.name
+                                    }
+                                )
+                            ) { backStackEntry ->
+                                val mode = backStackEntry.arguments?.getString("mode")
+                                    ?.let { runCatching { FlightMode.valueOf(it) }.getOrDefault(FlightMode.STORY) }
+                                    ?: FlightMode.STORY
+
                                 val viewModel: FlightSearchViewModel = viewModel(
-                                    factory = FlightSearchViewModelFactory(applicationContext, airportRepository, preferencesRepository, userRepository, flightLogRepository)
+                                    factory = FlightSearchViewModelFactory(applicationContext, airportRepository, preferencesRepository, userRepository, flightLogRepository, mode)
                                 )
                                 val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
 
                                 FlightSearchScreen(
                                     viewModel = viewModel,
+                                    mode = mode,
                                     onBackClick = {
                                         navController.popBackStack()
                                     },
                                     onRouteConfirm = { route ->
                                         coroutineScope.launch {
-                                            val originIata = preferencesRepository.getCurrentAirport() ?: "STR"
+                                            // `route.originIata` is whatever origin FlightSearchViewModel resolved
+                                            // for this session - `currentAirport` for STORY (unchanged), the
+                                            // player's picked airport for FREE. Reading it off the route (rather
+                                            // than re-reading currentAirport here) is what lets Free Mode's origin
+                                            // actually reach booking instead of being silently overridden.
+                                            val originIata = route.originIata
                                             val flightNo = "FF-${kotlin.math.abs(route.destIata.hashCode()) % 1000 + 100}"
                                             val durationMin = route.flightTimeMin
                                             withContext(Dispatchers.IO) {
                                                 pendingFlightLoader.loadPendingFlight(originIata, route.destIata, durationMin)
                                             }
-                                            // Flight Search only ever books a normal Story Mode flight today -
-                                            // Free Mode / Challenges (later phases) will have their own booking
-                                            // entry points that pass a different tag here.
-                                            navController.navigate(Screen.CheckIn.createRoute(flightNo, route.destIata, durationMin, FlightMode.STORY))
+                                            navController.navigate(Screen.CheckIn.createRoute(originIata, flightNo, route.destIata, durationMin, mode))
                                         }
                                     }
                                 )
@@ -256,12 +277,14 @@ class CesiumGameActivity : GameActivity() {
                             composable(
                                 route = Screen.CheckIn.route,
                                 arguments = listOf(
+                                    navArgument("originIata") { type = NavType.StringType },
                                     navArgument("flightNo") { type = NavType.StringType },
                                     navArgument("destIata") { type = NavType.StringType },
                                     navArgument("durationMin") { type = NavType.IntType },
                                     navArgument("mode") { type = NavType.StringType }
                                 )
                             ) { backStackEntry ->
+                                val originIata = backStackEntry.arguments?.getString("originIata") ?: ""
                                 val flightNo = backStackEntry.arguments?.getString("flightNo") ?: ""
                                 val destIata = backStackEntry.arguments?.getString("destIata") ?: ""
                                 val durationMin = backStackEntry.arguments?.getInt("durationMin") ?: 0
@@ -270,7 +293,7 @@ class CesiumGameActivity : GameActivity() {
                                     ?: FlightMode.STORY
 
                                 val viewModel: CheckInViewModel = viewModel(
-                                    factory = CheckInViewModelFactory(airportRepository, preferencesRepository, destIata, flightNo)
+                                    factory = CheckInViewModelFactory(airportRepository, originIata, destIata, flightNo)
                                 )
 
                                 CheckInScreen(
@@ -280,8 +303,8 @@ class CesiumGameActivity : GameActivity() {
                                     },
                                     onStartFlight = { fn, di, dm ->
                                         preferencesRepository.clearActiveFlightProgress(fn)
-                                        preferencesRepository.saveActiveFlightContext(fn, di, dm)
-                                        navController.navigate(Screen.InFlight.createRoute(fn, di, dm, mode)) {
+                                        preferencesRepository.saveActiveFlightContext(fn, originIata, di, dm, mode)
+                                        navController.navigate(Screen.InFlight.createRoute(originIata, fn, di, dm, mode)) {
                                             popUpTo(Screen.CheckIn.route) { inclusive = true }
                                         }
                                     }
@@ -292,12 +315,14 @@ class CesiumGameActivity : GameActivity() {
                             composable(
                                 route = Screen.InFlight.route,
                                 arguments = listOf(
+                                    navArgument("originIata") { type = NavType.StringType },
                                     navArgument("flightNo") { type = NavType.StringType },
                                     navArgument("destIata") { type = NavType.StringType },
                                     navArgument("durationMin") { type = NavType.IntType },
                                     navArgument("mode") { type = NavType.StringType }
                                 )
                             ) { backStackEntry ->
+                                val originIata = backStackEntry.arguments?.getString("originIata") ?: ""
                                 val flightNo = backStackEntry.arguments?.getString("flightNo") ?: ""
                                 val destIata = backStackEntry.arguments?.getString("destIata") ?: ""
                                 val durationMin = backStackEntry.arguments?.getInt("durationMin") ?: 0
@@ -306,7 +331,7 @@ class CesiumGameActivity : GameActivity() {
                                     ?: FlightMode.STORY
 
                                 val viewModel: InFlightViewModel = viewModel(
-                                    factory = InFlightViewModelFactory(airportRepository, preferencesRepository, flightLogRepository, cacheDir, flightNo, destIata, durationMin, mode)
+                                    factory = InFlightViewModelFactory(airportRepository, preferencesRepository, flightLogRepository, cacheDir, flightNo, originIata, destIata, durationMin, mode)
                                 )
 
                                 InFlightScreen(
