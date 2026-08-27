@@ -22,8 +22,8 @@ sealed class StartChallengeResult {
  * Single store for all active/completed challenges (all three types, curated and custom alike) -
  * see docs/design/challenges.md#persistence--route-scoping. This is the one seam
  * `InFlightViewModel.completeFlight()`'s post-landing pipeline calls into for the challenge half
- * of `checkAchievementsAndChallenges()` (via [processLandingForChallenges]), and the seam a
- * future Phase 3b quest-log UI calls into for start/abandon/list/render-a-progress-bar.
+ * of `checkAchievementsAndChallenges()` (via [processLandingForChallenges]), and the seam the
+ * Hub's quest-log UI calls into for start/abandon/list/render-a-progress-bar.
  */
 interface ChallengeRepository {
     suspend fun listActiveChallenges(): List<Challenge>

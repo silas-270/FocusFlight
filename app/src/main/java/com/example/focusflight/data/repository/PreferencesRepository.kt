@@ -21,10 +21,9 @@ data class ActiveFlightContext(
     /** Which Route challenge this CHALLENGE-tagged session is scoped to (see
      *  docs/design/challenges.md#persistence--route-scoping) - null for STORY/FREE. Threading
      *  this through resume (not just the initial nav args) matters so a resumed CHALLENGE
-     *  flight still advances the right challenge's position pointer on landing instead of
-     *  silently losing its scoping. No Phase 3 UI path produces a non-null value here yet (no
-     *  quest log to start a Route challenge from - Phase 3b); the field exists so that future
-     *  flow doesn't lose data the moment the app is backgrounded mid-flight. */
+     *  flight - started from the Hub's quest log - still advances the right challenge's position
+     *  pointer on landing instead of silently losing its scoping if the app is backgrounded
+     *  mid-flight. */
     val challengeId: Int? = null
 ) {
     fun serialize(): String =
