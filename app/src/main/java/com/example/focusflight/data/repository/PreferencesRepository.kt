@@ -17,22 +17,38 @@ data class ActiveFlightContext(
     val originIata: String,
     val destIata: String,
     val durationMin: Int,
-    val mode: FlightMode
+    val mode: FlightMode,
+    /** Which Route challenge this CHALLENGE-tagged session is scoped to (see
+     *  docs/design/challenges.md#persistence--route-scoping) - null for STORY/FREE. Threading
+     *  this through resume (not just the initial nav args) matters so a resumed CHALLENGE
+     *  flight still advances the right challenge's position pointer on landing instead of
+     *  silently losing its scoping. No Phase 3 UI path produces a non-null value here yet (no
+     *  quest log to start a Route challenge from - Phase 3b); the field exists so that future
+     *  flow doesn't lose data the moment the app is backgrounded mid-flight. */
+    val challengeId: Int? = null
 ) {
     fun serialize(): String =
-        listOf(flightNumber, originIata, destIata, durationMin.toString(), mode.name).joinToString("|")
+        listOf(flightNumber, originIata, destIata, durationMin.toString(), mode.name, challengeId?.toString() ?: "-1")
+            .joinToString("|")
 
     companion object {
         /**
-         * Parses the persisted string. Accepts both today's 5-field format and the pre-Phase-2
-         * 3-field format (`flightNo|destIata|durationMin`, implicitly always STORY with an
-         * implicit origin of `currentAirport`) so a context saved by an older build of the app
-         * still resumes correctly instead of crashing/dropping silently. [currentAirportIata]
-         * supplies the missing origin in that legacy case only.
+         * Parses the persisted string. Accepts today's 6-field format, the Phase 2 5-field
+         * format (implicitly no challenge scoping), and the pre-Phase-2 3-field format
+         * (`flightNo|destIata|durationMin`, implicitly always STORY with an implicit origin of
+         * `currentAirport`) so a context saved by an older build of the app still resumes
+         * correctly instead of crashing/dropping silently. [currentAirportIata] supplies the
+         * missing origin in the legacy 3-field case only.
          */
         fun parse(raw: String, currentAirportIata: String?): ActiveFlightContext? {
             val parts = raw.split("|")
             return when (parts.size) {
+                6 -> {
+                    val duration = parts[3].toIntOrNull() ?: return null
+                    val mode = runCatching { FlightMode.valueOf(parts[4]) }.getOrDefault(FlightMode.STORY)
+                    val challengeId = parts[5].toIntOrNull()?.takeIf { it >= 0 }
+                    ActiveFlightContext(parts[0], parts[1], parts[2], duration, mode, challengeId)
+                }
                 5 -> {
                     val duration = parts[3].toIntOrNull() ?: return null
                     val mode = runCatching { FlightMode.valueOf(parts[4]) }.getOrDefault(FlightMode.STORY)
@@ -110,10 +126,17 @@ class PreferencesRepository(context: Context) {
         prefs.edit().remove("active_flight_$flightNo").apply()
     }
 
-    fun saveActiveFlightContext(flightNo: String, originIata: String, destIata: String, durationMin: Int, mode: FlightMode) {
+    fun saveActiveFlightContext(
+        flightNo: String,
+        originIata: String,
+        destIata: String,
+        durationMin: Int,
+        mode: FlightMode,
+        challengeId: Int? = null
+    ) {
         prefs.edit().putString(
             "active_flight_context",
-            ActiveFlightContext(flightNo, originIata, destIata, durationMin, mode).serialize()
+            ActiveFlightContext(flightNo, originIata, destIata, durationMin, mode, challengeId).serialize()
         ).apply()
     }
 

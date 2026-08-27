@@ -8,6 +8,7 @@ import com.example.focusflight.data.model.Airport
 import com.example.focusflight.data.model.FlightMode
 import com.example.focusflight.data.model.FlightRoute
 import com.example.focusflight.data.repository.AirportRepository
+import com.example.focusflight.data.repository.ChallengeRepository
 import com.example.focusflight.data.repository.PreferencesRepository
 import com.example.focusflight.data.repository.UserRepository
 import com.example.focusflight.data.repository.FlightLogRepository
@@ -30,7 +31,9 @@ class FlightSearchViewModel(
     private val preferencesRepository: PreferencesRepository,
     private val userRepository: UserRepository,
     private val flightLogRepository: FlightLogRepository,
-    private val mode: FlightMode = FlightMode.STORY
+    private val challengeRepository: ChallengeRepository,
+    private val mode: FlightMode = FlightMode.STORY,
+    private val challengeId: Int? = null
 ) : ViewModel() {
 
     private val _originAirport = MutableStateFlow<Airport?>(null)
@@ -85,12 +88,26 @@ class FlightSearchViewModel(
         // STORY (default): origin is the existing origin-locked behavior, untouched.
         // FREE: origin starts unset - the screen shows the origin picker until selectOrigin()
         // is called, instead of ever reading currentAirport.
-        if (mode == FlightMode.STORY) {
-            loadOrigin()
-        } else {
-            observeOriginSearch()
+        // CHALLENGE: origin is read-only context from that Route challenge's own stored position
+        // pointer (docs/design/challenges.md#persistence--route-scoping) - mirrors Story Mode's
+        // origin-lock, just pointed at a different value, so FlightSearchScreen's existing
+        // `mode == FlightMode.FREE && originAirport == null` picker-gate is never true here.
+        when (mode) {
+            FlightMode.STORY -> loadOrigin()
+            FlightMode.FREE -> observeOriginSearch()
+            FlightMode.CHALLENGE -> loadChallengeOrigin()
         }
         loadMapData()
+    }
+
+    private fun loadChallengeOrigin() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val positionIata = challengeId?.let { challengeRepository.getChallenge(it) }?.positionIata
+            if (positionIata != null) {
+                _originAirport.value = airportRepository.getAirportByIata(positionIata)
+                fetchRoutes()
+            }
+        }
     }
 
     private fun observeOriginSearch() {
@@ -280,12 +297,14 @@ class FlightSearchViewModelFactory(
     private val preferencesRepository: PreferencesRepository,
     private val userRepository: UserRepository,
     private val flightLogRepository: FlightLogRepository,
-    private val mode: FlightMode = FlightMode.STORY
+    private val challengeRepository: ChallengeRepository,
+    private val mode: FlightMode = FlightMode.STORY,
+    private val challengeId: Int? = null
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(FlightSearchViewModel::class.java)) {
-            return FlightSearchViewModel(context, airportRepository, preferencesRepository, userRepository, flightLogRepository, mode) as T
+            return FlightSearchViewModel(context, airportRepository, preferencesRepository, userRepository, flightLogRepository, challengeRepository, mode, challengeId) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

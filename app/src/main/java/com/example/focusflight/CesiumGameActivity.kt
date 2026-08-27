@@ -34,7 +34,9 @@ import com.example.focusflight.data.local.AppDatabase
 import com.example.focusflight.data.local.airport.AirportRouteSqliteDataSource
 import com.example.focusflight.data.model.FlightMode
 import com.example.focusflight.data.repository.AirportRepository
+import com.example.focusflight.data.repository.ChallengeRepository
 import com.example.focusflight.data.repository.LocalAirportRepository
+import com.example.focusflight.data.repository.LocalChallengeRepository
 import com.example.focusflight.data.repository.FlightLogRepository
 import com.example.focusflight.data.repository.LegacyFlightLogMigrator
 import com.example.focusflight.data.repository.LocalFlightLogRepository
@@ -75,6 +77,7 @@ class CesiumGameActivity : GameActivity() {
     private lateinit var preferencesRepository: PreferencesRepository
     private lateinit var userRepository: UserRepository
     private lateinit var flightLogRepository: FlightLogRepository
+    private lateinit var challengeRepository: ChallengeRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -98,6 +101,7 @@ class CesiumGameActivity : GameActivity() {
         val appDatabase = AppDatabase.getInstance(applicationContext)
         userRepository = LocalUserRepository(appDatabase.userProfileDao())
         flightLogRepository = LocalFlightLogRepository(appDatabase.flightLogDao(), appDatabase.userProfileDao())
+        challengeRepository = LocalChallengeRepository(appDatabase.challengeDao(), appDatabase.userProfileDao(), airportRepository)
 
         // Copy reference database asset on first run
         airportRepository.ensureDatabaseCopied()
@@ -212,11 +216,13 @@ class CesiumGameActivity : GameActivity() {
                                             withContext(Dispatchers.IO) {
                                                 pendingFlightLoader.loadPendingFlight(context.originIata, context.destIata, context.durationMin)
                                             }
-                                            // Resumes with the mode/origin the flight was actually booked under -
-                                            // previously this hardcoded FlightMode.STORY, which would have silently
-                                            // mis-tagged a resumed Free Mode flight (see docs/design/codebase-map.md).
+                                            // Resumes with the mode/origin/challenge scoping the flight was actually
+                                            // booked under - previously this hardcoded FlightMode.STORY, which would
+                                            // have silently mis-tagged a resumed Free Mode flight (see
+                                            // docs/design/codebase-map.md). context.challengeId carries a resumed
+                                            // Route-challenge session's scoping the same way (Phase 3).
                                             navController.navigate(
-                                                Screen.InFlight.createRoute(context.originIata, context.flightNumber, context.destIata, context.durationMin, context.mode)
+                                                Screen.InFlight.createRoute(context.originIata, context.flightNumber, context.destIata, context.durationMin, context.mode, context.challengeId)
                                             )
                                         }
                                     },
@@ -236,15 +242,21 @@ class CesiumGameActivity : GameActivity() {
                                     navArgument("mode") {
                                         type = NavType.StringType
                                         defaultValue = FlightMode.STORY.name
+                                    },
+                                    navArgument("challengeId") {
+                                        type = NavType.IntType
+                                        defaultValue = -1
                                     }
                                 )
                             ) { backStackEntry ->
                                 val mode = backStackEntry.arguments?.getString("mode")
                                     ?.let { runCatching { FlightMode.valueOf(it) }.getOrDefault(FlightMode.STORY) }
                                     ?: FlightMode.STORY
+                                val challengeId = backStackEntry.arguments?.getInt("challengeId")
+                                    ?.takeIf { it >= 0 }
 
                                 val viewModel: FlightSearchViewModel = viewModel(
-                                    factory = FlightSearchViewModelFactory(applicationContext, airportRepository, preferencesRepository, userRepository, flightLogRepository, mode)
+                                    factory = FlightSearchViewModelFactory(applicationContext, airportRepository, preferencesRepository, userRepository, flightLogRepository, challengeRepository, mode, challengeId)
                                 )
                                 val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
 
@@ -258,16 +270,18 @@ class CesiumGameActivity : GameActivity() {
                                         coroutineScope.launch {
                                             // `route.originIata` is whatever origin FlightSearchViewModel resolved
                                             // for this session - `currentAirport` for STORY (unchanged), the
-                                            // player's picked airport for FREE. Reading it off the route (rather
-                                            // than re-reading currentAirport here) is what lets Free Mode's origin
-                                            // actually reach booking instead of being silently overridden.
+                                            // player's picked airport for FREE, that Route challenge's own position
+                                            // pointer for CHALLENGE (Phase 3). Reading it off the route (rather
+                                            // than re-reading currentAirport here) is what lets both Free Mode's
+                                            // and a Route challenge's origin actually reach booking instead of
+                                            // being silently overridden.
                                             val originIata = route.originIata
                                             val flightNo = "FF-${kotlin.math.abs(route.destIata.hashCode()) % 1000 + 100}"
                                             val durationMin = route.flightTimeMin
                                             withContext(Dispatchers.IO) {
                                                 pendingFlightLoader.loadPendingFlight(originIata, route.destIata, durationMin)
                                             }
-                                            navController.navigate(Screen.CheckIn.createRoute(originIata, flightNo, route.destIata, durationMin, mode))
+                                            navController.navigate(Screen.CheckIn.createRoute(originIata, flightNo, route.destIata, durationMin, mode, challengeId))
                                         }
                                     }
                                 )
@@ -281,7 +295,11 @@ class CesiumGameActivity : GameActivity() {
                                     navArgument("flightNo") { type = NavType.StringType },
                                     navArgument("destIata") { type = NavType.StringType },
                                     navArgument("durationMin") { type = NavType.IntType },
-                                    navArgument("mode") { type = NavType.StringType }
+                                    navArgument("mode") { type = NavType.StringType },
+                                    navArgument("challengeId") {
+                                        type = NavType.IntType
+                                        defaultValue = -1
+                                    }
                                 )
                             ) { backStackEntry ->
                                 val originIata = backStackEntry.arguments?.getString("originIata") ?: ""
@@ -291,6 +309,10 @@ class CesiumGameActivity : GameActivity() {
                                 val mode = backStackEntry.arguments?.getString("mode")
                                     ?.let { runCatching { FlightMode.valueOf(it) }.getOrDefault(FlightMode.STORY) }
                                     ?: FlightMode.STORY
+                                // Pure passthrough here (CheckInViewModel doesn't need it) - carried forward to
+                                // InFlight, which is where a CHALLENGE session's scoping is actually consumed.
+                                val challengeId = backStackEntry.arguments?.getInt("challengeId")
+                                    ?.takeIf { it >= 0 }
 
                                 val viewModel: CheckInViewModel = viewModel(
                                     factory = CheckInViewModelFactory(airportRepository, originIata, destIata, flightNo)
@@ -303,8 +325,8 @@ class CesiumGameActivity : GameActivity() {
                                     },
                                     onStartFlight = { fn, di, dm ->
                                         preferencesRepository.clearActiveFlightProgress(fn)
-                                        preferencesRepository.saveActiveFlightContext(fn, originIata, di, dm, mode)
-                                        navController.navigate(Screen.InFlight.createRoute(originIata, fn, di, dm, mode)) {
+                                        preferencesRepository.saveActiveFlightContext(fn, originIata, di, dm, mode, challengeId)
+                                        navController.navigate(Screen.InFlight.createRoute(originIata, fn, di, dm, mode, challengeId)) {
                                             popUpTo(Screen.CheckIn.route) { inclusive = true }
                                         }
                                     }
@@ -319,7 +341,11 @@ class CesiumGameActivity : GameActivity() {
                                     navArgument("flightNo") { type = NavType.StringType },
                                     navArgument("destIata") { type = NavType.StringType },
                                     navArgument("durationMin") { type = NavType.IntType },
-                                    navArgument("mode") { type = NavType.StringType }
+                                    navArgument("mode") { type = NavType.StringType },
+                                    navArgument("challengeId") {
+                                        type = NavType.IntType
+                                        defaultValue = -1
+                                    }
                                 )
                             ) { backStackEntry ->
                                 val originIata = backStackEntry.arguments?.getString("originIata") ?: ""
@@ -329,9 +355,13 @@ class CesiumGameActivity : GameActivity() {
                                 val mode = backStackEntry.arguments?.getString("mode")
                                     ?.let { runCatching { FlightMode.valueOf(it) }.getOrDefault(FlightMode.STORY) }
                                     ?: FlightMode.STORY
+                                // Consumed by InFlightViewModel.checkAchievementsAndChallenges() on landing - see
+                                // docs/design/challenges.md#persistence--route-scoping.
+                                val challengeId = backStackEntry.arguments?.getInt("challengeId")
+                                    ?.takeIf { it >= 0 }
 
                                 val viewModel: InFlightViewModel = viewModel(
-                                    factory = InFlightViewModelFactory(airportRepository, preferencesRepository, flightLogRepository, cacheDir, flightNo, originIata, destIata, durationMin, mode)
+                                    factory = InFlightViewModelFactory(airportRepository, preferencesRepository, flightLogRepository, challengeRepository, cacheDir, flightNo, originIata, destIata, durationMin, mode, challengeId)
                                 )
 
                                 InFlightScreen(
