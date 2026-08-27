@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.FlightTakeoff
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Person
@@ -32,21 +33,28 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberBottomSheetScaffoldState
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import com.example.focusflight.data.repository.ActiveFlightContext
 import com.example.focusflight.ui.theme.Amber
 import com.example.focusflight.ui.theme.Border
 import com.example.focusflight.ui.theme.DeepNavy
@@ -62,8 +70,9 @@ import com.example.focusflight.ui.viewmodel.hub.HubViewModel
 fun HubScreen(
     viewModel: HubViewModel,
     onBookFlightClick: () -> Unit,
-    onResumeFlightClick: (flightNo: String, destIata: String, durationMin: Int) -> Unit,
-    onPassportClick: () -> Unit
+    onResumeFlightClick: (context: ActiveFlightContext) -> Unit,
+    onPassportClick: () -> Unit,
+    onFreeModeClick: () -> Unit
 ) {
     val currentAirport by viewModel.currentAirport.collectAsState()
     val stats by viewModel.flightStats.collectAsState()
@@ -74,6 +83,11 @@ fun HubScreen(
     val isExpanded = scaffoldState.bottomSheetState.currentValue == SheetValue.Expanded
 
     val activeFlightContext by viewModel.activeFlightContext.collectAsState()
+
+    // Secondary "modes" menu (see docs/design/core-loop.md's "Mode-select addition") - a
+    // ModalBottomSheet, distinct from the Hub's own always-present BottomSheetScaffold sheet
+    // above, since this one is opened/dismissed on demand rather than permanently docked.
+    var showModeMenu by remember { mutableStateOf(false) }
 
     androidx.compose.material3.Scaffold(
         bottomBar = {
@@ -91,7 +105,7 @@ fun HubScreen(
                 if (activeFlightContext != null) {
                     val context = activeFlightContext!!
                     Button(
-                        onClick = { onResumeFlightClick(context.first, context.second, context.third) },
+                        onClick = { onResumeFlightClick(context) },
                         modifier = Modifier.fillMaxWidth().height(56.dp),
                         shape = RoundedCornerShape(16.dp),
                         colors = ButtonDefaults.buttonColors(
@@ -299,6 +313,25 @@ fun HubScreen(
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                // Modes (Free Mode today; Challenges quest log joins this same menu in Phase 3)
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(DeepNavy)
+                        .clickable { showModeMenu = true },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Explore,
+                        contentDescription = "Modes",
+                        tint = OffWhite,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(Spacing.Small))
+
                 // Account
                 Box(
                     modifier = Modifier
@@ -318,6 +351,108 @@ fun HubScreen(
             }
         }
     }
+    }
+
+    if (showModeMenu) {
+        ModalBottomSheet(
+            onDismissRequest = { showModeMenu = false },
+            sheetState = rememberModalBottomSheetState(),
+            containerColor = DeepNavy,
+            dragHandle = {
+                Box(
+                    modifier = Modifier
+                        .padding(top = 12.dp, bottom = 16.dp)
+                        .width(80.dp)
+                        .height(4.dp)
+                        .background(Border, RoundedCornerShape(2.dp))
+                )
+            }
+        ) {
+            ModeSelectMenuContent(
+                onFreeModeClick = {
+                    showModeMenu = false
+                    onFreeModeClick()
+                }
+            )
+        }
+    }
+}
+
+/**
+ * Content of the Hub's secondary "modes" bottom sheet. Per docs/design/core-loop.md's
+ * "Mode-select addition", this single menu will eventually cover both non-Story modes: a
+ * Challenges quest log (Phase 3 - active challenges, start/abandon actions) plus this Free
+ * Mode entry. Only Free Mode exists today, so this is a one-item list, but it's a `Column` of
+ * discrete sections (comment marks where Phase 3's section goes) rather than a single hardcoded
+ * layout, so adding the quest-log section later is additive, not a rewrite of this composable.
+ */
+@Composable
+private fun ModeSelectMenuContent(onFreeModeClick: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = Spacing.Large)
+            .padding(bottom = 30.dp)
+    ) {
+        Text(
+            text = "MODES",
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp
+            ),
+            color = Haze
+        )
+        Spacer(modifier = Modifier.height(Spacing.Medium))
+
+        // ── Phase 3 (Challenges) slots in here as its own section: an active-challenges list
+        // (up to the cap of 3) with start-new/abandon actions. See
+        // docs/design/core-loop.md#mode-select-addition and
+        // docs/design/challenges.md#entry--management-surface. Not built yet.
+
+        ModeMenuItem(
+            icon = Icons.Outlined.FlightTakeoff,
+            title = "Free Mode",
+            subtitle = "Any origin, any destination, any duration. Not tracked in Story Mode.",
+            onClick = onFreeModeClick
+        )
+    }
+}
+
+@Composable
+private fun ModeMenuItem(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(Slate.copy(alpha = 0.4f))
+            .clickable(onClick = onClick)
+            .padding(Spacing.Medium),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = Amber,
+            modifier = Modifier.size(28.dp)
+        )
+        Spacer(modifier = Modifier.width(Spacing.Medium))
+        Column {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                color = OffWhite
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = Haze
+            )
+        }
     }
 }
 

@@ -46,6 +46,7 @@ class InFlightViewModel(
     private val flightLogRepository: FlightLogRepository,
     private val cacheDir: java.io.File,
     val flightNumber: String,
+    val originIata: String,
     val destIata: String,
     val durationMin: Int,
     val mode: FlightMode = FlightMode.STORY
@@ -112,24 +113,26 @@ class InFlightViewModel(
         }
     }
 
+    // [originIata] arrives from the nav route (see Screen.InFlight) instead of being read here
+    // via `preferencesRepository.getCurrentAirport()` as it was pre-Phase-2 - for a STORY flight
+    // it's still exactly that value (threaded through from FlightSearch/CheckIn unchanged), but
+    // a Free Mode flight's origin is a user choice that isn't `currentAirport`, so this is the
+    // one place that has to stop assuming the two are the same.
     private fun loadFlightDetails() {
         viewModelScope.launch(Dispatchers.IO) {
-            val baseIata = preferencesRepository.getCurrentAirport()
-            if (baseIata != null) {
-                val origin = airportRepository.getAirportByIata(baseIata)
-                _originAirport.value = origin
-                
-                val dest = airportRepository.getAirportByIata(destIata)
-                _destAirport.value = dest
+            val origin = airportRepository.getAirportByIata(originIata)
+            _originAirport.value = origin
 
-                if (origin != null && dest != null) {
-                    val routes = airportRepository.getOutboundRoutes(originIata = origin.iataCode, searchQuery = destIata)
-                    val route = routes.find { it.destIata == destIata }
-                    _routeDetails.value = route
+            val dest = airportRepository.getAirportByIata(destIata)
+            _destAirport.value = dest
 
-                    // Initialize coordinates to origin
-                    _uiState.update { it.copy(currentLat = origin.lat, currentLon = origin.lon) }
-                }
+            if (origin != null && dest != null) {
+                val routes = airportRepository.getOutboundRoutes(originIata = origin.iataCode, searchQuery = destIata)
+                val route = routes.find { it.destIata == destIata }
+                _routeDetails.value = route
+
+                // Initialize coordinates to origin
+                _uiState.update { it.copy(currentLat = origin.lat, currentLon = origin.lon) }
             }
         }
     }
@@ -290,13 +293,12 @@ class InFlightViewModel(
     private fun saveFlightLog() {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val origin = _originAirport.value?.iataCode ?: "STR"
                 val route = _routeDetails.value
                 val distanceKm = route?.distanceKm ?: 0.0
 
                 flightLogRepository.logFlight(
                     flightNumber = flightNumber,
-                    originIata = origin,
+                    originIata = originIata,
                     destIata = destIata,
                     durationMin = durationMin,
                     distanceKm = distanceKm,
@@ -326,6 +328,7 @@ class InFlightViewModelFactory(
     private val flightLogRepository: FlightLogRepository,
     private val cacheDir: java.io.File,
     private val flightNumber: String,
+    private val originIata: String,
     private val destIata: String,
     private val durationMin: Int,
     private val mode: FlightMode = FlightMode.STORY
@@ -333,7 +336,7 @@ class InFlightViewModelFactory(
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(InFlightViewModel::class.java)) {
-            return InFlightViewModel(airportRepository, preferencesRepository, flightLogRepository, cacheDir, flightNumber, destIata, durationMin, mode) as T
+            return InFlightViewModel(airportRepository, preferencesRepository, flightLogRepository, cacheDir, flightNumber, originIata, destIata, durationMin, mode) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.focusflight.data.model.Airport
 import com.example.focusflight.data.model.FlightLog
 import com.example.focusflight.data.model.FlightStats
+import com.example.focusflight.data.repository.ActiveFlightContext
 import com.example.focusflight.data.repository.AirportRepository
 import com.example.focusflight.data.repository.FlightLogRepository
 import com.example.focusflight.data.repository.PreferencesRepository
@@ -40,8 +41,8 @@ class HubViewModel(
     private val _isRendering = MutableStateFlow(false)
     val isRendering: StateFlow<Boolean> = _isRendering.asStateFlow()
 
-    private val _activeFlightContext = MutableStateFlow<Triple<String, String, Int>?>(null)
-    val activeFlightContext: StateFlow<Triple<String, String, Int>?> = _activeFlightContext.asStateFlow()
+    private val _activeFlightContext = MutableStateFlow<ActiveFlightContext?>(null)
+    val activeFlightContext: StateFlow<ActiveFlightContext?> = _activeFlightContext.asStateFlow()
 
     private val _mapRenderError = MutableStateFlow<String?>(null)
     val mapRenderError: StateFlow<String?> = _mapRenderError.asStateFlow()

@@ -45,6 +45,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.focusflight.data.model.FlightMode
 import com.example.focusflight.data.model.FlightRoute
 import com.example.focusflight.ui.theme.Amber
 import com.example.focusflight.ui.theme.Border
@@ -61,6 +62,7 @@ import com.example.focusflight.ui.viewmodel.flightsearch.SearchMode
 @Composable
 fun FlightSearchScreen(
     viewModel: FlightSearchViewModel,
+    mode: FlightMode = FlightMode.STORY,
     onBackClick: () -> Unit,
     onRouteConfirm: (FlightRoute) -> Unit
 ) {
@@ -73,6 +75,55 @@ fun FlightSearchScreen(
     val searchMode by viewModel.searchMode.collectAsState()
     val airportSearchQuery by viewModel.airportSearchQuery.collectAsState()
     val airportSearchResults by viewModel.airportSearchResults.collectAsState()
+
+    // Free Mode has no origin lock, so unlike Story Mode (whose origin is always
+    // `currentAirport`, loaded before this screen even composes), there's a genuine "no origin
+    // chosen yet" state to render - the origin picker, ahead of the existing route-selection UI
+    // below, which starts working unmodified for whatever origin ends up in `originAirport`.
+    if (mode == FlightMode.FREE && originAirport == null) {
+        val originSearchQuery by viewModel.originSearchQuery.collectAsState()
+        val originSearchResults by viewModel.originSearchResults.collectAsState()
+
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Text(
+                            "FREE MODE",
+                            style = MaterialTheme.typography.labelLarge.copy(
+                                letterSpacing = 3.sp,
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = Amber
+                        )
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onBackClick) {
+                            Icon(
+                                Icons.AutoMirrored.Outlined.ArrowBack,
+                                contentDescription = "Back",
+                                tint = OffWhite
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Midnight)
+                )
+            },
+            containerColor = Midnight
+        ) { paddingValues ->
+            OriginSearchPanel(
+                query = originSearchQuery,
+                onQueryChange = { viewModel.onOriginSearchQueryChanged(it) },
+                results = originSearchResults,
+                onAirportSelect = { viewModel.selectOrigin(it) },
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .padding(horizontal = Spacing.Large, vertical = Spacing.Small)
+            )
+        }
+        return
+    }
 
     Scaffold(
         topBar = {

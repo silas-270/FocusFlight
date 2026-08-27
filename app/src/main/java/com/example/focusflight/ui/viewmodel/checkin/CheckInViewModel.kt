@@ -6,7 +6,6 @@ import androidx.lifecycle.viewModelScope
 import com.example.focusflight.data.model.Airport
 import com.example.focusflight.data.model.FlightRoute
 import com.example.focusflight.data.repository.AirportRepository
-import com.example.focusflight.data.repository.PreferencesRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,7 +18,7 @@ import kotlin.random.Random
 
 class CheckInViewModel(
     private val airportRepository: AirportRepository,
-    private val preferencesRepository: PreferencesRepository,
+    val originIata: String,
     val destIata: String,
     val flightNumber: String
 ) : ViewModel() {
@@ -39,21 +38,24 @@ class CheckInViewModel(
         loadFlightDetails()
     }
 
+    // [originIata] arrives from the nav route (see Screen.CheckIn) rather than
+    // `PreferencesRepository.getCurrentAirport()` as it did pre-Phase-2 - for a STORY booking
+    // the caller always passes the current airport anyway (see FlightSearchViewModel's
+    // STORY-only loadOrigin()), so this is value-identical for Story Mode; it's what lets a
+    // Free Mode booking's picked origin (which is not `currentAirport`) actually reach this
+    // screen and the in-flight session after it.
     private fun loadFlightDetails() {
         viewModelScope.launch(Dispatchers.IO) {
-            val baseIata = preferencesRepository.getCurrentAirport()
-            if (baseIata != null) {
-                val origin = airportRepository.getAirportByIata(baseIata)
-                _originAirport.value = origin
-                
-                val dest = airportRepository.getAirportByIata(destIata)
-                _destAirport.value = dest
+            val origin = airportRepository.getAirportByIata(originIata)
+            _originAirport.value = origin
 
-                if (origin != null && dest != null) {
-                    val routes = airportRepository.getOutboundRoutes(originIata = origin.iataCode, searchQuery = destIata)
-                    val route = routes.find { it.destIata == destIata }
-                    _routeDetails.value = route
-                }
+            val dest = airportRepository.getAirportByIata(destIata)
+            _destAirport.value = dest
+
+            if (origin != null && dest != null) {
+                val routes = airportRepository.getOutboundRoutes(originIata = origin.iataCode, searchQuery = destIata)
+                val route = routes.find { it.destIata == destIata }
+                _routeDetails.value = route
             }
         }
     }
@@ -61,14 +63,14 @@ class CheckInViewModel(
 
 class CheckInViewModelFactory(
     private val airportRepository: AirportRepository,
-    private val preferencesRepository: PreferencesRepository,
+    private val originIata: String,
     private val destIata: String,
     private val flightNumber: String
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(CheckInViewModel::class.java)) {
-            return CheckInViewModel(airportRepository, preferencesRepository, destIata, flightNumber) as T
+            return CheckInViewModel(airportRepository, originIata, destIata, flightNumber) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }
