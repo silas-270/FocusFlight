@@ -230,7 +230,7 @@ class CesiumGameActivity : GameActivity() {
                                 // Backs the quest log inside HubScreen's mode-select sheet (Phase 3b) - see
                                 // docs/design/challenges.md#entry--management-surface.
                                 val challengesViewModel: ChallengesViewModel = viewModel(
-                                    factory = ChallengesViewModelFactory(challengeRepository, airportRepository)
+                                    factory = ChallengesViewModelFactory(challengeRepository, airportRepository, achievementsRepository)
                                 )
                                 val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
                                 com.example.focusflight.ui.screens.hub.HubScreen(
@@ -503,7 +503,7 @@ class CesiumGameActivity : GameActivity() {
                             // ── Account / Passport ──
                             composable(Screen.Account.route) {
                                 val viewModel: AccountViewModel = viewModel(
-                                    factory = AccountViewModelFactory(applicationContext, userRepository, flightLogRepository, airportRepository, challengeRepository, preferencesRepository)
+                                    factory = AccountViewModelFactory(applicationContext, userRepository, flightLogRepository, airportRepository, challengeRepository, preferencesRepository, achievementsRepository)
                                 )
                                 
                                 com.example.focusflight.ui.screens.account.AccountScreen(
