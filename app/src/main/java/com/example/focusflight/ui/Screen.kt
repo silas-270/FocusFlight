@@ -50,4 +50,14 @@ sealed class Screen(val route: String) {
     object ChallengeCompletion : Screen("challenge_completion")
 
     object Account : Screen("account")
+
+    // The modes/goals surface: Free Mode entry, the three challenge slots, the completed-challenge
+    // log, and the still-unearned achievements tab. A full destination rather than the Hub bottom
+    // sheet this used to be - that sheet needed its own inner scroll and swapped five view states
+    // inside a card. Argument-less; everything it shows comes from ChallengesViewModel.
+    object Challenges : Screen("challenges")
+
+    // Custom Route/Distance creation, split out of the slot picker because choosing two airports
+    // needs two full search panels - more room than a modal card can give.
+    object CreateChallenge : Screen("create_challenge")
 }

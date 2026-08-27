@@ -1,10 +1,7 @@
 package com.example.focusflight.ui.screens.hub
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,11 +32,9 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberBottomSheetScaffoldState
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
@@ -51,7 +46,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
@@ -67,21 +61,17 @@ import com.example.focusflight.ui.theme.DeepNavy
 import com.example.focusflight.ui.theme.Haze
 import com.example.focusflight.ui.theme.Midnight
 import com.example.focusflight.ui.theme.OffWhite
-import com.example.focusflight.ui.theme.Slate
 import com.example.focusflight.ui.theme.Spacing
-import com.example.focusflight.ui.viewmodel.challenges.ChallengesViewModel
 import com.example.focusflight.ui.viewmodel.hub.HubViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HubScreen(
     viewModel: HubViewModel,
-    challengesViewModel: ChallengesViewModel,
     onBookFlightClick: () -> Unit,
     onResumeFlightClick: (context: ActiveFlightContext) -> Unit,
     onPassportClick: () -> Unit,
-    onFreeModeClick: () -> Unit,
-    onContinueRouteChallenge: (challengeId: Int) -> Unit
+    onChallengesClick: () -> Unit
 ) {
     val currentAirport by viewModel.currentAirport.collectAsState()
     val stats by viewModel.flightStats.collectAsState()
@@ -112,11 +102,6 @@ fun HubScreen(
     val isExpanded = scaffoldState.bottomSheetState.currentValue == SheetValue.Expanded
 
     val activeFlightContext by viewModel.activeFlightContext.collectAsState()
-
-    // Secondary "modes" menu (see docs/design/core-loop.md's "Mode-select addition") - a
-    // ModalBottomSheet, distinct from the Hub's own always-present BottomSheetScaffold sheet
-    // above, since this one is opened/dismissed on demand rather than permanently docked.
-    var showModeMenu by remember { mutableStateOf(false) }
 
     androidx.compose.material3.Scaffold(
         bottomBar = {
@@ -342,18 +327,18 @@ fun HubScreen(
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Modes (Free Mode today; Challenges quest log joins this same menu in Phase 3)
+                // Challenges: Free Mode entry, the challenge slots, and achievements
                 Box(
                     modifier = Modifier
                         .size(40.dp)
                         .clip(RoundedCornerShape(12.dp))
                         .background(DeepNavy)
-                        .clickable { showModeMenu = true },
+                        .clickable { onChallengesClick() },
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.Explore,
-                        contentDescription = "Modes",
+                        contentDescription = "Challenges",
                         tint = OffWhite,
                         modifier = Modifier.size(20.dp)
                     )
@@ -382,122 +367,6 @@ fun HubScreen(
     }
     }
 
-    if (showModeMenu) {
-        ModalBottomSheet(
-            onDismissRequest = { showModeMenu = false },
-            sheetState = rememberModalBottomSheetState(),
-            containerColor = DeepNavy,
-            dragHandle = {
-                Box(
-                    modifier = Modifier
-                        .padding(top = 12.dp, bottom = 16.dp)
-                        .width(80.dp)
-                        .height(4.dp)
-                        .background(Border, RoundedCornerShape(2.dp))
-                )
-            }
-        ) {
-            ModeSelectMenuContent(
-                challengesViewModel = challengesViewModel,
-                onFreeModeClick = {
-                    showModeMenu = false
-                    onFreeModeClick()
-                },
-                onContinueRouteChallenge = { challengeId ->
-                    showModeMenu = false
-                    onContinueRouteChallenge(challengeId)
-                }
-            )
-        }
-    }
-}
-
-/**
- * Content of the Hub's secondary "modes" bottom sheet. Per docs/design/core-loop.md's
- * "Mode-select addition", this single menu covers both non-Story modes: the Challenges quest log
- * (Phase 3b - see [QuestLogSection]) above the Free Mode entry, a `Column` of discrete sections
- * rather than one hardcoded layout.
- */
-@Composable
-private fun ModeSelectMenuContent(
-    challengesViewModel: ChallengesViewModel,
-    onFreeModeClick: () -> Unit,
-    onContinueRouteChallenge: (challengeId: Int) -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            // The quest log's browse/custom-creation sub-views can run longer than the sheet's
-            // available height (especially the curated catalog list on a small device) - this
-            // was a one-item static list before Phase 3b and never needed to scroll.
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = Spacing.Large)
-            .padding(bottom = 30.dp)
-    ) {
-        Text(
-            text = "MODES",
-            style = MaterialTheme.typography.labelSmall.copy(
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.sp
-            ),
-            color = Haze
-        )
-        Spacer(modifier = Modifier.height(Spacing.Medium))
-
-        QuestLogSection(
-            viewModel = challengesViewModel,
-            onContinueRouteChallenge = onContinueRouteChallenge
-        )
-
-        Spacer(modifier = Modifier.height(Spacing.Large))
-        HorizontalDivider(color = Border, thickness = 1.dp)
-        Spacer(modifier = Modifier.height(Spacing.Large))
-
-        ModeMenuItem(
-            icon = Icons.Outlined.FlightTakeoff,
-            title = "Free Mode",
-            subtitle = "Any origin, any destination, any duration. Not tracked in Story Mode.",
-            onClick = onFreeModeClick
-        )
-    }
-}
-
-@Composable
-private fun ModeMenuItem(
-    icon: ImageVector,
-    title: String,
-    subtitle: String,
-    onClick: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(Slate.copy(alpha = 0.4f))
-            .clickable(onClick = onClick)
-            .padding(Spacing.Medium),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = Amber,
-            modifier = Modifier.size(28.dp)
-        )
-        Spacer(modifier = Modifier.width(Spacing.Medium))
-        Column {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                color = OffWhite
-            )
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = Haze
-            )
-        }
-    }
 }
 
 @Composable

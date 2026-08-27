@@ -227,24 +227,14 @@ class CesiumGameActivity : GameActivity() {
                                 val viewModel: HubViewModel = viewModel(
                                     factory = HubViewModelFactory(airportRepository, preferencesRepository, flightLogRepository, cacheDir)
                                 )
-                                // Backs the quest log inside HubScreen's mode-select sheet (Phase 3b) - see
-                                // docs/design/challenges.md#entry--management-surface.
-                                val challengesViewModel: ChallengesViewModel = viewModel(
-                                    factory = ChallengesViewModelFactory(challengeRepository, airportRepository, achievementsRepository)
-                                )
                                 val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
                                 com.example.focusflight.ui.screens.hub.HubScreen(
                                     viewModel = viewModel,
-                                    challengesViewModel = challengesViewModel,
                                     onBookFlightClick = {
                                         navController.navigate(Screen.FlightSearch.createRoute())
                                     },
-                                    onContinueRouteChallenge = { challengeId ->
-                                        // Same booking flow Story Mode's "Book a flight" uses, just tagged
-                                        // CHALLENGE and scoped to this challenge's own position pointer - the
-                                        // nav-arg plumbing for this already exists as of Phase 3a. See
-                                        // docs/design/challenges.md#persistence--route-scoping.
-                                        navController.navigate(Screen.FlightSearch.createRoute(FlightMode.CHALLENGE, challengeId))
+                                    onChallengesClick = {
+                                        navController.navigate(Screen.Challenges.route)
                                     },
                                     onResumeFlightClick = { context ->
                                         coroutineScope.launch {
@@ -263,10 +253,44 @@ class CesiumGameActivity : GameActivity() {
                                     },
                                     onPassportClick = {
                                         navController.navigate(Screen.Account.route)
-                                    },
+                                    }
+                                )
+                            }
+
+                            // ── Challenges (modes/goals surface) ──
+                            composable(Screen.Challenges.route) {
+                                val challengesViewModel: ChallengesViewModel = viewModel(
+                                    factory = ChallengesViewModelFactory(challengeRepository, airportRepository, achievementsRepository)
+                                )
+                                com.example.focusflight.ui.screens.challenges.ChallengesScreen(
+                                    viewModel = challengesViewModel,
+                                    onBackClick = { navController.popBackStack() },
                                     onFreeModeClick = {
                                         navController.navigate(Screen.FlightSearch.createRoute(FlightMode.FREE))
+                                    },
+                                    onContinueRouteChallenge = { challengeId ->
+                                        // Same booking flow Story Mode's "Book a flight" uses, just tagged
+                                        // CHALLENGE and scoped to this challenge's own position pointer. See
+                                        // docs/design/challenges.md#persistence--route-scoping.
+                                        navController.navigate(Screen.FlightSearch.createRoute(FlightMode.CHALLENGE, challengeId))
+                                    },
+                                    onCreateCustomClick = {
+                                        navController.navigate(Screen.CreateChallenge.route)
                                     }
+                                )
+                            }
+
+                            // ── Custom challenge creation ──
+                            composable(Screen.CreateChallenge.route) {
+                                val challengesViewModel: ChallengesViewModel = viewModel(
+                                    factory = ChallengesViewModelFactory(challengeRepository, airportRepository, achievementsRepository)
+                                )
+                                com.example.focusflight.ui.screens.challenges.CreateChallengeScreen(
+                                    viewModel = challengesViewModel,
+                                    onBackClick = { navController.popBackStack() },
+                                    // The new challenge is already in a slot by the time we land back:
+                                    // activeChallenges is a Flow off the same table the insert wrote to.
+                                    onCreated = { navController.popBackStack() }
                                 )
                             }
 
