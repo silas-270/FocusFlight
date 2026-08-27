@@ -3,8 +3,10 @@ package com.example.focusflight.ui.viewmodel.challenges
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.focusflight.data.model.AchievementStatus
 import com.example.focusflight.data.model.Airport
 import com.example.focusflight.data.model.Challenge
+import com.example.focusflight.data.repository.AchievementsRepository
 import com.example.focusflight.data.repository.AirportRepository
 import com.example.focusflight.data.repository.ChallengeRepository
 import com.example.focusflight.data.repository.StartChallengeResult
@@ -21,23 +23,53 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Backs the quest log (Phase 3b - docs/design/challenges.md#entry--management-surface): the
- * active-challenges list in the Hub's mode-select sheet, plus the "start new" browse/custom-create
- * flows and abandon. One instance is created per composition of the Hub screen (see
- * `CesiumGameActivity`'s `Screen.Hub` composable) - cheap, since it holds no flight/engine state.
+ * Backs the Challenges screen (docs/design/challenges.md#entry--management-surface): the three
+ * active-challenge slots, the completed-challenges log beneath them, the Achievements tab's
+ * still-unearned list, and the start/abandon/custom-create flows. One instance is created per
+ * composition of that screen - cheap, since it holds no flight/engine state.
  */
 @OptIn(FlowPreview::class)
 class ChallengesViewModel(
     private val challengeRepository: ChallengeRepository,
-    private val airportRepository: AirportRepository
+    private val airportRepository: AirportRepository,
+    private val achievementsRepository: AchievementsRepository
 ) : ViewModel() {
 
-    /** Active challenges (cap of 3), reactively updated - drives the quest-log list directly.
-     *  `WhileSubscribed` rather than `Eagerly` since this is only ever collected while the mode
-     *  sheet is actually open. */
+    /** Active challenges (cap of 3), reactively updated - drives the three slots directly.
+     *  `WhileSubscribed` rather than `Eagerly` since this is only ever collected while the
+     *  Challenges screen is actually open. */
     val activeChallenges: StateFlow<List<Challenge>> =
         challengeRepository.listActiveChallengesFlow()
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** Completed challenges, newest-first (the DAO orders by `completed_at DESC`) - the logbook-
+     *  style list below the slots. Refreshed off [activeChallenges] rather than its own Flow:
+     *  a challenge can only ever reach this list by leaving the active one, so that emission is
+     *  an exact signal, not an approximation. */
+    private val _completedChallenges = MutableStateFlow<List<Challenge>>(emptyList())
+    val completedChallenges: StateFlow<List<Challenge>> = _completedChallenges.asStateFlow()
+
+    /** Still-unearned achievements, flat and ungrouped (no category headers by design), ordered
+     *  closest-to-done first so the next reachable goal is always on top. Earned ones are
+     *  deliberately absent - they live on the Passport as badges. */
+    private val _unfinishedAchievements = MutableStateFlow<List<AchievementStatus>>(emptyList())
+    val unfinishedAchievements: StateFlow<List<AchievementStatus>> = _unfinishedAchievements.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            // Re-read both derived lists whenever the active set changes - covers starting,
+            // abandoning, and completing a challenge without a second subscription.
+            activeChallenges.collect { refreshDerivedLists() }
+        }
+    }
+
+    private suspend fun refreshDerivedLists() {
+        _completedChallenges.value = challengeRepository.listCompletedChallenges()
+        val board = achievementsRepository.loadBoard()
+        _unfinishedAchievements.value = (board.geographic + board.distance + board.behavioral)
+            .filterNot { it.isUnlocked }
+            .sortedByDescending { it.progress }
+    }
 
     /** Result of the most recent start attempt (curated or custom) - surfaced once (e.g. a
      *  [StartChallengeResult.CapReached] message) then cleared via [clearStartResult] so it
@@ -126,12 +158,13 @@ fun formatKm(km: Double): String {
 
 class ChallengesViewModelFactory(
     private val challengeRepository: ChallengeRepository,
-    private val airportRepository: AirportRepository
+    private val airportRepository: AirportRepository,
+    private val achievementsRepository: AchievementsRepository
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(ChallengesViewModel::class.java)) {
-            return ChallengesViewModel(challengeRepository, airportRepository) as T
+            return ChallengesViewModel(challengeRepository, airportRepository, achievementsRepository) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

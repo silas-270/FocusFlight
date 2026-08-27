@@ -7,7 +7,6 @@ import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.paging.PagingData
 import androidx.paging.cachedIn
-import com.example.focusflight.data.model.AchievementProgress
 import com.example.focusflight.data.model.AchievementStatus
 import com.example.focusflight.data.model.Airport
 import com.example.focusflight.data.model.Challenge
@@ -16,6 +15,7 @@ import com.example.focusflight.data.model.FlightHighlights
 import com.example.focusflight.data.model.FlightLog
 import com.example.focusflight.data.model.FlightSortOrder
 import com.example.focusflight.data.model.HomeBaseCooldown
+import com.example.focusflight.data.repository.AchievementsRepository
 import com.example.focusflight.data.repository.AirportRepository
 import com.example.focusflight.data.repository.ChallengeRepository
 import com.example.focusflight.data.repository.FlightLogRepository
@@ -92,7 +92,8 @@ class AccountViewModel(
     private val flightLogRepository: FlightLogRepository,
     private val airportRepository: AirportRepository,
     private val challengeRepository: ChallengeRepository,
-    private val preferencesRepository: PreferencesRepository
+    private val preferencesRepository: PreferencesRepository,
+    private val achievementsRepository: AchievementsRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AccountUiState())
@@ -263,12 +264,14 @@ class AccountViewModel(
                 // 4. Derive visited countries / continent breakdown (shared with FlightSearchViewModel)
                 val geography = airportRepository.getVisitedGeography(history, homeIata)
 
-                // 5. Achievements (docs/design/achievements.md) - computed on-demand from the
-                // same STORY-scoped geography + full flight history every other card above already
-                // uses, not from any new persisted state. `history` is unfiltered (every mode),
-                // but AchievementProgress.evaluateDistance/evaluateBehavioral filter to STORY
-                // internally themselves, mirroring getVisitedGeography's own filtering.
-                val achievements = AchievementProgress.evaluateAll(geography, history)
+                // 5. Achievements - still computed on-demand from the same STORY-scoped geography
+                // + full flight history every other card above already uses. `history` is
+                // unfiltered (every mode), but AchievementProgress.evaluateDistance/
+                // evaluateBehavioral filter to STORY internally themselves, mirroring
+                // getVisitedGeography's own filtering. Routed through AchievementsRepository
+                // rather than AchievementProgress directly so each status also carries its
+                // `unlockedAt` stamp, which the Passport's badges sort by.
+                val achievements = achievementsRepository.evaluateBoard(geography, history)
 
                 // 6. Completed-challenges log (achievements.md's cross-mode exception) - a flat
                 // log, refetched alongside flightHistory since every landing (any mode) writes a
@@ -322,12 +325,13 @@ class AccountViewModelFactory(
     private val flightLogRepository: FlightLogRepository,
     private val airportRepository: AirportRepository,
     private val challengeRepository: ChallengeRepository,
-    private val preferencesRepository: PreferencesRepository
+    private val preferencesRepository: PreferencesRepository,
+    private val achievementsRepository: AchievementsRepository
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(AccountViewModel::class.java)) {
-            return AccountViewModel(context, userRepository, flightLogRepository, airportRepository, challengeRepository, preferencesRepository) as T
+            return AccountViewModel(context, userRepository, flightLogRepository, airportRepository, challengeRepository, preferencesRepository, achievementsRepository) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }
