@@ -74,28 +74,10 @@ class FlightSearchViewModel(
             val homeIata = profile?.homeAirportIata
 
             flightLogRepository.getFlightHistoryFlow().collect { history ->
-                val visitedIatas = history.map { it.destIata }.toMutableList()
-                if (homeIata != null) {
-                    visitedIatas.add(homeIata)
-                }
-                val uniqueVisited = visitedIatas.distinct()
-                val visitedSet = airportRepository.getCountriesForAirports(uniqueVisited)
-                visitedCountries.value = visitedSet
-
-                val worldMap = airportRepository.getContinentCountryMap()
-                val mapping = mutableMapOf<String, String>()
-                worldMap.forEach { (continent, countries) ->
-                    countries.forEach { country ->
-                        mapping[country] = continent
-                    }
-                }
-                countryToContinent.value = mapping
-
-                val completed = worldMap.filter { (_, allCountries) ->
-                    val missing = allCountries.subtract(visitedSet)
-                    missing.isEmpty() && allCountries.isNotEmpty()
-                }.keys
-                completedContinents.value = completed
+                val geography = airportRepository.getVisitedGeography(history, homeIata)
+                visitedCountries.value = geography.visitedCountries
+                countryToContinent.value = geography.countryToContinent
+                completedContinents.value = geography.completedContinents
             }
         }
     }

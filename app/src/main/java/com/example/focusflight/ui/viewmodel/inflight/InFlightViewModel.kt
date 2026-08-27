@@ -149,14 +149,7 @@ class InFlightViewModel(
                     val totalMs = state.totalDurationSeconds * 1000L
                     
                     if (newElapsedMs >= totalMs + 3000L) { // Added 3 second end hold
-                        timerJob?.cancel()
-                        timerJob = null
-                        preferencesRepository.setCurrentAirport(destIata)
-                        preferencesRepository.clearActiveFlightProgress(flightNumber)
-                        preferencesRepository.clearActiveFlightCamera(flightNumber)
-                        preRenderDestinationMap()
-                        saveFlightLog()
-                        com.example.focusflight.engine.live.CesiumLiveJniBridge.nativeSetProgress(1.0)
+                        completeFlight()
                         state.copy(
                             timeRemainingSeconds = 0,
                             timeElapsedSeconds = state.totalDurationSeconds,
@@ -213,14 +206,7 @@ class InFlightViewModel(
     }
 
     fun skipFlight() {
-        timerJob?.cancel()
-        timerJob = null
-        preferencesRepository.setCurrentAirport(destIata)
-        preferencesRepository.clearActiveFlightProgress(flightNumber)
-        preferencesRepository.clearActiveFlightCamera(flightNumber)
-        preRenderDestinationMap()
-        saveFlightLog()
-        com.example.focusflight.engine.live.CesiumLiveJniBridge.nativeSetProgress(1.0)
+        completeFlight()
         _uiState.update { state ->
             state.copy(
                 timeRemainingSeconds = 0,
@@ -231,6 +217,23 @@ class InFlightViewModel(
                 isCompleted = true
             )
         }
+    }
+
+    /** Shared landing/completion sequence: stop the timer, persist the new `currentAirport`,
+     *  clear this flight's saved progress/camera, kick off the destination pre-render, write
+     *  the logbook entry, and snap the native engine to 100% progress. Invoked by both the
+     *  normal timer-completion branch and the debug [skipFlight] shortcut so the two paths
+     *  can't drift out of sync. Does not touch [_uiState] — each call site applies its own
+     *  (identical) completed-state update. */
+    private fun completeFlight() {
+        timerJob?.cancel()
+        timerJob = null
+        preferencesRepository.setCurrentAirport(destIata)
+        preferencesRepository.clearActiveFlightProgress(flightNumber)
+        preferencesRepository.clearActiveFlightCamera(flightNumber)
+        preRenderDestinationMap()
+        saveFlightLog()
+        com.example.focusflight.engine.live.CesiumLiveJniBridge.nativeSetProgress(1.0)
     }
 
     private var renderJob: kotlinx.coroutines.Job? = null

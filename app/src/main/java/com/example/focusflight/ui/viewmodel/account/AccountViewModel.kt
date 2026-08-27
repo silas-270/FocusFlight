@@ -7,6 +7,7 @@ import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.paging.PagingData
 import androidx.paging.cachedIn
+import com.example.focusflight.data.model.ContinentStats
 import com.example.focusflight.data.model.FlightHighlights
 import com.example.focusflight.data.model.FlightLog
 import com.example.focusflight.data.model.FlightSortOrder
@@ -25,14 +26,6 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-
-data class ContinentStats(
-    val continentCode: String,
-    val totalCountries: Int,
-    val visitedCountries: Set<String>,
-    val missingCountries: Set<String>,
-    val isCompleted: Boolean
-)
 
 data class AccountUiState(
     // Profile Data
@@ -129,45 +122,12 @@ class AccountViewModel(
                 // 2. Fetch specific Flight Highlights
                 val highlights = flightLogRepository.getFlightHighlights()
 
-                // 3. Extract unique destination IATAs and include home airport
+                // 3. Fetch home airport for the visited-set calculation
                 val profile = userRepository.getProfile()
                 val homeIata = profile?.homeAirportIata
-                
-                val visitedIatas = history.map { it.destIata }.toMutableList()
-                if (homeIata != null) {
-                    visitedIatas.add(homeIata)
-                }
-                val uniqueVisitedIatas = visitedIatas.distinct()
-                
-                // 4. Translate IATAs to Countries (SQLite)
-                val visitedCountries = airportRepository.getCountriesForAirports(uniqueVisitedIatas)
-                
-                // 5. Get World Geography Data (SQLite)
-                val worldMap = airportRepository.getContinentCountryMap()
-                
-                // 6. Reverse map country to continent
-                val countryToContinent = mutableMapOf<String, String>()
-                worldMap.forEach { (continent, countries) ->
-                    countries.forEach { country ->
-                        countryToContinent[country] = continent
-                    }
-                }
 
-                // 7. Calculate Continent Completion
-                val continentStatsList = worldMap.map { (continent, allCountriesInContinent) ->
-                    val visitedInContinent = allCountriesInContinent.intersect(visitedCountries)
-                    val missingInContinent = allCountriesInContinent.subtract(visitedCountries)
-                    
-                    ContinentStats(
-                        continentCode = continent,
-                        totalCountries = allCountriesInContinent.size,
-                        visitedCountries = visitedInContinent,
-                        missingCountries = missingInContinent,
-                        isCompleted = missingInContinent.isEmpty() && allCountriesInContinent.isNotEmpty()
-                    )
-                }.sortedBy { it.continentCode }
-
-                val completedContinents = continentStatsList.filter { it.isCompleted }.map { it.continentCode }.toSet()
+                // 4. Derive visited countries / continent breakdown (shared with FlightSearchViewModel)
+                val geography = airportRepository.getVisitedGeography(history, homeIata)
 
                 _uiState.update { state ->
                     state.copy(
@@ -175,10 +135,10 @@ class AccountViewModel(
                         totalMinutes = stats.totalMinutes,
                         airportsVisited = stats.airportsVisited,
                         flightHistory = history,
-                        allVisitedCountries = visitedCountries,
-                        continentStats = continentStatsList,
-                        completedContinents = completedContinents,
-                        countryToContinent = countryToContinent,
+                        allVisitedCountries = geography.visitedCountries,
+                        continentStats = geography.continentStats,
+                        completedContinents = geography.completedContinents,
+                        countryToContinent = geography.countryToContinent,
                         mapPaths = mapPaths,
                         highlights = highlights,
                         isLoading = false
