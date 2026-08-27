@@ -56,10 +56,19 @@ private val unlockedDateFormat = SimpleDateFormat("d MMM yyyy", Locale.US)
  * Newest-first, using the persisted unlock timestamps (see `AchievementUnlock`). Badges with no
  * recorded time sort last: that only happens for achievements earned before unlock-time
  * persistence existed and not yet re-stamped.
+ *
+ * [onBadgeClick] is hoisted rather than owning the detail modal here: this grid renders inside the
+ * Passport's LazyColumn, and a ScrimCardModal opened from within a list item is clipped to that
+ * item's bounds - the scrim covers only the row and the card lands wherever the item happens to
+ * be, not centered on screen. The modal is rendered by `AccountScreen` as a sibling of its
+ * Scaffold instead, exactly as the home-base modals already are.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun AchievementBadgeGrid(achievements: List<AchievementStatus>) {
+internal fun AchievementBadgeGrid(
+    achievements: List<AchievementStatus>,
+    onBadgeClick: (AchievementStatus) -> Unit
+) {
     if (achievements.isEmpty()) {
         Text(
             text = "No achievements earned yet - see the Challenges screen for what's in reach.",
@@ -69,20 +78,14 @@ internal fun AchievementBadgeGrid(achievements: List<AchievementStatus>) {
         return
     }
 
-    var selected by remember { mutableStateOf<AchievementStatus?>(null) }
-
     FlowRow(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         achievements.forEach { achievement ->
-            AchievementBadge(achievement = achievement, onClick = { selected = achievement })
+            AchievementBadge(achievement = achievement, onClick = { onBadgeClick(achievement) })
         }
-    }
-
-    selected?.let { achievement ->
-        AchievementBadgeModal(achievement = achievement, onDismiss = { selected = null })
     }
 }
 
@@ -125,7 +128,7 @@ private fun AchievementBadge(achievement: AchievementStatus, onClick: () -> Unit
 }
 
 @Composable
-private fun AchievementBadgeModal(achievement: AchievementStatus, onDismiss: () -> Unit) {
+internal fun AchievementBadgeModal(achievement: AchievementStatus, onDismiss: () -> Unit) {
     ScrimCardModal(onScrimTap = onDismiss) {
         Box(
             modifier = Modifier

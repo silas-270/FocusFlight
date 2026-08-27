@@ -4,6 +4,7 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -33,11 +34,10 @@ import com.example.focusflight.data.model.progressFraction
 import com.example.focusflight.ui.components.RingProgress
 import com.example.focusflight.ui.components.challengeTypeIcon
 import com.example.focusflight.ui.theme.Amber
+import com.example.focusflight.ui.theme.Border
 import com.example.focusflight.ui.theme.DeepNavy
 import com.example.focusflight.ui.theme.Haze
-import com.example.focusflight.ui.theme.Midnight
 import com.example.focusflight.ui.theme.OffWhite
-import com.example.focusflight.ui.theme.Slate
 import com.example.focusflight.ui.theme.Spacing
 import com.example.focusflight.data.repository.MAX_ACTIVE_CHALLENGES
 
@@ -81,16 +81,19 @@ private fun RowScope.EmptySlot(onClick: () -> Unit) {
             .weight(1f)
             .aspectRatio(1f)
             .clip(RoundedCornerShape(16.dp))
-            // Deliberately darker than the filled slot's DeepNavy, so an open slot reads as a
-            // recess to fill rather than as a card with nothing in it.
-            .background(Midnight)
+            // Darker than the filled slot's DeepNavy so an open slot reads as a recess rather
+            // than a card with nothing in it - but NOT flat Midnight, which is the screen
+            // background itself and made the slot invisible entirely. The border does most of
+            // the work of showing there is something here to fill.
+            .background(DeepNavy.copy(alpha = 0.35f))
+            .border(1.dp, Border, RoundedCornerShape(16.dp))
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Icon(
             imageVector = Icons.Outlined.Add,
             contentDescription = "Start a challenge",
-            tint = Slate,
+            tint = Haze,
             modifier = Modifier.size(28.dp)
         )
     }

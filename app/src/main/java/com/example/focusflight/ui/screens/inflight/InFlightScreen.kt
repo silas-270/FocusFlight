@@ -539,6 +539,12 @@ fun InFlightScreen(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // Debug: jump straight to landing. Still scaffolding - see TODO.md's
+                    // "Debug/scaffolding to remove". Restored because the challenge
+                    // advance/completion beats are otherwise only reachable by sitting
+                    // through a real 30-minute-plus session.
+                    SkipFlightDebugButton(viewModel)
+
                     // Scenic-mode toggle: clears the HUD down to a glass settings
                     // button and a timer-only pill. Plain icon, no background/border.
                     Box(
@@ -1573,8 +1579,9 @@ private fun Modifier.glassSurface(shape: Shape): Modifier = this
     .background(Dim.copy(alpha = 0.35f), shape)
     .border(1.dp, Haze.copy(alpha = 0.4f), shape)
 
-// Unused: preserved debug affordance in case it's needed again. Call
-// SkipFlightDebugButton(viewModel) from the top bar Row to bring it back.
+// Debug affordance, wired into the HUD top bar. Jumps straight to the landing pipeline so the
+// post-flight beats (rank stamp, challenge tick-up, challenge completion) can be exercised
+// without sitting through a real session. Must go before shipping - see TODO.md.
 @Composable
 private fun SkipFlightDebugButton(viewModel: InFlightViewModel) {
     Box(

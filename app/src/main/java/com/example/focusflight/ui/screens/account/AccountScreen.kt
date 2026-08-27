@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.paging.LoadState
 import androidx.paging.compose.collectAsLazyPagingItems
+import com.example.focusflight.data.model.AchievementStatus
 import com.example.focusflight.data.model.FlightLog
 import com.example.focusflight.ui.theme.Amber
 import com.example.focusflight.ui.theme.Haze
@@ -75,6 +76,9 @@ fun AccountScreen(
     // Hoisted out of ProfileHeroCard so it survives the card scrolling out of the LazyColumn's
     // viewport and back in.
     var heroExpanded by remember { mutableStateOf(false) }
+    // Owned here, not inside AchievementBadgeGrid: a ScrimCardModal opened from inside a
+    // LazyColumn item is clipped to that item, so it has to be a sibling of the Scaffold.
+    var selectedBadge by remember { mutableStateOf<AchievementStatus?>(null) }
     val homeBaseSearchQuery by viewModel.homeBaseSearchQuery.collectAsState()
     val homeBaseSearchResults by viewModel.homeBaseSearchResults.collectAsState()
 
@@ -163,7 +167,12 @@ fun AccountScreen(
                 // screen, where they sit alongside active challenges (the same kind of thing: a
                 // goal you haven't finished). The completed-challenges log moved there too.
                 item { SectionHeader(icon = Icons.Outlined.EmojiEvents, title = "ACHIEVEMENTS") }
-                item { AchievementBadgeGrid(uiState.unlockedAchievements) }
+                item {
+                    AchievementBadgeGrid(
+                        achievements = uiState.unlockedAchievements,
+                        onBadgeClick = { selectedBadge = it }
+                    )
+                }
 
                 // ── Flight History Header + Sorting Bar ───────────────────────
                 item {
@@ -233,6 +242,13 @@ fun AccountScreen(
                 showReturnHomeModal = false
             },
             onDismiss = { showReturnHomeModal = false }
+        )
+    }
+
+    selectedBadge?.let { achievement ->
+        AchievementBadgeModal(
+            achievement = achievement,
+            onDismiss = { selectedBadge = null }
         )
     }
 
