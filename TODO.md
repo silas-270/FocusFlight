@@ -3,13 +3,6 @@
 Deferred items from the 2026-08-25 architecture cleanup, plus notes for
 what's next. Not urgent, but don't forget.
 
-## CesiumRS (external repo, not this one)
-
-- [ ] **Cockpit-mode UI.** InFlightScreen has a `COCKPIT` camera mode
-      (`nativeSetCameraMode`), but there's no actual cockpit UI/HUD drawn
-      by the engine for it yet — this is a CesiumRS update, not a
-      FocusFlight one.
-
 ## Build hygiene
 
 - [x] ~~`app/build.gradle.kts`'s `cargoNdkBuild` task hardcodes two absolute
@@ -37,8 +30,9 @@ what's next. Not urgent, but don't forget.
 - [ ] Skip-flight button in `InFlightScreen` — debug affordance, remove
       before shipping.
 
-## Later — big feature, only once everything above is settled
+## Big feature — "game modes" (Story / Free / Challenges)
 
-- [ ] Challenges feature: users start challenges, eventually shareable
-      with friends to compare progress. Intentionally not started —
-      wait until the codebase is confirmed solid first.
+Design/planning in progress, no implementation yet — see
+`docs/design/README.md` for the full spec-in-progress (one file per
+feature, decisions log, open items). Don't duplicate detail here;
+update the docs folder instead and just keep this as a pointer.
