@@ -27,6 +27,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.focusflight.data.model.ContinentStats
 import com.example.focusflight.ui.theme.Amber
 import com.example.focusflight.ui.theme.DeepNavy
 import com.example.focusflight.ui.theme.Green
@@ -34,7 +35,6 @@ import com.example.focusflight.ui.theme.Haze
 import com.example.focusflight.ui.theme.OffWhite
 import com.example.focusflight.ui.theme.Slate
 import com.example.focusflight.ui.theme.Spacing
-import com.example.focusflight.ui.viewmodel.account.ContinentStats
 
 private val continentNames = mapOf(
     "AF" to "Africa",
