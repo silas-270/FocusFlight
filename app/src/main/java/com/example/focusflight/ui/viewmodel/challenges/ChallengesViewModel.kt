@@ -56,9 +56,10 @@ class ChallengesViewModel(
     val unfinishedAchievements: StateFlow<List<AchievementStatus>> = _unfinishedAchievements.asStateFlow()
 
     init {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             // Re-read both derived lists whenever the active set changes - covers starting,
-            // abandoning, and completing a challenge without a second subscription.
+            // abandoning, and completing a challenge without a second subscription. On IO because
+            // the achievement board's geography derivation reaches the airport SQLite DB.
             activeChallenges.collect { refreshDerivedLists() }
         }
     }

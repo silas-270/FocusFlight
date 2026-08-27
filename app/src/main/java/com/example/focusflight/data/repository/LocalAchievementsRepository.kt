@@ -8,6 +8,8 @@ import com.example.focusflight.data.model.AchievementStatus
 import com.example.focusflight.data.model.AchievementUnlock
 import com.example.focusflight.data.model.FlightLog
 import com.example.focusflight.data.model.VisitedGeography
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * Stamps unlock timestamps onto an otherwise purely-computed [AchievementBoard].
@@ -62,12 +64,17 @@ class LocalAchievementsRepository(
         )
     }
 
-    override suspend fun loadBoard(): AchievementBoard {
+    override suspend fun loadBoard(): AchievementBoard = withContext(Dispatchers.IO) {
         val history = flightLogRepository.getFlightHistory()
         val homeIata = userProfileDao.getProfile()?.homeAirportIata
-        // getVisitedGeography filters to STORY internally, as do evaluateDistance/evaluateBehavioral
-        // - so passing the raw all-modes history here is correct, matching AccountViewModel.
+        // getVisitedGeography is a plain (non-suspend) function that hits the airport SQLite DB,
+        // so it carries no dispatcher of its own - hence the explicit IO here rather than trusting
+        // callers to remember. AccountViewModel already wraps its own call site; this makes the
+        // repository safe from a main-thread caller too.
+        //
+        // It filters to STORY internally, as do evaluateDistance/evaluateBehavioral - so passing
+        // the raw all-modes history is correct, matching AccountViewModel.
         val geo = airportRepository.getVisitedGeography(history, homeIata)
-        return evaluateBoard(geo, history)
+        evaluateBoard(geo, history)
     }
 }
