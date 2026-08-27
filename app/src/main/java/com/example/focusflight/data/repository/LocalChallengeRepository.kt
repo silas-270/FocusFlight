@@ -39,6 +39,9 @@ class LocalChallengeRepository(
 
     override suspend fun getChallenge(id: Int): Challenge? = challengeDao.getById(id)
 
+    override suspend fun listCompletedChallenges(): List<Challenge> =
+        challengeDao.getByStatusOrderedByCompletedAt(getUserId(), ChallengeStatus.COMPLETED)
+
     private suspend fun hasCapSlot(userId: Int): Boolean =
         challengeDao.countByStatus(userId, ChallengeStatus.ACTIVE) < MAX_ACTIVE_CHALLENGES
 

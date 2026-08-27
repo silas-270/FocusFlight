@@ -30,4 +30,14 @@ interface ChallengeDao {
 
     @Query("SELECT COUNT(*) FROM challenges WHERE user_id = :userId AND status = :status")
     suspend fun countByStatus(userId: Int, status: ChallengeStatus): Int
+
+    /** Ordered by completion time, newest first - backs the Achievements screen's "Challenges
+     *  completed" log (docs/design/achievements.md - a flat log, not an x/N tally, since custom
+     *  challenges and repeat completions mean there's no fixed denominator). Every completion
+     *  leaves its own row (completing sets `status = COMPLETED` and keeps the row; only
+     *  *abandoning* deletes it - see `ChallengeRepository.abandonChallenge`), so duplicates from
+     *  repeat completions of the same curated/custom challenge show up here as separate rows,
+     *  same as the flight logbook. */
+    @Query("SELECT * FROM challenges WHERE user_id = :userId AND status = :status ORDER BY completed_at DESC")
+    suspend fun getByStatusOrderedByCompletedAt(userId: Int, status: ChallengeStatus): List<Challenge>
 }

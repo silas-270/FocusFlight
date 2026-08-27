@@ -285,11 +285,21 @@ class InFlightViewModel(
     // JNI-free function so it's unit-testable without instantiating this ViewModel - see
     // ChallengeLandingTest); the before/after diffing that turns its side effects into a
     // `LandingResult` is [resolveLandingOutcome], pulled out the same way for the same reason -
-    // see LandingResultTest. The achievement half stays a stub for Phase 4.
+    // see LandingResultTest.
+    //
+    // Phase 4 (achievements) deliberately has no achievement half here, and this isn't a stub -
+    // docs/design/achievements.md never specifies an unlock-celebration screen or landing-sequence
+    // beat for achievements the way achievements.md/challenges.md explicitly do for challenge
+    // completion. Unlike Challenge progress (which lives on the `challenges` row and has to be
+    // mutated somewhere), every v1 achievement category is fully re-derivable on read: Geographic
+    // reads `AirportRepository.getVisitedGeography`'s output, Distance/Behavioral fold over the
+    // STORY-tagged flight history, and Challenges-completed is a live query - see
+    // `AchievementProgress`/`AccountViewModel`. So achievement state is computed on-demand
+    // whenever the Account screen is viewed (same reactive pattern `AccountViewModel`/
+    // `FlightSearchViewModel` already use for `visitedCountries`/`completedContinents`), not
+    // checked/persisted here after every landing - there's no "just unlocked" flag to set, and
+    // no new Room migration needed for this feature.
     private fun checkAchievementsAndChallenges() {
-        // TODO(Phase 4 - achievements): evaluate this flight against achievements too, and
-        // surface both results to the arrival flow (mechanics.md's step 5 sequencing). No-op
-        // for achievements today.
         val distanceKm = _routeDetails.value?.distanceKm ?: 0.0
         viewModelScope.launch(Dispatchers.IO) {
             // FREE never reaches processLandingForChallenges's own checks anyway (it's a no-op
