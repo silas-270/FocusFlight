@@ -9,7 +9,6 @@ import androidx.paging.PagingData
 import androidx.paging.cachedIn
 import com.example.focusflight.data.model.AchievementStatus
 import com.example.focusflight.data.model.Airport
-import com.example.focusflight.data.model.Challenge
 import com.example.focusflight.data.model.ContinentStats
 import com.example.focusflight.data.model.FlightHighlights
 import com.example.focusflight.data.model.FlightLog
@@ -17,7 +16,6 @@ import com.example.focusflight.data.model.FlightSortOrder
 import com.example.focusflight.data.model.HomeBaseCooldown
 import com.example.focusflight.data.repository.AchievementsRepository
 import com.example.focusflight.data.repository.AirportRepository
-import com.example.focusflight.data.repository.ChallengeRepository
 import com.example.focusflight.data.repository.FlightLogRepository
 import com.example.focusflight.data.repository.PreferencesRepository
 import com.example.focusflight.data.repository.UserRepository
@@ -64,13 +62,10 @@ data class AccountUiState(
     val highlights: FlightHighlights = FlightHighlights(),
     val sortOrder: FlightSortOrder = FlightSortOrder.DATE_DESC,
 
-    // Achievements Data (docs/design/achievements.md) - computed reactively from flightHistory/
-    // geography above, not persisted (see AchievementProgress's doc comment). Story Mode only,
-    // except completedChallenges which is achievements.md's one confirmed cross-mode exception.
-    val geographicAchievements: List<AchievementStatus> = emptyList(),
-    val distanceAchievements: List<AchievementStatus> = emptyList(),
-    val behavioralAchievements: List<AchievementStatus> = emptyList(),
-    val completedChallenges: List<Challenge> = emptyList(),
+    // Earned achievements only, newest-first - the Passport is a trophy case. Everything still
+    // unearned lives on the Challenges screen instead, so this list only ever grows. Not split by
+    // category any more: the badge grid is one flat wrap, with no group headers to feed.
+    val unlockedAchievements: List<AchievementStatus> = emptyList(),
 
     // Home base + return (docs/design/story-mode.md) - the two cooldown-gated actions, both
     // computed once per loadData()/action call rather than ticking live every second; see
@@ -91,7 +86,6 @@ class AccountViewModel(
     private val userRepository: UserRepository,
     private val flightLogRepository: FlightLogRepository,
     private val airportRepository: AirportRepository,
-    private val challengeRepository: ChallengeRepository,
     private val preferencesRepository: PreferencesRepository,
     private val achievementsRepository: AchievementsRepository
 ) : ViewModel() {
@@ -273,11 +267,13 @@ class AccountViewModel(
                 // `unlockedAt` stamp, which the Passport's badges sort by.
                 val achievements = achievementsRepository.evaluateBoard(geography, history)
 
-                // 6. Completed-challenges log (achievements.md's cross-mode exception) - a flat
-                // log, refetched alongside flightHistory since every landing (any mode) writes a
-                // flight_log row, so this flow re-emitting is a reasonable-enough freshness signal
-                // without a dedicated Flow from ChallengeRepository.
-                val completedChallenges = challengeRepository.listCompletedChallenges()
+                // Only the earned ones reach the Passport, newest first. Anything without a
+                // recorded unlock time sorts last - that can only be an achievement earned before
+                // unlock-time persistence existed and not yet re-stamped.
+                val unlockedAchievements =
+                    (achievements.geographic + achievements.distance + achievements.behavioral)
+                        .filter { it.isUnlocked }
+                        .sortedByDescending { it.unlockedAt ?: Long.MIN_VALUE }
 
                 _uiState.update { state ->
                     state.copy(
@@ -291,10 +287,7 @@ class AccountViewModel(
                         countryToContinent = geography.countryToContinent,
                         mapPaths = mapPaths,
                         highlights = highlights,
-                        geographicAchievements = achievements.geographic,
-                        distanceAchievements = achievements.distance,
-                        behavioralAchievements = achievements.behavioral,
-                        completedChallenges = completedChallenges,
+                        unlockedAchievements = unlockedAchievements,
                         isLoading = false
                     )
                 }
@@ -324,14 +317,13 @@ class AccountViewModelFactory(
     private val userRepository: UserRepository,
     private val flightLogRepository: FlightLogRepository,
     private val airportRepository: AirportRepository,
-    private val challengeRepository: ChallengeRepository,
     private val preferencesRepository: PreferencesRepository,
     private val achievementsRepository: AchievementsRepository
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(AccountViewModel::class.java)) {
-            return AccountViewModel(context, userRepository, flightLogRepository, airportRepository, challengeRepository, preferencesRepository, achievementsRepository) as T
+            return AccountViewModel(context, userRepository, flightLogRepository, airportRepository, preferencesRepository, achievementsRepository) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }
