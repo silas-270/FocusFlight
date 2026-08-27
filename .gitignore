@@ -16,3 +16,6 @@ local.properties
 
 # Compiled native libraries (built via cargo NDK)
 app/src/main/jniLibs/
+
+# Perfetto traces + memory logs from tools/run_perf_scenario.sh (~100 MB per capture)
+perf_runs/
