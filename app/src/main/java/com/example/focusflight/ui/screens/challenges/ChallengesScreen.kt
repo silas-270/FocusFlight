@@ -150,6 +150,13 @@ fun ChallengesScreen(
                 when (tab) {
                     ChallengesTab.CHALLENGES -> {
                         item {
+                            SectionLabel(
+                                text = "ACTIVE",
+                                trailing = "${activeChallenges.size}/$MAX_ACTIVE_CHALLENGES"
+                            )
+                        }
+
+                        item {
                             ChallengeSlotRow(
                                 challenges = activeChallenges,
                                 onEmptySlotClick = { showPicker = true },
@@ -157,12 +164,7 @@ fun ChallengesScreen(
                             )
                         }
 
-                        item {
-                            SectionLabel(
-                                text = "COMPLETED",
-                                trailing = "${activeChallenges.size}/$MAX_ACTIVE_CHALLENGES active"
-                            )
-                        }
+                        item { SectionLabel(text = "COMPLETED") }
 
                         if (completedChallenges.isEmpty()) {
                             item { EmptyLine("No challenges completed yet.") }
