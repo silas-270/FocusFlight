@@ -9,6 +9,7 @@ val Amber = Color(0xFFF5A623)
 val SoftAmber = Color(0x40F5A623)
 val OffWhite = Color(0xFFF1F3F7)   // Lighter text
 val Haze = Color(0xFF8C9BB0)       // Lighter silver-grey text
+val Silver = Color(0xFFD3DAE6)     // Bright chrome-silver accent (scenic-mode timer/icon)
 val Dim = Color(0xFF4E5D78)        // Lighter steel grey
 val Green = Color(0xFF34D399)
 val Border = Color(0xFF2C3954)     // Brightened borders

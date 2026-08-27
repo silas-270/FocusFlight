@@ -92,6 +92,11 @@ class AccountViewModel(
 
     init {
         loadData()
+        // Off the UI thread, well before the user can scroll a fast fling down to the
+        // logbook (see PaperGrainTexture's doc comment).
+        viewModelScope.launch(Dispatchers.Default) {
+            com.example.focusflight.ui.screens.account.PaperGrainTexture.warm()
+        }
     }
 
     private fun loadData() {
