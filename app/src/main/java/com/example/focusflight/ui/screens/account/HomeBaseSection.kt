@@ -42,22 +42,19 @@ import com.example.focusflight.ui.theme.Spacing
 import com.example.focusflight.ui.viewmodel.account.AccountUiState
 
 /**
- * Story Mode's home-base + return card (docs/design/story-mode.md) - lives on the Passport
- * (Account) screen rather than the Hub's "modes" menu: the modes menu (see `HubScreen.kt`'s
- * `ModeSelectMenuContent`) is for choosing what kind of *session* to fly next (Free Mode, a Route
- * challenge) - return-home isn't a session at all, and changing home base is an identity/profile
- * edit, not a mode choice. The Passport already displays `homeAirportIata` as a chip on
- * [ProfileHeroCard], so this is the natural place a "home base" setting lives.
+ * Story Mode's home-base actions (docs/design/story-mode.md) - return home, and change where home
+ * is. They live on the Passport rather than the Challenges screen because neither is a *session*:
+ * return-home is an instant teleport, and changing home base is an identity edit.
+ *
+ * They are also deliberately *inside* [ProfileHeroCard]'s expanded state rather than sitting in
+ * the page as their own section. Both are gated by long cooldowns (7 and 30 days) and are close to
+ * never used, so giving them permanent real estate at the top of the screen overstated them badly.
+ * The hero card already shows the home airport as a chip, which makes it the natural thing to open
+ * for anything home-related.
  */
 @Composable
-internal fun HomeBaseCard(state: AccountUiState, onReturnHomeClick: () -> Unit, onChangeHomeBaseClick: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(DeepNavy)
-            .padding(Spacing.Medium)
-    ) {
+internal fun HomeBaseActions(state: AccountUiState, onReturnHomeClick: () -> Unit, onChangeHomeBaseClick: () -> Unit) {
+    Column(modifier = Modifier.fillMaxWidth()) {
         HomeBaseActionRow(
             icon = Icons.Outlined.FlightLand,
             title = "RETURN HOME",
