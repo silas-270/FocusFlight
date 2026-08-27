@@ -1,5 +1,6 @@
 package com.example.focusflight.ui.components
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -28,7 +29,10 @@ import com.example.focusflight.ui.theme.Spacing
  * codebase-map.md's explicit recommendation to extract and reuse this pattern.
  *
  * [onScrimTap] is usually "dismiss", but callers that pause something while the modal is up (the
- * original exit-confirm resumes the flight timer on scrim-tap) can do that here too.
+ * original exit-confirm resumes the flight timer on scrim-tap) can do that here too. System back
+ * is routed to it as well: without that the back gesture passes straight through an open modal and
+ * pops the whole nav destination underneath it, which on the Challenges screen meant tapping back
+ * to close the challenge picker instead threw you out to the Hub.
  */
 @Composable
 fun ScrimCardModal(
@@ -36,6 +40,7 @@ fun ScrimCardModal(
     modifier: Modifier = Modifier,
     content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit
 ) {
+    BackHandler(onBack = onScrimTap)
     Box(modifier = modifier.fillMaxSize()) {
         Box(
             modifier = Modifier
