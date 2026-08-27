@@ -44,6 +44,14 @@ object CesiumLiveJniBridge {
 
     external fun nativeLoadPendingFlight()
 
+    /** Debug-only performance-testing hook (see tools/run_perf_scenario.sh at the repo
+     *  root): tags a captured Perfetto trace with [scenarioId] and switches camera mode
+     *  for the steady-state scenarios (2=Free, 3=Tracking, 4=Cockpit). Only present in a
+     *  `-Pcesium.profile=profiling` build (native `perf_trace` feature) — throws
+     *  UnsatisfiedLinkError if called against a normal release .so, so callers must be
+     *  gated behind BuildConfig.DEBUG (see PerfScenarioReceiver). */
+    external fun nativeRunPerfScenario(scenarioId: Int)
+
     external fun nativeSetRunways(
         airportIds: IntArray,
         lengthFt: FloatArray,

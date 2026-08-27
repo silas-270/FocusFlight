@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Debug-build-only automation hook for on-device performance testing
+         (see tools/run_perf_scenario.sh at the repo root). Merged only into
+         debug builds, never present in a release/Play-Store APK. Triggered via
+         adb shell am broadcast with action com.example.focusflight.PERF_SCENARIO
+         and an int extra named scenario_id. -->
+    <application>
+        <receiver
+            android:name=".engine.live.PerfScenarioReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.example.focusflight.PERF_SCENARIO" />
+            </intent-filter>
+        </receiver>
+    </application>
+
+</manifest>

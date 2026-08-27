@@ -37,6 +37,14 @@ android {
         compose = true
         prefab = true
     }
+    packaging {
+        jniLibs {
+            // Debug/profiling builds (`-Pcesium.profile=profiling`) embed native debug
+            // symbols so on-device simpleperf/Perfetto captures can be symbolicated;
+            // without this AGP strips them from the packaged .so even in debug builds.
+            keepDebugSymbols += "**/*.so"
+        }
+    }
     testOptions {
         unitTests {
             isReturnDefaultValues = true
@@ -49,6 +57,12 @@ tasks.register("cargoNdkBuild") {
         val isWindows = System.getProperty("os.name").lowercase().contains("windows")
         val userHome = System.getProperty("user.home")
         val sdkRoot = System.getenv("ANDROID_HOME") ?: System.getenv("ANDROID_SDK_ROOT")
+
+        // -Pcesium.profile=profiling builds CesiumRS's `profiling` Cargo profile (release
+        // codegen, kept debug symbols) with the `perf_trace` feature on, for on-device
+        // CPU/RAM profiling (see tools/run_perf_scenario.sh). Defaults to the normal
+        // shipped `release` profile so day-to-day builds are unaffected.
+        val cesiumProfile = (project.findProperty("cesium.profile") as String?) ?: "release"
 
         // CESIUM_RS_HOME lets each dev machine point at its own CesiumRS checkout;
         // falls back to the historical per-machine defaults if unset.
@@ -82,25 +96,40 @@ tasks.register("cargoNdkBuild") {
             // debug_panel (not the full "testing" default) pulls in egui just far enough to
             // draw the city-label pills; app.rs skips the actual debug-sliders window on
             // Android, so this doesn't put any dev UI in front of the real app.
-            val builder = ProcessBuilder(cargoBin, "ndk", "--target", rustTarget, "build", "--lib", "--release", "--no-default-features", "--features", "debug_panel")
+            //
+            // cesium.profile=profiling swaps in the `profiling` Cargo profile (release
+            // codegen, debug symbols kept) plus the `perf_trace` feature (ATrace spans +
+            // finer per-subsystem timings); output then lands under a `profiling/` (not
+            // `release/`) target directory, matching Cargo's `--profile` naming.
+            val cargoFeatures = if (cesiumProfile == "profiling") "debug_panel,perf_trace" else "debug_panel"
+            val cargoArgs = if (cesiumProfile == "release") {
+                listOf("--release")
+            } else {
+                listOf("--profile", cesiumProfile)
+            }
+            val builder = ProcessBuilder(
+                listOf(cargoBin, "ndk", "--target", rustTarget, "build", "--lib")
+                    + cargoArgs
+                    + listOf("--no-default-features", "--features", cargoFeatures)
+            )
             builder.directory(File(absoluteRustPath))
-            
+
             builder.environment()["ANDROID_NDK_HOME"] = ndkDir
             if (!isWindows) {
                 builder.environment()["PATH"] = "$userHome/.cargo/bin:" + System.getenv("PATH")
             }
-            
+
             val logFile = File(absoluteRustPath, "cargo_build.log")
             builder.redirectOutput(ProcessBuilder.Redirect.appendTo(logFile))
             builder.redirectError(ProcessBuilder.Redirect.appendTo(logFile))
-            
+
             val process = builder.start()
             val exitCode = process.waitFor()
             if (exitCode != 0) {
                 throw GradleException("cargo ndk build failed with exit code $exitCode. See cargo_build.log in CesiumRS for details.")
             }
-            
-            val soFile = File("$absoluteRustPath/target/$rustTarget/release/libcesium_rs.so")
+
+            val soFile = File("$absoluteRustPath/target/$rustTarget/$cesiumProfile/libcesium_rs.so")
             val destDir = File(projectDir, "src/main/jniLibs/$androidAbi")
             destDir.mkdirs()
             soFile.copyTo(File(destDir, "libcesium_rs.so"), overwrite = true)
