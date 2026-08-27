@@ -33,8 +33,10 @@ import androidx.navigation.navArgument
 import com.example.focusflight.data.local.AppDatabase
 import com.example.focusflight.data.local.airport.AirportRouteSqliteDataSource
 import com.example.focusflight.data.model.FlightMode
+import com.example.focusflight.data.repository.AchievementsRepository
 import com.example.focusflight.data.repository.AirportRepository
 import com.example.focusflight.data.repository.ChallengeRepository
+import com.example.focusflight.data.repository.LocalAchievementsRepository
 import com.example.focusflight.data.repository.LandingResult
 import com.example.focusflight.data.repository.LandingResultChannel
 import com.example.focusflight.data.repository.LocalAirportRepository
@@ -85,6 +87,7 @@ class CesiumGameActivity : GameActivity() {
     private lateinit var userRepository: UserRepository
     private lateinit var flightLogRepository: FlightLogRepository
     private lateinit var challengeRepository: ChallengeRepository
+    private lateinit var achievementsRepository: AchievementsRepository
 
     // Bridges the post-landing challenge-check result across the InFlight -> ArrivalCelebration
     // -> (tick-up | completion) navigation hop (Phase 3b - see LandingResultChannel's doc). Needs
@@ -115,6 +118,12 @@ class CesiumGameActivity : GameActivity() {
         userRepository = LocalUserRepository(appDatabase.userProfileDao())
         flightLogRepository = LocalFlightLogRepository(appDatabase.flightLogDao(), appDatabase.userProfileDao())
         challengeRepository = LocalChallengeRepository(appDatabase.challengeDao(), appDatabase.userProfileDao(), airportRepository)
+        achievementsRepository = LocalAchievementsRepository(
+            appDatabase.achievementUnlockDao(),
+            appDatabase.userProfileDao(),
+            airportRepository,
+            flightLogRepository
+        )
 
         // Copy reference database asset on first run
         airportRepository.ensureDatabaseCopied()

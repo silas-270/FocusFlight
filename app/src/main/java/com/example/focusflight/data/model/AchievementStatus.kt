@@ -18,6 +18,11 @@ enum class AchievementCategory { GEOGRAPHIC, DISTANCE, BEHAVIORAL }
  * boolean-style achievement (e.g. "First Flight") uses [target] == 1.0 and [current] of 0.0 or
  * 1.0 with an empty [unitLabel] - callers rendering a value string should special-case
  * `target <= 1.0` rather than printing "0 / 1".
+ *
+ * [unlockedAt] is the one field [AchievementProgress] does *not* compute: evaluation stays pure
+ * and always leaves it null, and `AchievementsRepository` fills it in afterwards from the
+ * `achievement_unlocks` table. Treat a null here as "unlock time unknown", never as "locked" -
+ * [isUnlocked] is the only authority on that.
  */
 data class AchievementStatus(
     val id: String,
@@ -27,7 +32,8 @@ data class AchievementStatus(
     val current: Double,
     val target: Double,
     val unitLabel: String,
-    val isUnlocked: Boolean
+    val isUnlocked: Boolean,
+    val unlockedAt: Long? = null
 ) {
     val progress: Float
         get() = if (target > 0.0) (current / target).toFloat().coerceIn(0f, 1f) else if (isUnlocked) 1f else 0f

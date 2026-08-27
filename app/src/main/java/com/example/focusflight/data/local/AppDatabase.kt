@@ -7,13 +7,14 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.example.focusflight.data.model.AchievementUnlock
 import com.example.focusflight.data.model.Challenge
 import com.example.focusflight.data.model.FlightLog
 import com.example.focusflight.data.model.UserProfile
 
 @Database(
-    entities = [UserProfile::class, FlightLog::class, Challenge::class],
-    version = 3,
+    entities = [UserProfile::class, FlightLog::class, Challenge::class, AchievementUnlock::class],
+    version = 4,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -21,6 +22,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun userProfileDao(): UserProfileDao
     abstract fun flightLogDao(): FlightLogDao
     abstract fun challengeDao(): ChallengeDao
+    abstract fun achievementUnlockDao(): AchievementUnlockDao
 
     companion object {
         @Volatile
@@ -75,6 +77,28 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** Adds the achievement-unlock timestamp store (see AchievementUnlock) - the only
+         *  persisted achievement state, used purely to order earned badges newest-first.
+         *  Brand-new table, so nothing to backfill: achievements already unlocked before this
+         *  migration get stamped lazily the first time an achievements surface is opened, which
+         *  is the closest to a true unlock moment the data model can recover. */
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `achievement_unlocks` (
+                        `user_id` INTEGER NOT NULL,
+                        `achievement_id` TEXT NOT NULL,
+                        `unlocked_at` INTEGER NOT NULL,
+                        PRIMARY KEY(`user_id`, `achievement_id`),
+                        FOREIGN KEY(`user_id`) REFERENCES `user_profile`(`id`) ON DELETE CASCADE
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_achievement_unlocks_user_id` ON `achievement_unlocks` (`user_id`)")
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -82,7 +106,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "user_data.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                     .build()
                 INSTANCE = instance
                 instance
