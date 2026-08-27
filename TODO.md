@@ -30,9 +30,13 @@ what's next. Not urgent, but don't forget.
 - [ ] Skip-flight button in `InFlightScreen` — debug affordance, remove
       before shipping.
 
-## Big feature — "game modes" (Story / Free / Challenges)
+## Big feature — "game modes" (Story / Free / Challenges / Achievements)
 
-Design/planning in progress, no implementation yet — see
-`docs/design/README.md` for the full spec-in-progress (one file per
-feature, decisions log, open items). Don't duplicate detail here;
-update the docs folder instead and just keep this as a pointer.
+Implemented 2026-08-27 across 7 phases (dedup refactor, mode-tag
+plumbing, Free Mode, Challenges backend, Challenges UI, Achievements,
+Story Mode home-base+return) — see commit history (`d1f8d70`..
+`ff5ae25`) for what shipped. The `docs/design/` planning docs were
+removed after ship; known, accepted v1 limitations that were called
+out there: Route challenge progress can legitimately decrease
+(straight-line-distance proxy formula), and dead-end Route challenges
+have no exit besides abandon.
