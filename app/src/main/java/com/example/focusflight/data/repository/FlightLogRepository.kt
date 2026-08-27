@@ -3,6 +3,7 @@ package com.example.focusflight.data.repository
 import androidx.paging.PagingSource
 import com.example.focusflight.data.model.FlightLog
 import com.example.focusflight.data.model.FlightHighlights
+import com.example.focusflight.data.model.FlightMode
 import com.example.focusflight.data.model.FlightSortOrder
 import com.example.focusflight.data.model.FlightStats
 import kotlinx.coroutines.flow.Flow
@@ -13,7 +14,8 @@ interface FlightLogRepository {
         originIata: String,
         destIata: String,
         durationMin: Int,
-        distanceKm: Double
+        distanceKm: Double,
+        mode: FlightMode = FlightMode.STORY
     ): FlightLog
     fun getFlightHistoryFlow(): Flow<List<FlightLog>>
     suspend fun getFlightHistory(): List<FlightLog>

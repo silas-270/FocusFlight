@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.focusflight.data.model.Airport
+import com.example.focusflight.data.model.FlightMode
 import com.example.focusflight.data.model.FlightRoute
 import com.example.focusflight.data.repository.AirportRepository
 import com.example.focusflight.data.repository.FlightLogRepository
@@ -46,7 +47,8 @@ class InFlightViewModel(
     private val cacheDir: java.io.File,
     val flightNumber: String,
     val destIata: String,
-    val durationMin: Int
+    val durationMin: Int,
+    val mode: FlightMode = FlightMode.STORY
 ) : ViewModel() {
 
     private val _originAirport = MutableStateFlow<Airport?>(null)
@@ -219,21 +221,48 @@ class InFlightViewModel(
         }
     }
 
-    /** Shared landing/completion sequence: stop the timer, persist the new `currentAirport`,
-     *  clear this flight's saved progress/camera, kick off the destination pre-render, write
-     *  the logbook entry, and snap the native engine to 100% progress. Invoked by both the
-     *  normal timer-completion branch and the debug [skipFlight] shortcut so the two paths
-     *  can't drift out of sync. Does not touch [_uiState] — each call site applies its own
-     *  (identical) completed-state update. */
+    /** Shared landing/completion sequence: stop the timer, persist the new `currentAirport`
+     *  (STORY only - see below), clear this flight's saved progress/camera, kick off the
+     *  destination pre-render, write the logbook entry (always, tagged with [mode]), run the
+     *  post-landing achievement/challenge check, and snap the native engine to 100% progress.
+     *  Invoked by both the normal timer-completion branch and the debug [skipFlight] shortcut
+     *  so the two paths can't drift out of sync. Does not touch [_uiState] — each call site
+     *  applies its own (identical) completed-state update.
+     *
+     *  Follows docs/design/mechanics.md's post-landing pipeline: step 2 (logbook, always) →
+     *  step 3 (currentAirport/visited-set, STORY only) → step 4 (achievement/challenge check,
+     *  stubbed - see [checkAchievementsAndChallenges]). Every flight is STORY today (Free Mode
+     *  and Challenges don't exist yet), so the STORY branch is the only one exercised in
+     *  practice - but the branch is real, not a placeholder. */
     private fun completeFlight() {
         timerJob?.cancel()
         timerJob = null
-        preferencesRepository.setCurrentAirport(destIata)
+
+        // Step 3: only a STORY-tagged session moves the player's main position/visited-set.
+        // FREE and CHALLENGE sessions are logged (below) but never touch currentAirport.
+        if (mode == FlightMode.STORY) {
+            preferencesRepository.setCurrentAirport(destIata)
+        }
+
         preferencesRepository.clearActiveFlightProgress(flightNumber)
         preferencesRepository.clearActiveFlightCamera(flightNumber)
         preRenderDestinationMap()
         saveFlightLog()
+        checkAchievementsAndChallenges()
         com.example.focusflight.engine.live.CesiumLiveJniBridge.nativeSetProgress(1.0)
+    }
+
+    // ── Post-landing pipeline step 4 (docs/design/mechanics.md) ─────────────────────────
+    // Every eligible flight (STORY or CHALLENGE - never FREE) is meant to be checked against
+    // all achievements and all active challenges here, then the result surfaced to
+    // InFlightScreen's landing sequence per mechanics.md's step 5. Intentionally a no-op stub:
+    // achievements and challenges don't exist yet (Phase 3/4 build them). This seam exists so
+    // those phases have exactly one place to add that check, rather than re-threading
+    // completeFlight() again.
+    private fun checkAchievementsAndChallenges() {
+        // TODO(Phase 3 - challenges, Phase 4 - achievements): if mode != FlightMode.FREE,
+        // evaluate this flight against active challenges / achievements and surface the result
+        // to the arrival flow. No-op today.
     }
 
     private var renderJob: kotlinx.coroutines.Job? = null
@@ -270,7 +299,8 @@ class InFlightViewModel(
                     originIata = origin,
                     destIata = destIata,
                     durationMin = durationMin,
-                    distanceKm = distanceKm
+                    distanceKm = distanceKm,
+                    mode = mode
                 )
             } catch (e: Exception) {
                 android.util.Log.e("InFlightViewModel", "Error saving flight log to Room", e)
@@ -297,12 +327,13 @@ class InFlightViewModelFactory(
     private val cacheDir: java.io.File,
     private val flightNumber: String,
     private val destIata: String,
-    private val durationMin: Int
+    private val durationMin: Int,
+    private val mode: FlightMode = FlightMode.STORY
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(InFlightViewModel::class.java)) {
-            return InFlightViewModel(airportRepository, preferencesRepository, flightLogRepository, cacheDir, flightNumber, destIata, durationMin) as T
+            return InFlightViewModel(airportRepository, preferencesRepository, flightLogRepository, cacheDir, flightNumber, destIata, durationMin, mode) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

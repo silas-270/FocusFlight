@@ -3,6 +3,7 @@ package com.example.focusflight.data.repository
 import com.example.focusflight.data.model.Airport
 import com.example.focusflight.data.model.ContinentStats
 import com.example.focusflight.data.model.FlightLog
+import com.example.focusflight.data.model.FlightMode
 import com.example.focusflight.data.model.FlightRoute
 import com.example.focusflight.data.model.Runway
 import com.example.focusflight.data.model.VisitedGeography
@@ -25,9 +26,14 @@ interface AirportRepository {
      * stats, and completed continents) from a flight history + home airport. Shared by
      * `FlightSearchViewModel` and `AccountViewModel` so both compute this identically instead of
      * each re-deriving it from [getCountriesForAirports]/[getContinentCountryMap] independently.
+     *
+     * Only STORY-tagged flights count toward the visited-set (see the isolation matrix in
+     * docs/design/mechanics.md) - filtered here, once, so both callers stay correct without
+     * needing their own STORY-only filtering as FREE/CHALLENGE flights start getting logged.
      */
     fun getVisitedGeography(flightHistory: List<FlightLog>, homeAirportIata: String?): VisitedGeography {
-        val visitedIatas = flightHistory.map { it.destIata }.toMutableList()
+        val storyFlights = flightHistory.filter { it.mode == FlightMode.STORY }
+        val visitedIatas = storyFlights.map { it.destIata }.toMutableList()
         if (homeAirportIata != null) {
             visitedIatas.add(homeAirportIata)
         }
