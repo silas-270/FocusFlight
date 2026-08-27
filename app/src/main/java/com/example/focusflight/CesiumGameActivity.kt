@@ -494,7 +494,7 @@ class CesiumGameActivity : GameActivity() {
                             // ── Account / Passport ──
                             composable(Screen.Account.route) {
                                 val viewModel: AccountViewModel = viewModel(
-                                    factory = AccountViewModelFactory(applicationContext, userRepository, flightLogRepository, airportRepository, challengeRepository)
+                                    factory = AccountViewModelFactory(applicationContext, userRepository, flightLogRepository, airportRepository, challengeRepository, preferencesRepository)
                                 )
                                 
                                 com.example.focusflight.ui.screens.account.AccountScreen(
