@@ -4,13 +4,17 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.focusflight.data.model.Airport
+import com.example.focusflight.data.model.Challenge
 import com.example.focusflight.data.model.FlightMode
 import com.example.focusflight.data.model.FlightRoute
 import com.example.focusflight.data.repository.AirportRepository
 import com.example.focusflight.data.repository.ChallengeRepository
 import com.example.focusflight.data.repository.FlightLogRepository
+import com.example.focusflight.data.repository.LandingResult
+import com.example.focusflight.data.repository.LandingResultChannel
 import com.example.focusflight.data.repository.PreferencesRepository
 import com.example.focusflight.data.repository.processLandingForChallenges
+import com.example.focusflight.data.repository.resolveLandingOutcome
 import com.example.focusflight.engine.headless.CesiumHeadlessMapRenderer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -47,6 +51,11 @@ class InFlightViewModel(
     private val preferencesRepository: PreferencesRepository,
     private val flightLogRepository: FlightLogRepository,
     private val challengeRepository: ChallengeRepository,
+    /** Phase 3b's landing-result channel (see docs/design/mechanics.md's post-landing pipeline
+     *  step 5) - published into at the end of [checkAchievementsAndChallenges], read by
+     *  `CesiumGameActivity`'s `Screen.ArrivalCelebration` `onContinue` once this ViewModel (and
+     *  its nav entry) may already be gone. */
+    private val landingResultChannel: LandingResultChannel,
     private val cacheDir: java.io.File,
     val flightNumber: String,
     val originIata: String,
@@ -77,6 +86,11 @@ class InFlightViewModel(
     private val mapRenderer = CesiumHeadlessMapRenderer(cacheDir)
 
     init {
+        // A fresh nav entry (new flight, or resuming one) always means a fresh ViewModel
+        // instance - clear out whatever the *previous* flight's landing left behind so a stale
+        // result can never leak into this flight's own landing sequence.
+        landingResultChannel.reset()
+
         val totalSec = durationMin * 60L
         val savedProgress = preferencesRepository.getActiveFlightProgress(flightNumber)
         val initialElapsedMs = savedProgress ?: -3000L
@@ -265,18 +279,34 @@ class InFlightViewModel(
 
     // ── Post-landing pipeline step 4 (docs/design/mechanics.md) ─────────────────────────
     // Every eligible flight (STORY or CHALLENGE - never FREE) is checked against all active
-    // challenges here, then (eventually) the result surfaced to InFlightScreen's landing
-    // sequence per mechanics.md's step 5. The challenge half is real as of Phase 3 - it delegates
-    // to processLandingForChallenges (a standalone, JNI-free function so it's unit-testable
-    // without instantiating this ViewModel - see ChallengeLandingTest). The achievement half
-    // stays a stub for Phase 4.
+    // challenges here, and the result is published to [landingResultChannel] for step 5's landing
+    // sequence (the rank stamp always shows first, unchanged; this decides what - if anything -
+    // follows it). The challenge half delegates to processLandingForChallenges (a standalone,
+    // JNI-free function so it's unit-testable without instantiating this ViewModel - see
+    // ChallengeLandingTest); the before/after diffing that turns its side effects into a
+    // `LandingResult` is [resolveLandingOutcome], pulled out the same way for the same reason -
+    // see LandingResultTest. The achievement half stays a stub for Phase 4.
     private fun checkAchievementsAndChallenges() {
         // TODO(Phase 4 - achievements): evaluate this flight against achievements too, and
         // surface both results to the arrival flow (mechanics.md's step 5 sequencing). No-op
         // for achievements today.
         val distanceKm = _routeDetails.value?.distanceKm ?: 0.0
         viewModelScope.launch(Dispatchers.IO) {
+            // FREE never reaches processLandingForChallenges's own checks anyway (it's a no-op
+            // for FREE), but short-circuiting here too skips two DB round trips and resolves the
+            // channel near-instantly rather than leaving it Pending until a query completes.
+            if (mode == FlightMode.FREE) {
+                landingResultChannel.publish(LandingResult.None)
+                return@launch
+            }
+
+            val before: List<Challenge> = challengeRepository.listActiveChallenges()
             processLandingForChallenges(challengeRepository, mode, challengeId, destIata, distanceKm)
+            // Re-fetched by id (not re-listing "active" challenges) because a challenge that just
+            // *completed* this landing is no longer ACTIVE - listing active-only here would make
+            // every completion invisible to the diff. See resolveLandingOutcome's own note.
+            val after: List<Challenge> = before.mapNotNull { challengeRepository.getChallenge(it.id) }
+            landingResultChannel.publish(resolveLandingOutcome(before, after))
         }
     }
 
@@ -339,6 +369,7 @@ class InFlightViewModelFactory(
     private val preferencesRepository: PreferencesRepository,
     private val flightLogRepository: FlightLogRepository,
     private val challengeRepository: ChallengeRepository,
+    private val landingResultChannel: LandingResultChannel,
     private val cacheDir: java.io.File,
     private val flightNumber: String,
     private val originIata: String,
@@ -350,7 +381,7 @@ class InFlightViewModelFactory(
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(InFlightViewModel::class.java)) {
-            return InFlightViewModel(airportRepository, preferencesRepository, flightLogRepository, challengeRepository, cacheDir, flightNumber, originIata, destIata, durationMin, mode, challengeId) as T
+            return InFlightViewModel(airportRepository, preferencesRepository, flightLogRepository, challengeRepository, landingResultChannel, cacheDir, flightNumber, originIata, destIata, durationMin, mode, challengeId) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

@@ -35,6 +35,8 @@ import com.example.focusflight.data.local.airport.AirportRouteSqliteDataSource
 import com.example.focusflight.data.model.FlightMode
 import com.example.focusflight.data.repository.AirportRepository
 import com.example.focusflight.data.repository.ChallengeRepository
+import com.example.focusflight.data.repository.LandingResult
+import com.example.focusflight.data.repository.LandingResultChannel
 import com.example.focusflight.data.repository.LocalAirportRepository
 import com.example.focusflight.data.repository.LocalChallengeRepository
 import com.example.focusflight.data.repository.FlightLogRepository
@@ -47,11 +49,15 @@ import com.example.focusflight.engine.live.CesiumLiveJniBridge
 import com.example.focusflight.engine.live.PendingFlightLoader
 import com.example.focusflight.ui.Screen
 import com.example.focusflight.ui.screens.arrival.ArrivalCelebrationScreen
+import com.example.focusflight.ui.screens.challenge.ChallengeCompletionScreen
+import com.example.focusflight.ui.screens.challenge.ChallengeProgressScreen
 import com.example.focusflight.ui.screens.checkin.CheckInScreen
 import com.example.focusflight.ui.screens.flightsearch.FlightSearchScreen
 import com.example.focusflight.ui.screens.inflight.InFlightScreen
 import com.example.focusflight.ui.screens.onboarding.OnboardingScreen
 import com.example.focusflight.ui.theme.FocusFlightTheme
+import com.example.focusflight.ui.viewmodel.challenges.ChallengesViewModel
+import com.example.focusflight.ui.viewmodel.challenges.ChallengesViewModelFactory
 import com.example.focusflight.ui.viewmodel.checkin.CheckInViewModel
 import com.example.focusflight.ui.viewmodel.checkin.CheckInViewModelFactory
 import com.example.focusflight.ui.viewmodel.flightsearch.FlightSearchViewModel
@@ -66,6 +72,7 @@ import com.example.focusflight.ui.viewmodel.onboarding.OnboardingViewModel
 import com.example.focusflight.ui.viewmodel.onboarding.OnboardingViewModelFactory
 import com.google.androidgamesdk.GameActivity
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -78,6 +85,12 @@ class CesiumGameActivity : GameActivity() {
     private lateinit var userRepository: UserRepository
     private lateinit var flightLogRepository: FlightLogRepository
     private lateinit var challengeRepository: ChallengeRepository
+
+    // Bridges the post-landing challenge-check result across the InFlight -> ArrivalCelebration
+    // -> (tick-up | completion) navigation hop (Phase 3b - see LandingResultChannel's doc). Needs
+    // no Activity/context dependency, so - unlike the repositories above - it's constructed
+    // directly here rather than in onCreate.
+    private val landingResultChannel = LandingResultChannel()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -205,11 +218,24 @@ class CesiumGameActivity : GameActivity() {
                                 val viewModel: HubViewModel = viewModel(
                                     factory = HubViewModelFactory(airportRepository, preferencesRepository, flightLogRepository, cacheDir)
                                 )
+                                // Backs the quest log inside HubScreen's mode-select sheet (Phase 3b) - see
+                                // docs/design/challenges.md#entry--management-surface.
+                                val challengesViewModel: ChallengesViewModel = viewModel(
+                                    factory = ChallengesViewModelFactory(challengeRepository, airportRepository)
+                                )
                                 val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
                                 com.example.focusflight.ui.screens.hub.HubScreen(
                                     viewModel = viewModel,
+                                    challengesViewModel = challengesViewModel,
                                     onBookFlightClick = {
                                         navController.navigate(Screen.FlightSearch.createRoute())
+                                    },
+                                    onContinueRouteChallenge = { challengeId ->
+                                        // Same booking flow Story Mode's "Book a flight" uses, just tagged
+                                        // CHALLENGE and scoped to this challenge's own position pointer - the
+                                        // nav-arg plumbing for this already exists as of Phase 3a. See
+                                        // docs/design/challenges.md#persistence--route-scoping.
+                                        navController.navigate(Screen.FlightSearch.createRoute(FlightMode.CHALLENGE, challengeId))
                                     },
                                     onResumeFlightClick = { context ->
                                         coroutineScope.launch {
@@ -361,7 +387,7 @@ class CesiumGameActivity : GameActivity() {
                                     ?.takeIf { it >= 0 }
 
                                 val viewModel: InFlightViewModel = viewModel(
-                                    factory = InFlightViewModelFactory(airportRepository, preferencesRepository, flightLogRepository, challengeRepository, cacheDir, flightNo, originIata, destIata, durationMin, mode, challengeId)
+                                    factory = InFlightViewModelFactory(airportRepository, preferencesRepository, flightLogRepository, challengeRepository, landingResultChannel, cacheDir, flightNo, originIata, destIata, durationMin, mode, challengeId)
                                 )
 
                                 InFlightScreen(
@@ -395,19 +421,68 @@ class CesiumGameActivity : GameActivity() {
                                 val destIata = backStackEntry.arguments?.getString("destIata") ?: ""
                                 val durationMin = backStackEntry.arguments?.getInt("durationMin") ?: 0
                                 val rank = backStackEntry.arguments?.getString("rank") ?: ""
-                                // Threaded through for later phases (e.g. a challenge-progress
-                                // beat after the rank stamp, per mechanics.md's post-landing
-                                // pipeline step 5). Not consumed by this screen yet.
+                                // Not consumed by this screen itself - mechanics.md's post-landing
+                                // pipeline step 5 branches purely on `landingResultChannel`, not on mode.
                                 @Suppress("UNUSED_VARIABLE")
                                 val mode = backStackEntry.arguments?.getString("mode")
                                     ?.let { runCatching { FlightMode.valueOf(it) }.getOrDefault(FlightMode.STORY) }
                                     ?: FlightMode.STORY
+                                val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
 
                                 ArrivalCelebrationScreen(
                                     flightNo = flightNo,
                                     destIata = destIata,
                                     durationMin = durationMin,
                                     rank = rank,
+                                    onContinue = {
+                                        // mechanics.md's post-landing pipeline step 5: the rank stamp above
+                                        // always shows first, unchanged - this is the "always sequenced,
+                                        // never replaced" hand-off into whatever step 4's challenge check
+                                        // found (Phase 3b). `first { it != Pending }` awaits a resolved value
+                                        // rather than racing InFlightViewModel's IO-dispatched check - see
+                                        // LandingResultChannel's doc for why Pending is never itself acted on.
+                                        coroutineScope.launch {
+                                            when (landingResultChannel.result.first { it != LandingResult.Pending }) {
+                                                is LandingResult.ChallengeCompleted ->
+                                                    navController.navigate(Screen.ChallengeCompletion.route) {
+                                                        popUpTo(Screen.ArrivalCelebration.route) { inclusive = true }
+                                                    }
+                                                is LandingResult.ChallengeAdvanced ->
+                                                    navController.navigate(Screen.ChallengeProgress.route) {
+                                                        popUpTo(Screen.ArrivalCelebration.route) { inclusive = true }
+                                                    }
+                                                LandingResult.None, LandingResult.Pending ->
+                                                    navController.navigate(Screen.Hub.route) {
+                                                        popUpTo(Screen.Hub.route) { inclusive = true }
+                                                    }
+                                            }
+                                        }
+                                    }
+                                )
+                            }
+
+                            // ── Challenge per-leg tick-up (Phase 3b) ──
+                            composable(Screen.ChallengeProgress.route) {
+                                val outcome = landingResultChannel.result.value as? LandingResult.ChallengeAdvanced
+                                ChallengeProgressScreen(
+                                    challengeName = outcome?.name ?: "",
+                                    challengeType = outcome?.type ?: com.example.focusflight.data.model.ChallengeType.DISTANCE,
+                                    oldProgress = outcome?.oldProgress ?: 0f,
+                                    newProgress = outcome?.newProgress ?: 0f,
+                                    onContinue = {
+                                        navController.navigate(Screen.Hub.route) {
+                                            popUpTo(Screen.Hub.route) { inclusive = true }
+                                        }
+                                    }
+                                )
+                            }
+
+                            // ── Challenge completion celebration (Phase 3b) ──
+                            composable(Screen.ChallengeCompletion.route) {
+                                val outcome = landingResultChannel.result.value as? LandingResult.ChallengeCompleted
+                                ChallengeCompletionScreen(
+                                    challengeName = outcome?.name ?: "",
+                                    challengeType = outcome?.type ?: com.example.focusflight.data.model.ChallengeType.DISTANCE,
                                     onContinue = {
                                         navController.navigate(Screen.Hub.route) {
                                             popUpTo(Screen.Hub.route) { inclusive = true }

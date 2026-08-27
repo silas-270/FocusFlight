@@ -3,6 +3,8 @@ package com.example.focusflight.ui.screens.hub
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -63,16 +65,19 @@ import com.example.focusflight.ui.theme.Midnight
 import com.example.focusflight.ui.theme.OffWhite
 import com.example.focusflight.ui.theme.Slate
 import com.example.focusflight.ui.theme.Spacing
+import com.example.focusflight.ui.viewmodel.challenges.ChallengesViewModel
 import com.example.focusflight.ui.viewmodel.hub.HubViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HubScreen(
     viewModel: HubViewModel,
+    challengesViewModel: ChallengesViewModel,
     onBookFlightClick: () -> Unit,
     onResumeFlightClick: (context: ActiveFlightContext) -> Unit,
     onPassportClick: () -> Unit,
-    onFreeModeClick: () -> Unit
+    onFreeModeClick: () -> Unit,
+    onContinueRouteChallenge: (challengeId: Int) -> Unit
 ) {
     val currentAirport by viewModel.currentAirport.collectAsState()
     val stats by viewModel.flightStats.collectAsState()
@@ -369,9 +374,14 @@ fun HubScreen(
             }
         ) {
             ModeSelectMenuContent(
+                challengesViewModel = challengesViewModel,
                 onFreeModeClick = {
                     showModeMenu = false
                     onFreeModeClick()
+                },
+                onContinueRouteChallenge = { challengeId ->
+                    showModeMenu = false
+                    onContinueRouteChallenge(challengeId)
                 }
             )
         }
@@ -380,17 +390,23 @@ fun HubScreen(
 
 /**
  * Content of the Hub's secondary "modes" bottom sheet. Per docs/design/core-loop.md's
- * "Mode-select addition", this single menu will eventually cover both non-Story modes: a
- * Challenges quest log (Phase 3 - active challenges, start/abandon actions) plus this Free
- * Mode entry. Only Free Mode exists today, so this is a one-item list, but it's a `Column` of
- * discrete sections (comment marks where Phase 3's section goes) rather than a single hardcoded
- * layout, so adding the quest-log section later is additive, not a rewrite of this composable.
+ * "Mode-select addition", this single menu covers both non-Story modes: the Challenges quest log
+ * (Phase 3b - see [QuestLogSection]) above the Free Mode entry, a `Column` of discrete sections
+ * rather than one hardcoded layout.
  */
 @Composable
-private fun ModeSelectMenuContent(onFreeModeClick: () -> Unit) {
+private fun ModeSelectMenuContent(
+    challengesViewModel: ChallengesViewModel,
+    onFreeModeClick: () -> Unit,
+    onContinueRouteChallenge: (challengeId: Int) -> Unit
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            // The quest log's browse/custom-creation sub-views can run longer than the sheet's
+            // available height (especially the curated catalog list on a small device) - this
+            // was a one-item static list before Phase 3b and never needed to scroll.
+            .verticalScroll(rememberScrollState())
             .padding(horizontal = Spacing.Large)
             .padding(bottom = 30.dp)
     ) {
@@ -404,10 +420,14 @@ private fun ModeSelectMenuContent(onFreeModeClick: () -> Unit) {
         )
         Spacer(modifier = Modifier.height(Spacing.Medium))
 
-        // ── Phase 3 (Challenges) slots in here as its own section: an active-challenges list
-        // (up to the cap of 3) with start-new/abandon actions. See
-        // docs/design/core-loop.md#mode-select-addition and
-        // docs/design/challenges.md#entry--management-surface. Not built yet.
+        QuestLogSection(
+            viewModel = challengesViewModel,
+            onContinueRouteChallenge = onContinueRouteChallenge
+        )
+
+        Spacer(modifier = Modifier.height(Spacing.Large))
+        HorizontalDivider(color = Border, thickness = 1.dp)
+        Spacer(modifier = Modifier.height(Spacing.Large))
 
         ModeMenuItem(
             icon = Icons.Outlined.FlightTakeoff,
