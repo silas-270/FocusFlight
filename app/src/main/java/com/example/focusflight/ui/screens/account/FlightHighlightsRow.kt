@@ -199,6 +199,14 @@ private fun EquatorProgressCard(ratio: Double, modifier: Modifier = Modifier) {
             fraction = 1f
         }
         val lapColor = equatorLapColors[lapIndex % equatorLapColors.size]
+        // Once a lap has completed, the track behind the new lap is painted in the color that
+        // just finished — so the ring reads as a new circle drawn over the last one, rather
+        // than always sitting on a neutral background.
+        val trackColor = if (lapIndex > 0) {
+            equatorLapColors[(lapIndex - 1) % equatorLapColors.size]
+        } else {
+            Slate
+        }
         val percentText = String.format(Locale.US, "%.1f%%", safeRatio * 100)
 
         Box(
@@ -217,7 +225,7 @@ private fun EquatorProgressCard(ratio: Double, modifier: Modifier = Modifier) {
                     val topLeft = androidx.compose.ui.geometry.Offset(strokeWidth / 2, strokeWidth / 2)
 
                     drawArc(
-                        color = Slate,
+                        color = trackColor,
                         startAngle = -90f,
                         sweepAngle = 360f,
                         useCenter = false,

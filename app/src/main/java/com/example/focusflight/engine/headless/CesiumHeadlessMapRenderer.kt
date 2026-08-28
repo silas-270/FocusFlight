@@ -1,7 +1,9 @@
 package com.example.focusflight.engine.headless
 
 import android.util.Log
+import com.example.focusflight.data.model.Airport
 import com.example.focusflight.data.model.FlightRoute
+import com.example.focusflight.data.repository.AirportRepository
 import java.io.File
 
 /**
@@ -15,6 +17,20 @@ class CesiumHeadlessMapRenderer(private val cacheDir: File) {
     sealed class Result {
         data class Success(val path: String, val fromCache: Boolean) : Result()
         data class Failure(val message: String) : Result()
+    }
+
+    /**
+     * Fetches [airport]'s outbound routes and renders them, so callers don't each re-implement
+     * the "fetch routes, then render" pairing - previously duplicated in `OnboardingViewModel`,
+     * `HubViewModel`, and `InFlightViewModel`.
+     */
+    suspend fun renderRouteMapForAirport(
+        airportRepository: AirportRepository,
+        airport: Airport,
+        reuseCachedFile: Boolean = false
+    ): Result {
+        val outboundRoutes = airportRepository.getOutboundRoutes(airport.iataCode)
+        return renderRouteMap(airport.iataCode, airport.lat, airport.lon, outboundRoutes, reuseCachedFile)
     }
 
     suspend fun renderRouteMap(

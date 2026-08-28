@@ -33,24 +33,39 @@ sealed class LandingResult {
      *  today. */
     object None : LandingResult()
 
-    /** At least one active challenge's progress moved (but didn't reach 100%) - challenges.md's
-     *  "Per-leg progress feedback". [oldProgress]/[newProgress] are 0f..1f, per
-     *  [com.example.focusflight.data.model.progressFraction]. */
-    data class ChallengeAdvanced(
-        val challengeId: Int,
-        val name: String,
-        val type: ChallengeType,
+    /** At least one active challenge changed - a single landing can credit more than one at once
+     *  (e.g. two Distance challenges and a Set-completion challenge all get credited by the same
+     *  flight, since `MAX_ACTIVE_CHALLENGES` is 3). [outcomes] holds every one of them, in
+     *  [before]'s order - see [resolveLandingOutcome]. `ChallengeOutcomeScreen` shows one bar per
+     *  entry, so [outcomes] is never empty. */
+    data class ChallengesAffected(val outcomes: List<ChallengeOutcome>) : LandingResult()
+}
+
+/**
+ * One challenge's change from a single landing - either it advanced (challenges.md's "Per-leg
+ * progress feedback") but didn't reach 100%, or it completed (challenges.md's "Completion
+ * celebration"). [oldProgress]/[newProgress] are 0f..1f, per
+ * [com.example.focusflight.data.model.progressFraction].
+ */
+sealed interface ChallengeOutcome {
+    val challengeId: Int
+    val name: String
+    val type: ChallengeType
+
+    data class Advanced(
+        override val challengeId: Int,
+        override val name: String,
+        override val type: ChallengeType,
         val oldProgress: Float,
         val newProgress: Float
-    ) : LandingResult()
+    ) : ChallengeOutcome
 
-    /** This landing pushed an active challenge to 100% - challenges.md's "Completion
-     *  celebration". */
-    data class ChallengeCompleted(
-        val challengeId: Int,
-        val name: String,
-        val type: ChallengeType
-    ) : LandingResult()
+    data class Completed(
+        override val challengeId: Int,
+        override val name: String,
+        override val type: ChallengeType,
+        val oldProgress: Float
+    ) : ChallengeOutcome
 }
 
 /**
@@ -66,35 +81,31 @@ sealed class LandingResult {
  * entry missing from [after] (e.g. abandoned mid-flight, an unlikely but possible race) is skipped
  * rather than crashing.
  *
- * Judgment call (not specced): a single landing can qualify for more than one active challenge at
- * once (e.g. one Distance challenge and one Set-completion challenge both get credited by the same
- * flight). Rather than queueing multiple beats, this surfaces exactly one: a completion always
- * wins over a mere advance (the bigger moment), and ties within a kind are broken by [before]'s
- * order. Revisit if that turns out to feel like it's hiding progress often in practice.
+ * A single landing can affect more than one active challenge at once (e.g. one Distance challenge
+ * and one Set-completion challenge both get credited by the same flight) - every changed challenge
+ * is collected here, in [before]'s order, including a Route challenge's own per-leg advance (shown
+ * as a bar here too, alongside its own persistent progress strip on the Hub).
  */
 fun resolveLandingOutcome(before: List<Challenge>, after: List<Challenge>): LandingResult {
     val afterById = after.associateBy { it.id }
-    var advanced: LandingResult.ChallengeAdvanced? = null
-    var completed: LandingResult.ChallengeCompleted? = null
+    val outcomes = mutableListOf<ChallengeOutcome>()
 
     for (old in before) {
         val new = afterById[old.id] ?: continue
+        val oldProgress = old.progressFraction()
 
         if (old.status == ChallengeStatus.ACTIVE && new.status == ChallengeStatus.COMPLETED) {
-            if (completed == null) {
-                completed = LandingResult.ChallengeCompleted(new.id, new.name, new.type)
-            }
+            outcomes += ChallengeOutcome.Completed(new.id, new.name, new.type, oldProgress)
             continue
         }
 
-        val oldProgress = old.progressFraction()
         val newProgress = new.progressFraction()
-        if (advanced == null && newProgress != oldProgress) {
-            advanced = LandingResult.ChallengeAdvanced(new.id, new.name, new.type, oldProgress, newProgress)
+        if (newProgress != oldProgress) {
+            outcomes += ChallengeOutcome.Advanced(new.id, new.name, new.type, oldProgress, newProgress)
         }
     }
 
-    return completed ?: advanced ?: LandingResult.None
+    return if (outcomes.isEmpty()) LandingResult.None else LandingResult.ChallengesAffected(outcomes)
 }
 
 /**

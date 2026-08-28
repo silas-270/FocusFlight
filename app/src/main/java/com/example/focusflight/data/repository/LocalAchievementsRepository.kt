@@ -2,6 +2,7 @@ package com.example.focusflight.data.repository
 
 import com.example.focusflight.data.local.AchievementUnlockDao
 import com.example.focusflight.data.local.UserProfileDao
+import com.example.focusflight.data.local.requireProfileId
 import com.example.focusflight.data.model.AchievementBoard
 import com.example.focusflight.data.model.AchievementProgress
 import com.example.focusflight.data.model.AchievementStatus
@@ -33,16 +34,12 @@ class LocalAchievementsRepository(
     private val now: () -> Long = System::currentTimeMillis
 ) : AchievementsRepository {
 
-    private suspend fun getUserId(): Int =
-        userProfileDao.getProfile()?.id
-            ?: throw IllegalStateException("No user profile found. Create a profile first.")
-
     override suspend fun evaluateBoard(
         geo: VisitedGeography,
         history: List<FlightLog>
     ): AchievementBoard {
         val board = AchievementProgress.evaluateAll(geo, history)
-        val userId = getUserId()
+        val userId = userProfileDao.requireProfileId()
         val stampedAt = now()
 
         // Record anything newly unlocked. IGNORE-on-conflict means an already-stamped achievement

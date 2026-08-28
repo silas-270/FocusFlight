@@ -16,12 +16,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -33,8 +28,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.example.focusflight.data.model.FlightRoute
+import com.example.focusflight.ui.components.CaptionLabel
+import com.example.focusflight.ui.components.IataBadge
+import com.example.focusflight.ui.components.SearchTextField
 import com.example.focusflight.ui.theme.Amber
 import com.example.focusflight.ui.theme.Border
 import com.example.focusflight.ui.theme.DeepNavy
@@ -57,54 +54,18 @@ fun AirportSearchPanel(
         modifier = modifier
             .fillMaxWidth()
     ) {
-        OutlinedTextField(
+        SearchTextField(
             value = query,
             onValueChange = onQueryChange,
-            modifier = Modifier.fillMaxWidth(),
-            placeholder = {
-                Text(
-                    text = "Search airport…",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = Haze,
-                    modifier = Modifier.padding(start = 4.dp)
-                )
-            },
-            leadingIcon = {
-                Icon(
-                    imageVector = Icons.Outlined.Search,
-                    contentDescription = "Search",
-                    tint = Haze,
-                    modifier = Modifier.size(24.dp)
-                )
-            },
-            singleLine = true,
-            shape = RoundedCornerShape(16.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = Slate,
-                unfocusedContainerColor = DeepNavy,
-                cursorColor = Amber,
-                focusedBorderColor = Amber,
-                unfocusedBorderColor = Border.copy(alpha = 0.3f),
-                focusedTextColor = OffWhite,
-                unfocusedTextColor = OffWhite,
-                focusedLeadingIconColor = Amber,
-                unfocusedLeadingIconColor = Haze
-            ),
-            textStyle = MaterialTheme.typography.bodyLarge
+            placeholder = "Search airport…",
+            unfocusedBorderColor = Border.copy(alpha = 0.3f)
         )
 
         Spacer(modifier = Modifier.height(Spacing.Medium))
 
         if (query.trim().isEmpty()) {
             Column(modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    text = "SUGGESTED DESTINATIONS",
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.sp
-                    ),
-                    color = Haze
-                )
+                CaptionLabel(text = "SUGGESTED DESTINATIONS")
                 Spacer(modifier = Modifier.height(Spacing.Medium))
 
                 val suggestions = remember(results) {
@@ -133,7 +94,7 @@ fun AirportSearchPanel(
                                     code = r.destIata,
                                     city = r.destMunicipality,
                                     name = r.destName,
-                                    durationMin = r.flightTimeMin,
+                                    durationMin = r.durationMin,
                                     isSelected = isSelected,
                                     onClick = { onRouteSelect(r) }
                                 )
@@ -145,7 +106,7 @@ fun AirportSearchPanel(
                                     code = r.destIata,
                                     city = r.destMunicipality,
                                     name = r.destName,
-                                    durationMin = r.flightTimeMin,
+                                    durationMin = r.durationMin,
                                     isSelected = isSelected,
                                     onClick = { onRouteSelect(r) }
                                 )
@@ -159,7 +120,7 @@ fun AirportSearchPanel(
                                 code = r.destIata,
                                 city = r.destMunicipality,
                                 name = r.destName,
-                                durationMin = r.flightTimeMin,
+                                durationMin = r.durationMin,
                                 isSelected = isSelected,
                                 onClick = { onRouteSelect(r) }
                             )
@@ -178,7 +139,7 @@ fun AirportSearchPanel(
                                     code = r.destIata,
                                     city = r.destMunicipality,
                                     name = r.destName,
-                                    durationMin = r.flightTimeMin,
+                                    durationMin = r.durationMin,
                                     isSelected = isSelected,
                                     onClick = { onRouteSelect(r) }
                                 )
@@ -190,7 +151,7 @@ fun AirportSearchPanel(
                                     code = r.destIata,
                                     city = r.destMunicipality,
                                     name = r.destName,
-                                    durationMin = r.flightTimeMin,
+                                    durationMin = r.durationMin,
                                     isSelected = isSelected,
                                     onClick = { onRouteSelect(r) }
                                 )
@@ -208,7 +169,7 @@ fun AirportSearchPanel(
                                     code = r.destIata,
                                     city = r.destMunicipality,
                                     name = r.destName,
-                                    durationMin = r.flightTimeMin,
+                                    durationMin = r.durationMin,
                                     isSelected = isSelected,
                                     onClick = { onRouteSelect(r) }
                                 )
@@ -244,8 +205,8 @@ fun AirportSearchPanel(
                 items(results.size) { index ->
                     val route = results[index]
                     val isSelected = selectedRoute?.id == route.id
-                    val hrs = route.flightTimeMin / 60
-                    val mins = route.flightTimeMin % 60
+                    val hrs = route.durationMin / 60
+                    val mins = route.durationMin % 60
                     val formattedTime = "%02d:%02d".format(hrs, mins)
 
                     Row(
@@ -322,29 +283,7 @@ internal fun SuggestionTile(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                modifier = Modifier
-                    .size(width = 46.dp, height = 28.dp)
-                    .border(
-                        width = 1.dp,
-                        color = Border,
-                        shape = RoundedCornerShape(6.dp)
-                    )
-                    .background(
-                        color = Midnight,
-                        shape = RoundedCornerShape(6.dp)
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = code,
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        fontFamily = FontFamily.SansSerif,
-                        fontWeight = FontWeight.Bold
-                    ),
-                    color = OffWhite
-                )
-            }
+            IataBadge(code = code, borderColor = Border, backgroundColor = Midnight, textColor = OffWhite)
 
             Text(
                 text = timeStr,

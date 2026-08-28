@@ -12,19 +12,16 @@ import com.example.focusflight.data.repository.ChallengeRepository
 import com.example.focusflight.data.repository.PreferencesRepository
 import com.example.focusflight.data.repository.UserRepository
 import com.example.focusflight.data.repository.FlightLogRepository
+import com.example.focusflight.domain.AirportSearchController
+import com.example.focusflight.ui.components.airportpicker.resolveSuggestedAirports
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 enum class SearchMode { TIME, AIRPORT }
 
-@OptIn(FlowPreview::class)
 class FlightSearchViewModel(
     private val context: android.content.Context,
     private val airportRepository: AirportRepository,
@@ -70,13 +67,16 @@ class FlightSearchViewModel(
     // doc asks for: a second airport search, structurally identical to the existing destination
     // search (onAirportSearchQueryChanged/airportSearchResults above), just over
     // `airportRepository.searchAirports()` (any airport) instead of `getOutboundRoutes()` (routes
-    // from a fixed origin) - reusing OnboardingViewModel's debounced-search pattern since that's
-    // the other place in the app that already searches airports by free text, not by route.
-    private val _originSearchQuery = MutableStateFlow("")
-    val originSearchQuery: StateFlow<String> = _originSearchQuery.asStateFlow()
+    // from a fixed origin) - shares AirportSearchController with OnboardingViewModel's home-
+    // airport search since both search airports by free text, not by route.
+    private val originSearch = AirportSearchController(airportRepository, viewModelScope)
+    val originSearchQuery: StateFlow<String> = originSearch.query
+    val originSearchResults: StateFlow<List<Airport>> = originSearch.results
 
-    private val _originSearchResults = MutableStateFlow<List<Airport>>(emptyList())
-    val originSearchResults: StateFlow<List<Airport>> = _originSearchResults.asStateFlow()
+    // Same FRA/LHR/BER/MUC tiles Onboarding shows before a search is typed, so the origin picker
+    // looks identical to Onboarding's two-step "search -> confirm on map" layout.
+    private val _originSuggestions = MutableStateFlow<List<Airport>>(emptyList())
+    val originSuggestions: StateFlow<List<Airport>> = _originSuggestions.asStateFlow()
 
     // World Map Data
     val mapPaths = MutableStateFlow<List<com.example.focusflight.ui.map.CountryPath>>(emptyList())
@@ -94,7 +94,7 @@ class FlightSearchViewModel(
         // `mode == FlightMode.FREE && originAirport == null` picker-gate is never true here.
         when (mode) {
             FlightMode.STORY -> loadOrigin()
-            FlightMode.FREE -> observeOriginSearch()
+            FlightMode.FREE -> loadOriginSuggestions()
             FlightMode.CHALLENGE -> loadChallengeOrigin()
         }
         loadMapData()
@@ -110,24 +110,14 @@ class FlightSearchViewModel(
         }
     }
 
-    private fun observeOriginSearch() {
-        viewModelScope.launch {
-            _originSearchQuery
-                .debounce(300)
-                .collectLatest { query ->
-                    if (query.trim().length >= 2) {
-                        _originSearchResults.value = withContext(Dispatchers.IO) {
-                            airportRepository.searchAirports(query)
-                        }
-                    } else {
-                        _originSearchResults.value = emptyList()
-                    }
-                }
-        }
+    fun onOriginSearchQueryChanged(query: String) {
+        originSearch.onQueryChanged(query)
     }
 
-    fun onOriginSearchQueryChanged(query: String) {
-        _originSearchQuery.value = query
+    private fun loadOriginSuggestions() {
+        viewModelScope.launch(Dispatchers.IO) {
+            _originSuggestions.value = resolveSuggestedAirports(airportRepository)
+        }
     }
 
     /** Free Mode only: the player's chosen origin, picked from [originSearchResults]. Kicks off
@@ -135,8 +125,8 @@ class FlightSearchViewModel(
      *  picker, so everything downstream of this point is identical between modes. */
     fun selectOrigin(airport: Airport) {
         _originAirport.value = airport
-        _originSearchQuery.value = ""
-        _originSearchResults.value = emptyList()
+        originSearch.onQueryChanged("")
+        originSearch.clearResults()
         fetchRoutes()
     }
 
@@ -177,7 +167,7 @@ class FlightSearchViewModel(
 
     fun selectInterval(interval: Int) {
         _selectedInterval.value = interval
-        val filtered = _allRoutes.value.filter { it.flightTimeMin in interval..(interval + 9) }
+        val filtered = _allRoutes.value.filter { it.durationMin in interval..(interval + 9) }
         _filteredRoutes.value = filtered
         
         // Auto-select the first route in the new interval if available
@@ -269,12 +259,12 @@ class FlightSearchViewModel(
             _allRoutes.value = fetched
 
             if (fetched.isNotEmpty()) {
-                val shortest = fetched.first().flightTimeMin
-                val longest = fetched.maxOf { it.flightTimeMin }
+                val shortest = fetched.first().durationMin
+                val longest = fetched.maxOf { it.durationMin }
                 val startInterval = (shortest / 10) * 10
                 val endInterval = (longest / 10) * 10
                 val generatedIntervals = (startInterval..endInterval step 10).filter { interval ->
-                    fetched.any { it.flightTimeMin in interval..(interval + 9) }
+                    fetched.any { it.durationMin in interval..(interval + 9) }
                 }
                 _intervals.value = generatedIntervals
                 

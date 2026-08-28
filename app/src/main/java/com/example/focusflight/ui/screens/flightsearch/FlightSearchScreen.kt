@@ -20,24 +20,22 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.FlightTakeoff
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Timer
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -45,8 +43,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.focusflight.data.model.Airport
 import com.example.focusflight.data.model.FlightMode
 import com.example.focusflight.data.model.FlightRoute
+import com.example.focusflight.ui.components.BackTopAppBar
+import com.example.focusflight.ui.components.PrimaryActionButton
+import com.example.focusflight.ui.components.airportpicker.AirportMapConfirmCard
+import com.example.focusflight.ui.components.airportpicker.AirportSearchStep
+import com.example.focusflight.ui.components.airportpicker.AirportSuggestion
 import com.example.focusflight.ui.theme.Amber
 import com.example.focusflight.ui.theme.Border
 import com.example.focusflight.ui.theme.DeepNavy
@@ -83,70 +87,61 @@ fun FlightSearchScreen(
     if (mode == FlightMode.FREE && originAirport == null) {
         val originSearchQuery by viewModel.originSearchQuery.collectAsState()
         val originSearchResults by viewModel.originSearchResults.collectAsState()
+        val originSuggestions by viewModel.originSuggestions.collectAsState()
+        var pendingOrigin by remember { mutableStateOf<Airport?>(null) }
 
         Scaffold(
             topBar = {
-                TopAppBar(
-                    title = {
-                        Text(
-                            "FREE MODE",
-                            style = MaterialTheme.typography.labelLarge.copy(
-                                letterSpacing = 3.sp,
-                                fontWeight = FontWeight.Bold
-                            ),
-                            color = Amber
-                        )
-                    },
-                    navigationIcon = {
-                        IconButton(onClick = onBackClick) {
-                            Icon(
-                                Icons.AutoMirrored.Outlined.ArrowBack,
-                                contentDescription = "Back",
-                                tint = OffWhite
-                            )
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Midnight)
-                )
+                BackTopAppBar(title = "FREE MODE", onBackClick = onBackClick)
             },
             containerColor = Midnight
         ) { paddingValues ->
-            OriginSearchPanel(
-                query = originSearchQuery,
-                onQueryChange = { viewModel.onOriginSearchQueryChanged(it) },
-                results = originSearchResults,
-                onAirportSelect = { viewModel.selectOrigin(it) },
+            Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
                     .padding(horizontal = Spacing.Large, vertical = Spacing.Small)
-            )
+            ) {
+                Box(modifier = Modifier.weight(1f)) {
+                    if (pendingOrigin == null) {
+                        AirportSearchStep(
+                            headline = "Where does your flight start?",
+                            searchQuery = originSearchQuery,
+                            onQueryChange = { viewModel.onOriginSearchQueryChanged(it) },
+                            placeholder = "Search origin airport…",
+                            searchResults = originSearchResults,
+                            onAirportSelected = { pendingOrigin = it },
+                            suggestions = originSuggestions.map { airport ->
+                                AirportSuggestion(airport.iataCode, airport.municipality, airport.name) {
+                                    pendingOrigin = airport
+                                }
+                            }
+                        )
+                    } else {
+                        AirportMapConfirmCard(
+                            airport = pendingOrigin!!,
+                            onChangeSelection = { pendingOrigin = null }
+                        )
+                    }
+                }
+
+                if (pendingOrigin != null) {
+                    Spacer(modifier = Modifier.height(Spacing.Medium))
+                    PrimaryActionButton(
+                        text = "CONFIRM ORIGIN",
+                        onClick = { pendingOrigin?.let { viewModel.selectOrigin(it) } }
+                    )
+                }
+            }
         }
         return
     }
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        "SELECT ROUTE",
-                        style = MaterialTheme.typography.labelLarge.copy(
-                            letterSpacing = 3.sp,
-                            fontWeight = FontWeight.Bold
-                        ),
-                        color = Amber
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(
-                            Icons.AutoMirrored.Outlined.ArrowBack,
-                            contentDescription = "Back",
-                            tint = OffWhite
-                        )
-                    }
-                },
+            BackTopAppBar(
+                title = "SELECT ROUTE",
+                onBackClick = onBackClick,
                 actions = {
                     IconButton(onClick = { viewModel.toggleSearchMode() }) {
                         Icon(
@@ -159,10 +154,7 @@ fun FlightSearchScreen(
                             tint = Amber
                         )
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Midnight
-                )
+                }
             )
         },
         containerColor = Midnight
@@ -338,29 +330,14 @@ fun FlightSearchScreen(
             Spacer(modifier = Modifier.height(Spacing.Large))
 
             // 6. Common Confirm Selection Button (always displayed at the bottom)
-            Button(
-                onClick = { selectedRoute?.let { onRouteConfirm(it) } },
-                enabled = selectedRoute != null,
+            PrimaryActionButton(
+                text = "CONFIRM SELECTION",
                 modifier = Modifier
-                    .fillMaxWidth()
                     .padding(horizontal = Spacing.Large)
                     .height(54.dp),
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Amber,
-                    contentColor = Midnight,
-                    disabledContainerColor = Amber.copy(alpha = 0.35f),
-                    disabledContentColor = Midnight.copy(alpha = 0.5f)
-                )
-            ) {
-                Text(
-                    text = "CONFIRM SELECTION",
-                    style = MaterialTheme.typography.labelLarge.copy(
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.5.sp
-                    )
-                )
-            }
+                enabled = selectedRoute != null,
+                onClick = { selectedRoute?.let { onRouteConfirm(it) } }
+            )
         }
     }
 }

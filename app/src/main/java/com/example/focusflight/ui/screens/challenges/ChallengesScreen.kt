@@ -18,17 +18,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.FlightTakeoff
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -48,6 +44,8 @@ import com.example.focusflight.data.model.ChallengeType
 import com.example.focusflight.data.repository.MAX_ACTIVE_CHALLENGES
 import com.example.focusflight.data.repository.StartChallengeResult
 import com.example.focusflight.ui.components.AchievementProgressRow
+import com.example.focusflight.ui.components.BackTopAppBar
+import com.example.focusflight.ui.components.CaptionLabel
 import com.example.focusflight.ui.screens.account.ChallengeCompletionEntry
 import com.example.focusflight.ui.theme.Amber
 import com.example.focusflight.ui.theme.Border
@@ -112,27 +110,11 @@ fun ChallengesScreen(
         Scaffold(
             containerColor = Midnight,
             topBar = {
-                TopAppBar(
-                    title = {
-                        Text(
-                            text = "CHALLENGES",
-                            style = MaterialTheme.typography.labelLarge.copy(
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 2.sp
-                            ),
-                            color = OffWhite
-                        )
-                    },
-                    navigationIcon = {
-                        IconButton(onClick = onBackClick) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
-                                contentDescription = "Back",
-                                tint = OffWhite
-                            )
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Midnight)
+                BackTopAppBar(
+                    title = "CHALLENGES",
+                    onBackClick = onBackClick,
+                    accentColor = OffWhite,
+                    letterSpacing = 2.sp
                 )
             }
         ) { padding ->
@@ -167,7 +149,7 @@ fun ChallengesScreen(
                             )
                         }
 
-                        item { SectionLabel(text = "COMPLETED") }
+                        item { CaptionLabel(text = "COMPLETED") }
 
                         if (completedChallenges.isEmpty()) {
                             item { EmptyLine("No challenges completed yet.") }
@@ -354,18 +336,6 @@ private fun TabSwitcher(selected: ChallengesTab, onSelect: (ChallengesTab) -> Un
             }
         }
     }
-}
-
-@Composable
-private fun SectionLabel(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.labelSmall.copy(
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 1.sp
-        ),
-        color = Haze
-    )
 }
 
 @Composable

@@ -105,7 +105,7 @@ class HubViewModel(
             try {
                 val stats = flightLogRepository.getFlightStats()
                 _flightStats.value = stats
-                _recentFlights.value = flightLogRepository.getRecentFlights(5)
+                _recentFlights.value = flightLogRepository.getRecentFlights()
             } catch (e: Exception) {
                 Log.e("HubViewModel", "Error loading flight stats", e)
                 _flightStats.value = FlightStats(
@@ -122,14 +122,7 @@ class HubViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             _isRendering.value = true
             try {
-                val outboundRoutes = airportRepository.getOutboundRoutes(origin.iataCode)
-                val result = mapRenderer.renderRouteMap(
-                    centerIata = origin.iataCode,
-                    centerLat = origin.lat,
-                    centerLon = origin.lon,
-                    outboundRoutes = outboundRoutes,
-                    reuseCachedFile = true
-                )
+                val result = mapRenderer.renderRouteMapForAirport(airportRepository, origin, reuseCachedFile = true)
                 when (result) {
                     is CesiumHeadlessMapRenderer.Result.Success -> _routeMapPath.value = result.path
                     is CesiumHeadlessMapRenderer.Result.Failure -> _mapRenderError.value = result.message

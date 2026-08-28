@@ -5,7 +5,7 @@ data class FlightRoute(
     val originIata: String,
     val destIata: String,
     val distanceKm: Double,
-    val flightTimeMin: Int,
+    val durationMin: Int,
     val carriers: String,
     val destName: String,
     val destMunicipality: String,

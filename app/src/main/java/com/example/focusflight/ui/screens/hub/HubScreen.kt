@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.defaultMinSize
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -48,6 +47,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -60,6 +60,7 @@ import com.example.focusflight.data.model.Challenge
 import com.example.focusflight.data.model.PausedFlight
 import com.example.focusflight.data.model.progressFraction
 import com.example.focusflight.ui.components.ChallengeProgressBar
+import com.example.focusflight.ui.components.PrimaryActionButton
 import com.example.focusflight.ui.components.challengeTypeIcon
 import com.example.focusflight.ui.components.challengeTypeLabel
 import com.example.focusflight.ui.screens.challenges.challengeSubtitle
@@ -140,54 +141,20 @@ fun HubScreen(
                 }
                 if (pausedFlight != null) {
                     val flight = pausedFlight!!
-                    Button(
-                        onClick = { onResumeFlightClick(flight) },
-                        modifier = Modifier.fillMaxWidth().height(56.dp),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = Midnight
-                        )
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.FlightTakeoff,
-                            contentDescription = null,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Spacer(modifier = Modifier.width(Spacing.Small))
-                        Text(
-                            text = "RESUME FLIGHT",
-                            style = MaterialTheme.typography.labelLarge.copy(
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 1.5.sp
-                            )
-                        )
-                    }
+                    PrimaryActionButton(
+                        text = "RESUME FLIGHT",
+                        modifier = Modifier.height(56.dp),
+                        icon = Icons.Outlined.FlightTakeoff,
+                        onClick = { onResumeFlightClick(flight) }
+                    )
                 } else {
                     val focused = focusedChallenge
-                    Button(
-                        onClick = { if (focused != null) onContinueChallengeClick(focused.id) else onBookFlightClick() },
-                        modifier = Modifier.fillMaxWidth().height(56.dp),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Amber,
-                            contentColor = Midnight
-                        )
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.FlightTakeoff,
-                            contentDescription = null,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Spacer(modifier = Modifier.width(Spacing.Small))
-                        Text(
-                            text = "BOOK A FLIGHT",
-                            style = MaterialTheme.typography.labelLarge.copy(
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 1.5.sp
-                            )
-                        )
-                    }
+                    PrimaryActionButton(
+                        text = "BOOK A FLIGHT",
+                        modifier = Modifier.height(56.dp),
+                        icon = Icons.Outlined.FlightTakeoff,
+                        onClick = { if (focused != null) onContinueChallengeClick(focused.id) else onBookFlightClick() }
+                    )
                 }
               }
             }
@@ -290,11 +257,16 @@ fun HubScreen(
                 .fillMaxSize()
                 .background(Midnight)
         ) {
-            // Background Globe image
+            // Background Globe image. Sized off the screen's own height, not this Box's
+            // immediate parent - that parent shrinks whenever the outer Scaffold's bottomBar
+            // grows (e.g. the focused-challenge card adds a row above Resume/Book), and sizing
+            // off a shrinking container recentered the crop of this fixed-aspect image, reading
+            // as the globe getting cut off at the top the moment a challenge is focused.
+            val screenHeightDp = LocalConfiguration.current.screenHeightDp.dp
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .fillMaxHeight(0.775f)
+                    .height(screenHeightDp * 0.775f)
                     .padding(top = 48.dp)
                     .align(Alignment.TopCenter)
             ) {

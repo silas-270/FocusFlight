@@ -2,6 +2,7 @@ package com.example.focusflight.data.repository
 
 import com.example.focusflight.data.local.ChallengeDao
 import com.example.focusflight.data.local.UserProfileDao
+import com.example.focusflight.data.local.requireProfileId
 import com.example.focusflight.data.model.Airport
 import com.example.focusflight.data.model.Challenge
 import com.example.focusflight.data.model.ChallengeProgress
@@ -24,31 +25,27 @@ class LocalChallengeRepository(
     private val airportRepository: AirportRepository
 ) : ChallengeRepository {
 
-    private suspend fun getUserId(): Int =
-        userProfileDao.getProfile()?.id
-            ?: throw IllegalStateException("No user profile found. Create a profile first.")
-
     override suspend fun listActiveChallenges(): List<Challenge> =
-        challengeDao.getByStatus(getUserId(), ChallengeStatus.ACTIVE)
+        challengeDao.getByStatus(userProfileDao.requireProfileId(), ChallengeStatus.ACTIVE)
 
     override fun listActiveChallengesFlow(): Flow<List<Challenge>> {
         // userId is resolved synchronously, mirroring LocalFlightLogRepository.getFlightHistoryFlow
         // - a challenges list is only ever read post-onboarding, when a profile is guaranteed.
-        val userId = kotlinx.coroutines.runBlocking { getUserId() }
+        val userId = kotlinx.coroutines.runBlocking { userProfileDao.requireProfileId() }
         return challengeDao.getByStatusFlow(userId, ChallengeStatus.ACTIVE)
     }
 
     override suspend fun getChallenge(id: Int): Challenge? = challengeDao.getById(id)
 
     override suspend fun listCompletedChallenges(): List<Challenge> =
-        challengeDao.getByStatusOrderedByCompletedAt(getUserId(), ChallengeStatus.COMPLETED)
+        challengeDao.getByStatusOrderedByCompletedAt(userProfileDao.requireProfileId(), ChallengeStatus.COMPLETED)
 
     private suspend fun hasCapSlot(userId: Int): Boolean =
         challengeDao.countByStatus(userId, ChallengeStatus.ACTIVE) < MAX_ACTIVE_CHALLENGES
 
     override suspend fun startCuratedChallenge(catalogId: String): StartChallengeResult {
         val template = CuratedChallengeCatalog.find(catalogId) ?: return StartChallengeResult.UnknownTemplate
-        val userId = getUserId()
+        val userId = userProfileDao.requireProfileId()
         if (!hasCapSlot(userId)) return StartChallengeResult.CapReached
 
         val challenge = when (template.type) {
@@ -94,7 +91,7 @@ class LocalChallengeRepository(
     }
 
     override suspend fun startCustomRouteChallenge(originIata: String, destIata: String, name: String): StartChallengeResult {
-        val userId = getUserId()
+        val userId = userProfileDao.requireProfileId()
         if (!hasCapSlot(userId)) return StartChallengeResult.CapReached
         val challenge = Challenge(
             userId = userId,
@@ -111,7 +108,7 @@ class LocalChallengeRepository(
     }
 
     override suspend fun startCustomDistanceChallenge(targetDistanceKm: Double, name: String): StartChallengeResult {
-        val userId = getUserId()
+        val userId = userProfileDao.requireProfileId()
         if (!hasCapSlot(userId)) return StartChallengeResult.CapReached
         val challenge = Challenge(
             userId = userId,
@@ -177,7 +174,7 @@ class LocalChallengeRepository(
     }
 
     override suspend fun creditEligibleFlight(destIata: String, distanceKm: Double) {
-        val userId = getUserId()
+        val userId = userProfileDao.requireProfileId()
         val active = challengeDao.getByStatus(userId, ChallengeStatus.ACTIVE)
         if (active.isEmpty()) return
         val destAirport = airportRepository.getAirportByIata(destIata)

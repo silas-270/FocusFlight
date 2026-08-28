@@ -2,6 +2,7 @@ package com.example.focusflight.ui.screens.account
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
@@ -9,21 +10,19 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.AirplanemodeActive
 import androidx.compose.material.icons.outlined.EmojiEvents
+import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.StarHalf
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -32,6 +31,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -39,6 +39,7 @@ import androidx.paging.LoadState
 import androidx.paging.compose.collectAsLazyPagingItems
 import com.example.focusflight.data.model.AchievementStatus
 import com.example.focusflight.data.model.FlightLog
+import com.example.focusflight.ui.components.BackTopAppBar
 import com.example.focusflight.ui.theme.Amber
 import com.example.focusflight.ui.theme.Haze
 import com.example.focusflight.ui.theme.Midnight
@@ -71,8 +72,16 @@ fun AccountScreen(
     // siblings of the Scaffold below (not nested inside it) so they draw on top of the whole
     // screen, same reasoning as every other ScrimCardModal use in this codebase.
     var showReturnHomeModal by remember { mutableStateOf(false) }
+    var showReturningHomeModal by remember { mutableStateOf(false) }
     var showChangeHomeBaseModal by remember { mutableStateOf(false) }
     var showTravelMapModal by remember { mutableStateOf(false) }
+    // Same ScrimCardModal convention for the sort-order picker, replacing the old inline
+    // DropdownMenu — this app never uses DropdownMenu/AlertDialog/Dialog elsewhere.
+    var showSortModal by remember { mutableStateOf(false) }
+    // Months start collapsed; tapping a MonthHeader adds/removes its label here. Only
+    // meaningful when sorted by date — monthHeaderLabels is empty for distance/duration
+    // order, so nothing ever gets collapsed there.
+    var expandedMonths by remember { mutableStateOf(setOf<String>()) }
     // Hoisted out of ProfileHeroCard so it survives the card scrolling out of the LazyColumn's
     // viewport and back in.
     var heroExpanded by remember { mutableStateOf(false) }
@@ -81,34 +90,12 @@ fun AccountScreen(
     var selectedBadge by remember { mutableStateOf<AchievementStatus?>(null) }
     val homeBaseSearchQuery by viewModel.homeBaseSearchQuery.collectAsState()
     val homeBaseSearchResults by viewModel.homeBaseSearchResults.collectAsState()
+    val homeBaseSuggestions by viewModel.homeBaseSuggestions.collectAsState()
 
     Box(modifier = Modifier.fillMaxSize()) {
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        "PILOT PASSPORT",
-                        style = MaterialTheme.typography.labelLarge.copy(
-                            letterSpacing = 3.sp,
-                            fontWeight = FontWeight.Bold
-                        ),
-                        color = Amber
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(
-                            Icons.AutoMirrored.Outlined.ArrowBack,
-                            contentDescription = "Back",
-                            tint = OffWhite
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Midnight
-                )
-            )
+            BackTopAppBar(title = "PILOT PASSPORT", onBackClick = onBackClick)
         },
         containerColor = Midnight
     ) { paddingValues ->
@@ -175,32 +162,51 @@ fun AccountScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         SectionHeader(title = "FLIGHT HISTORY")
-                        SortDropdown(
+                        SortOrderButton(
                             currentOrder = uiState.sortOrder,
-                            onOrderSelected = { viewModel.setSortOrder(it) }
+                            onClick = { showSortModal = true }
                         )
                     }
                 }
 
                 // ── Paged Logbook Items (with sticky month/year headers) ──────
+                // currentMonthLabel tracks which month index i falls in even when i isn't a
+                // header boundary itself, so every item's visibility can be checked against
+                // expandedMonths, not just the first item of each month.
+                var currentMonthLabel: String? = null
                 for (index in 0 until lazyPagingItems.itemCount) {
                     val headerLabel = monthHeaderLabels[index]
                     if (headerLabel != null) {
+                        currentMonthLabel = headerLabel
+                        val isExpanded = headerLabel in expandedMonths
                         stickyHeader(key = "header_$headerLabel") {
-                            MonthHeader(headerLabel)
+                            MonthHeader(
+                                label = headerLabel,
+                                expanded = isExpanded,
+                                onToggle = {
+                                    expandedMonths = if (isExpanded) {
+                                        expandedMonths - headerLabel
+                                    } else {
+                                        expandedMonths + headerLabel
+                                    }
+                                }
+                            )
                         }
                     }
-                    item(
-                        key = lazyPagingItems.peek(index)?.id ?: "placeholder_$index",
-                        contentType = "flight"
-                    ) {
-                        val flight = lazyPagingItems[index]
-                        if (flight != null) {
-                            val entryNo = when (uiState.sortOrder) {
-                                FlightSortOrder.DATE_DESC, FlightSortOrder.DISTANCE_DESC, FlightSortOrder.DURATION_DESC -> uiState.totalFlights - index
-                                FlightSortOrder.DATE_ASC, FlightSortOrder.DISTANCE_ASC -> index + 1
+                    val monthLabel = currentMonthLabel
+                    if (monthLabel == null || monthLabel in expandedMonths) {
+                        item(
+                            key = lazyPagingItems.peek(index)?.id ?: "placeholder_$index",
+                            contentType = "flight"
+                        ) {
+                            val flight = lazyPagingItems[index]
+                            if (flight != null) {
+                                val entryNo = when (uiState.sortOrder) {
+                                    FlightSortOrder.DATE_DESC, FlightSortOrder.DISTANCE_DESC, FlightSortOrder.DURATION_DESC -> uiState.stats.totalFlights - index
+                                    FlightSortOrder.DATE_ASC, FlightSortOrder.DISTANCE_ASC -> index + 1
+                                }
+                                LogbookEntry(flight = flight, entryNumber = entryNo)
                             }
-                            LogbookEntry(flight = flight, entryNumber = entryNo)
                         }
                     }
                 }
@@ -228,10 +234,27 @@ fun AccountScreen(
             homeAirportIata = uiState.homeAirportIata,
             currentAirportIata = uiState.currentAirportIata,
             onConfirm = {
-                viewModel.returnHome()
                 showReturnHomeModal = false
+                showReturningHomeModal = true
             },
             onDismiss = { showReturnHomeModal = false }
+        )
+    }
+
+    if (showReturningHomeModal) {
+        ReturningHomeModal(
+            onComplete = {
+                viewModel.returnHome()
+                showReturningHomeModal = false
+            }
+        )
+    }
+
+    if (showSortModal) {
+        SortOrderModal(
+            currentOrder = uiState.sortOrder,
+            onOrderSelected = { viewModel.setSortOrder(it) },
+            onDismiss = { showSortModal = false }
         )
     }
 
@@ -247,6 +270,7 @@ fun AccountScreen(
             query = homeBaseSearchQuery,
             onQueryChange = { viewModel.onHomeBaseSearchQueryChanged(it) },
             results = homeBaseSearchResults,
+            suggestions = homeBaseSuggestions,
             onAirportSelect = {
                 viewModel.changeHomeBase(it)
                 showChangeHomeBaseModal = false
@@ -270,12 +294,15 @@ fun AccountScreen(
 }
 
 @Composable
-private fun MonthHeader(label: String) {
-    Box(
+private fun MonthHeader(label: String, expanded: Boolean, onToggle: () -> Unit) {
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .background(Midnight)
-            .padding(vertical = Spacing.Small)
+            .clickable(onClick = onToggle)
+            .padding(vertical = Spacing.Small),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
             text = label,
@@ -284,6 +311,14 @@ private fun MonthHeader(label: String) {
                 letterSpacing = 1.5.sp
             ),
             color = Haze
+        )
+        Icon(
+            imageVector = Icons.Outlined.ExpandMore,
+            contentDescription = if (expanded) "Collapse month" else "Expand month",
+            tint = Haze,
+            modifier = Modifier
+                .size(20.dp)
+                .rotate(if (expanded) 180f else 0f)
         )
     }
 }

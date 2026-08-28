@@ -12,17 +12,14 @@ import com.example.focusflight.data.repository.AirportRepository
 import com.example.focusflight.data.repository.ChallengeRepository
 import com.example.focusflight.data.repository.PreferencesRepository
 import com.example.focusflight.data.repository.StartChallengeResult
+import com.example.focusflight.domain.AirportSearchController
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 /**
  * Backs the Challenges screen (docs/design/challenges.md#entry--management-surface): the three
@@ -30,7 +27,6 @@ import kotlinx.coroutines.withContext
  * still-unearned list, and the start/abandon/custom-create flows. One instance is created per
  * composition of that screen - cheap, since it holds no flight/engine state.
  */
-@OptIn(FlowPreview::class)
 class ChallengesViewModel(
     private val challengeRepository: ChallengeRepository,
     private val airportRepository: AirportRepository,
@@ -89,44 +85,25 @@ class ChallengesViewModel(
     val focusedChallengeId: StateFlow<Int?> = _focusedChallengeId.asStateFlow()
 
     // ── Custom Route creation: origin/destination airport search ────────────────────────
-    // Structurally identical to FlightSearchViewModel's Free-Mode origin picker (debounced
-    // search over AirportRepository.searchAirports()) - reused here twice, once per endpoint,
-    // since a custom Route challenge needs both ends picked rather than one fixed + one browsed.
-    private val _originQuery = MutableStateFlow("")
-    val originQuery: StateFlow<String> = _originQuery.asStateFlow()
-    private val _originResults = MutableStateFlow<List<Airport>>(emptyList())
-    val originResults: StateFlow<List<Airport>> = _originResults.asStateFlow()
+    // Shares AirportSearchController with FlightSearchViewModel's Free-Mode origin picker -
+    // one instance per endpoint, since a custom Route challenge needs both ends picked rather
+    // than one fixed + one browsed.
+    private val originSearch = AirportSearchController(airportRepository, viewModelScope)
+    val originQuery: StateFlow<String> = originSearch.query
+    val originResults: StateFlow<List<Airport>> = originSearch.results
 
-    private val _destQuery = MutableStateFlow("")
-    val destQuery: StateFlow<String> = _destQuery.asStateFlow()
-    private val _destResults = MutableStateFlow<List<Airport>>(emptyList())
-    val destResults: StateFlow<List<Airport>> = _destResults.asStateFlow()
+    private val destSearch = AirportSearchController(airportRepository, viewModelScope)
+    val destQuery: StateFlow<String> = destSearch.query
+    val destResults: StateFlow<List<Airport>> = destSearch.results
 
-    init {
-        observeSearch(_originQuery, _originResults)
-        observeSearch(_destQuery, _destResults)
-    }
-
-    private fun observeSearch(query: MutableStateFlow<String>, results: MutableStateFlow<List<Airport>>) {
-        viewModelScope.launch {
-            query.debounce(300).collectLatest { q ->
-                results.value = if (q.trim().length >= 2) {
-                    withContext(Dispatchers.IO) { airportRepository.searchAirports(q) }
-                } else {
-                    emptyList()
-                }
-            }
-        }
-    }
-
-    fun onOriginQueryChanged(query: String) { _originQuery.value = query }
-    fun onDestQueryChanged(query: String) { _destQuery.value = query }
+    fun onOriginQueryChanged(query: String) { originSearch.onQueryChanged(query) }
+    fun onDestQueryChanged(query: String) { destSearch.onQueryChanged(query) }
 
     fun clearRouteSearch() {
-        _originQuery.value = ""
-        _originResults.value = emptyList()
-        _destQuery.value = ""
-        _destResults.value = emptyList()
+        originSearch.onQueryChanged("")
+        originSearch.clearResults()
+        destSearch.onQueryChanged("")
+        destSearch.clearResults()
     }
 
     fun startCurated(catalogId: String) {
