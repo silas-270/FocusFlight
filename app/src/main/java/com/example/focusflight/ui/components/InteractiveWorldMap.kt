@@ -20,6 +20,15 @@ import com.example.focusflight.data.model.Airport
 import com.example.focusflight.data.model.FlightRoute
 import com.example.focusflight.ui.map.CountryPath
 import com.example.focusflight.ui.map.RobinsonProjection
+import com.example.focusflight.ui.theme.MapCompletedContinentStroke
+import com.example.focusflight.ui.theme.MapGraticule
+import com.example.focusflight.ui.theme.MapOcean
+import com.example.focusflight.ui.theme.MapRouteArc
+import com.example.focusflight.ui.theme.MapUnvisitedLand
+import com.example.focusflight.ui.theme.MapUnvisitedStroke
+import com.example.focusflight.ui.theme.MapVisitedLand
+import com.example.focusflight.ui.theme.MapVisitedStroke
+import com.example.focusflight.ui.theme.OffWhite
 
 // One merged outline per fill/stroke bucket instead of ~1000 individual country
 // sub-paths. Compose Canvas issues drawPath as an immediate Skia call, so drawing
@@ -77,6 +86,11 @@ private fun buildMergedMapPaths(
     )
 }
 
+/**
+ * World map drawn in Robinson projection using paths extracted from natural_earth_vectors.svg.
+ *
+ * Visited countries are filled with Amber; unvisited countries are dark slate.
+ */
 @Composable
 fun InteractiveWorldMap(
     mapPaths: List<CountryPath>,
@@ -95,7 +109,7 @@ fun InteractiveWorldMap(
 
     Box(
         modifier = modifier
-            .background(Color(0xFF0F172A)) // Slate 900 background
+            .background(MapOcean)
             .aspectRatio(784.077f / 458.627f) // Keep SVG aspect ratio
     ) {
         Canvas(
@@ -124,24 +138,24 @@ fun InteractiveWorldMap(
                 scale(scale = scale, pivot = androidx.compose.ui.geometry.Offset.Zero) {
                     translate(left = -30.767f, top = -241.591f) {
                         // 1. Draw all country fills (one merged path per fill color)
-                        drawPath(path = merged.unvisitedFill, color = Color(0xFF1E293B)) // Slate 800
-                        drawPath(path = merged.visitedFill, color = Color(0xFFF59E0B)) // Amber / Orange
+                        drawPath(path = merged.unvisitedFill, color = MapUnvisitedLand)
+                        drawPath(path = merged.visitedFill, color = MapVisitedLand)
 
                         // 2. Draw country borders/outlines (one merged path per stroke bucket)
                         drawPath(
                             path = merged.unvisitedStroke,
-                            color = Color(0xFF94A3B8), // Muted Silver / Slate 400 for unvisited
+                            color = MapUnvisitedStroke,
                             style = Stroke(width = 0.7f / scale)
                         )
                         drawPath(
                             path = merged.visitedStroke,
-                            color = Color(0xFFCBD5E1), // Silver / Slate 300 for visited
+                            color = MapVisitedStroke,
                             style = Stroke(width = 0.7f / scale)
                         )
                         drawPath(
                             path = merged.completedStroke,
-                            color = Color(0xFF10B981), // Emerald / Green for completed continents
-                            style = Stroke(width = 1.8f / scale) // Thicker green outline
+                            color = MapCompletedContinentStroke,
+                            style = Stroke(width = 1.8f / scale) // Thicker outline
                         )
 
                         // 3. Draw routes if origin is present
@@ -170,9 +184,9 @@ fun InteractiveWorldMap(
 
                                     drawPath(
                                         path = path,
-                                        color = Color(0xFF94A3B8).copy(alpha = 0.4f), // Muted Haze
+                                        color = MapGraticule.copy(alpha = 0.4f),
                                         style = Stroke(
-                                            width = 1.5f / scale, // Scale stroke width so it stays constant size
+                                            width = 1.5f / scale,
                                             pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(
                                                 floatArrayOf(10f / scale, 10f / scale), 0f
                                             ),
@@ -181,7 +195,7 @@ fun InteractiveWorldMap(
                                     )
 
                                     drawCircle(
-                                        color = Color(0xFF94A3B8).copy(alpha = 0.6f),
+                                        color = MapGraticule.copy(alpha = 0.6f),
                                         radius = 2.5f / scale,
                                         center = androidx.compose.ui.geometry.Offset(cxDest, cyDest)
                                     )
@@ -207,7 +221,7 @@ fun InteractiveWorldMap(
                                 // Glow
                                 drawPath(
                                     path = path,
-                                    color = Color(0xFFF59E0B).copy(alpha = 0.2f),
+                                    color = MapRouteArc.copy(alpha = 0.2f),
                                     style = Stroke(
                                         width = 6f / scale,
                                         cap = androidx.compose.ui.graphics.StrokeCap.Round
@@ -217,7 +231,7 @@ fun InteractiveWorldMap(
                                 // Main selected path
                                 drawPath(
                                     path = path,
-                                    color = Color(0xFFF59E0B),
+                                    color = MapRouteArc,
                                     style = Stroke(
                                         width = 3f / scale,
                                         cap = androidx.compose.ui.graphics.StrokeCap.Round
@@ -235,12 +249,12 @@ fun InteractiveWorldMap(
                                         val dotY = pos[1]
 
                                         drawCircle(
-                                            color = Color(0xFFF59E0B).copy(alpha = 0.8f),
+                                            color = MapRouteArc.copy(alpha = 0.8f),
                                             radius = 2.5f / scale,
                                             center = androidx.compose.ui.geometry.Offset(dotX, dotY)
                                         )
                                         drawCircle(
-                                            color = Color(0xFFF59E0B).copy(alpha = 0.2f),
+                                            color = MapRouteArc.copy(alpha = 0.2f),
                                             radius = (2.5f + 4f * (1f - animationProgress)) / scale,
                                             center = androidx.compose.ui.geometry.Offset(dotX, dotY),
                                             style = Stroke(width = 1f / scale)
@@ -252,12 +266,12 @@ fun InteractiveWorldMap(
 
                                 // Target ring
                                 drawCircle(
-                                    color = Color(0xFFF59E0B),
+                                    color = MapRouteArc,
                                     radius = 3.5f / scale,
                                     center = androidx.compose.ui.geometry.Offset(cxDest, cyDest)
                                 )
                                 drawCircle(
-                                    color = Color(0xFFF59E0B),
+                                    color = MapRouteArc,
                                     radius = 7.5f / scale,
                                     center = androidx.compose.ui.geometry.Offset(cxDest, cyDest),
                                     style = Stroke(width = 1.2f / scale)
@@ -266,12 +280,12 @@ fun InteractiveWorldMap(
 
                             // Draw origin airport marker
                             drawCircle(
-                                color = Color(0xFFF8FAFC), // OffWhite
+                                color = OffWhite,
                                 radius = 4f / scale,
                                 center = androidx.compose.ui.geometry.Offset(cxOrigin, cyOrigin)
                             )
                             drawCircle(
-                                color = Color(0xFFF59E0B), // Amber
+                                color = MapRouteArc,
                                 radius = 2f / scale,
                                 center = androidx.compose.ui.geometry.Offset(cxOrigin, cyOrigin)
                             )

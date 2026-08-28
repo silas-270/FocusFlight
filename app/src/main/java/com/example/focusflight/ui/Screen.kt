@@ -45,7 +45,7 @@ sealed class Screen(val route: String) {
     // less: both screens read the resolved outcome directly off the shared, Activity-scoped
     // `LandingResultChannel` (see `CesiumGameActivity`) rather than round-tripping its fields
     // through nav args - the result only ever needs to reach the very next screen in the same
-    // process, the same reasoning `ActiveFlightContext` already bridges other per-session state on.
+    // process, the same reasoning `PausedFlight` already bridges other per-session state on.
     object ChallengeProgress : Screen("challenge_progress")
     object ChallengeCompletion : Screen("challenge_completion")
 

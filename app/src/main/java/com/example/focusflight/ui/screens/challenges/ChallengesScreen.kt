@@ -44,6 +44,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.focusflight.data.model.Challenge
+import com.example.focusflight.data.model.ChallengeType
 import com.example.focusflight.data.repository.MAX_ACTIVE_CHALLENGES
 import com.example.focusflight.data.repository.StartChallengeResult
 import com.example.focusflight.ui.components.AchievementProgressRow
@@ -77,24 +78,33 @@ fun ChallengesScreen(
     onBackClick: () -> Unit,
     onFreeModeClick: () -> Unit,
     onContinueRouteChallenge: (challengeId: Int) -> Unit,
-    onCreateCustomClick: () -> Unit
+    onResumeRouteChallenge: (challenge: Challenge) -> Unit,
+    onCreateCustomClick: () -> Unit,
+    onChallengeStarted: () -> Unit
 ) {
     val activeChallenges by viewModel.activeChallenges.collectAsState()
     val completedChallenges by viewModel.completedChallenges.collectAsState()
     val unfinishedAchievements by viewModel.unfinishedAchievements.collectAsState()
     val startResult by viewModel.startResult.collectAsState()
+    val focusedChallengeId by viewModel.focusedChallengeId.collectAsState()
 
     var tab by rememberSaveable { mutableStateOf(ChallengesTab.CHALLENGES) }
     var showPicker by remember { mutableStateOf(false) }
     var infoChallenge by remember { mutableStateOf<Challenge?>(null) }
-    var pendingRouteConfirm by remember { mutableStateOf<Challenge?>(null) }
     var pendingAbandon by remember { mutableStateOf<Challenge?>(null) }
+    var showFreeModeNotice by remember { mutableStateOf(false) }
 
-    // A successful start just fills a slot - close the picker and let the slot row update.
+    // A successful start just fills a slot - close the picker and let the slot row update. A
+    // Route challenge additionally takes over the Hub's focus (already set by the ViewModel), so
+    // it should drop straight back there instead of lingering on this screen.
     LaunchedEffect(startResult) {
-        if (startResult is StartChallengeResult.Started) {
+        val result = startResult
+        if (result is StartChallengeResult.Started) {
             showPicker = false
             viewModel.clearStartResult()
+            if (result.challenge.type == ChallengeType.ROUTE) {
+                onChallengeStarted()
+            }
         }
     }
 
@@ -138,7 +148,7 @@ fun ChallengesScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(Spacing.Medium)
             ) {
-                item { FreeModeRow(onClick = onFreeModeClick) }
+                item { FreeModeRow(onClick = { showFreeModeNotice = true }) }
 
                 item {
                     TabSwitcher(
@@ -149,13 +159,6 @@ fun ChallengesScreen(
 
                 when (tab) {
                     ChallengesTab.CHALLENGES -> {
-                        item {
-                            SectionLabel(
-                                text = "ACTIVE",
-                                trailing = "${activeChallenges.size}/$MAX_ACTIVE_CHALLENGES"
-                            )
-                        }
-
                         item {
                             ChallengeSlotRow(
                                 challenges = activeChallenges,
@@ -210,6 +213,16 @@ fun ChallengesScreen(
             }
         }
 
+        if (showFreeModeNotice) {
+            FreeModeNoticeModal(
+                onConfirm = {
+                    showFreeModeNotice = false
+                    onFreeModeClick()
+                },
+                onDismiss = { showFreeModeNotice = false }
+            )
+        }
+
         if (showPicker) {
             ChallengePickerModal(
                 onStartCurated = viewModel::startCurated,
@@ -224,26 +237,28 @@ fun ChallengesScreen(
         infoChallenge?.let { challenge ->
             ChallengeInfoModal(
                 challenge = challenge,
+                isFocused = challenge.id == focusedChallengeId,
                 onContinue = {
                     infoChallenge = null
-                    pendingRouteConfirm = challenge
+                    // Focuses the Hub on this challenge, then jumps straight into either the
+                    // flight this challenge already has paused (never strand it behind a fresh
+                    // search) or a new scoped flight-search session - no confirm step either way.
+                    viewModel.focusRouteChallenge(challenge.id)
+                    if (challenge.pausedFlight != null) {
+                        onResumeRouteChallenge(challenge)
+                    } else {
+                        onContinueRouteChallenge(challenge.id)
+                    }
+                },
+                onPause = {
+                    infoChallenge = null
+                    viewModel.pauseFocusedChallenge()
                 },
                 onAbandon = {
                     infoChallenge = null
                     pendingAbandon = challenge
                 },
                 onDismiss = { infoChallenge = null }
-            )
-        }
-
-        pendingRouteConfirm?.let { challenge ->
-            RouteContinueConfirmModal(
-                challenge = challenge,
-                onConfirm = {
-                    pendingRouteConfirm = null
-                    onContinueRouteChallenge(challenge.id)
-                },
-                onDismiss = { pendingRouteConfirm = null }
             )
         }
 
@@ -342,24 +357,15 @@ private fun TabSwitcher(selected: ChallengesTab, onSelect: (ChallengesTab) -> Un
 }
 
 @Composable
-private fun SectionLabel(text: String, trailing: String? = null) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.labelSmall.copy(
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.sp
-            ),
-            color = Haze
-        )
-        if (trailing != null) {
-            Text(text = trailing, style = MaterialTheme.typography.labelSmall, color = Haze)
-        }
-    }
+private fun SectionLabel(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelSmall.copy(
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.sp
+        ),
+        color = Haze
+    )
 }
 
 @Composable

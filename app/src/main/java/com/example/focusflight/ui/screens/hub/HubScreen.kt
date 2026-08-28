@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.FlightTakeoff
 import androidx.compose.material.icons.outlined.Info
@@ -48,19 +49,27 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import coil3.compose.AsyncImage
-import com.example.focusflight.data.repository.ActiveFlightContext
+import com.example.focusflight.data.model.Challenge
+import com.example.focusflight.data.model.PausedFlight
+import com.example.focusflight.data.model.progressFraction
+import com.example.focusflight.ui.components.ChallengeProgressBar
+import com.example.focusflight.ui.components.challengeTypeIcon
+import com.example.focusflight.ui.components.challengeTypeLabel
+import com.example.focusflight.ui.screens.challenges.challengeSubtitle
 import com.example.focusflight.ui.theme.Amber
 import com.example.focusflight.ui.theme.Border
 import com.example.focusflight.ui.theme.DeepNavy
 import com.example.focusflight.ui.theme.Haze
 import com.example.focusflight.ui.theme.Midnight
 import com.example.focusflight.ui.theme.OffWhite
+import com.example.focusflight.ui.theme.Slate
 import com.example.focusflight.ui.theme.Spacing
 import com.example.focusflight.ui.viewmodel.hub.HubViewModel
 
@@ -69,11 +78,13 @@ import com.example.focusflight.ui.viewmodel.hub.HubViewModel
 fun HubScreen(
     viewModel: HubViewModel,
     onBookFlightClick: () -> Unit,
-    onResumeFlightClick: (context: ActiveFlightContext) -> Unit,
+    onResumeFlightClick: (flight: PausedFlight) -> Unit,
     onPassportClick: () -> Unit,
-    onChallengesClick: () -> Unit
+    onChallengesClick: () -> Unit,
+    onContinueChallengeClick: (challengeId: Int) -> Unit
 ) {
     val currentAirport by viewModel.currentAirport.collectAsState()
+    val focusedChallenge by viewModel.focusedChallenge.collectAsState()
     val stats by viewModel.flightStats.collectAsState()
     val recentFlights by viewModel.recentFlights.collectAsState()
     val routeMapPath by viewModel.routeMapPath.collectAsState()
@@ -101,7 +112,7 @@ fun HubScreen(
     val scaffoldState = rememberBottomSheetScaffoldState()
     val isExpanded = scaffoldState.bottomSheetState.currentValue == SheetValue.Expanded
 
-    val activeFlightContext by viewModel.activeFlightContext.collectAsState()
+    val pausedFlight by viewModel.pausedFlight.collectAsState()
 
     androidx.compose.material3.Scaffold(
         bottomBar = {
@@ -116,10 +127,21 @@ fun HubScreen(
                         top = Spacing.Medium
                     )
             ) {
-                if (activeFlightContext != null) {
-                    val context = activeFlightContext!!
+              Column {
+                // The obvious cue that the Hub is in Route-challenge focus mode: a full card
+                // (same style as the Achievements-tab cards) with a progress bar and an explicit
+                // exit, stacked above the normal Resume/Book button rather than replacing it.
+                focusedChallenge?.let { challenge ->
+                    FocusedChallengeCard(
+                        challenge = challenge,
+                        onExit = { viewModel.exitFocusedChallenge() },
+                        modifier = Modifier.padding(bottom = Spacing.Small)
+                    )
+                }
+                if (pausedFlight != null) {
+                    val flight = pausedFlight!!
                     Button(
-                        onClick = { onResumeFlightClick(context) },
+                        onClick = { onResumeFlightClick(flight) },
                         modifier = Modifier.fillMaxWidth().height(56.dp),
                         shape = RoundedCornerShape(16.dp),
                         colors = ButtonDefaults.buttonColors(
@@ -142,8 +164,9 @@ fun HubScreen(
                         )
                     }
                 } else {
+                    val focused = focusedChallenge
                     Button(
-                        onClick = onBookFlightClick,
+                        onClick = { if (focused != null) onContinueChallengeClick(focused.id) else onBookFlightClick() },
                         modifier = Modifier.fillMaxWidth().height(56.dp),
                         shape = RoundedCornerShape(16.dp),
                         colors = ButtonDefaults.buttonColors(
@@ -166,6 +189,7 @@ fun HubScreen(
                         )
                     }
                 }
+              }
             }
         }
     ) { innerPadding ->
@@ -232,8 +256,10 @@ fun HubScreen(
                     StatItem(value = stats.airportsVisited.toString(), label = "AIRPORTS")
                 }
 
-                // Secondary Button (only if active flight exists)
-                if (activeFlightContext != null) {
+                // Secondary Button (only if an active flight exists, and never while focused on a
+                // challenge - a Story Mode booking shortcut would be a confusing detour while the
+                // Hub is showing a challenge's card).
+                if (pausedFlight != null && focusedChallenge == null) {
                     Spacer(modifier = Modifier.height(30.dp))
                     Button(
                         onClick = onBookFlightClick,
@@ -367,6 +393,77 @@ fun HubScreen(
     }
     }
 
+}
+
+/**
+ * The Hub's cue for Route-challenge focus mode - same card language as the Achievements-tab cards
+ * (rounded corners, a colored container, progress bar) but in [Slate] rather than [DeepNavy] so
+ * it reads as a distinct, temporary mode rather than just another list item. Purely informational
+ * (like an achievement card) aside from the exit "x" - continuing/resuming lives on the Resume/
+ * Book button below it instead of on the card itself.
+ */
+@Composable
+private fun FocusedChallengeCard(challenge: Challenge, onExit: () -> Unit, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(Slate)
+            .padding(Spacing.Medium)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = challengeTypeIcon(challenge.type),
+                contentDescription = null,
+                tint = Amber,
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = challengeTypeLabel(challenge.type),
+                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
+                color = Haze
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            Text(
+                text = challenge.name,
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                color = OffWhite
+            )
+        }
+        Spacer(modifier = Modifier.height(10.dp))
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Spacing.Small)
+        ) {
+            ChallengeProgressBar(
+                progress = challenge.progressFraction(),
+                modifier = Modifier.weight(1f),
+                height = 10.dp
+            )
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(RoundedCornerShape(9.dp))
+                    .background(DeepNavy)
+                    .clickable(onClick = onExit),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Close,
+                    contentDescription = "Exit challenge",
+                    tint = Haze,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = challengeSubtitle(challenge),
+            style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
+            color = Haze.copy(alpha = 0.75f)
+        )
+    }
 }
 
 @Composable

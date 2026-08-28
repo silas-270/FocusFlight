@@ -137,7 +137,9 @@ internal fun ChallengePickerModal(
 @Composable
 internal fun ChallengeInfoModal(
     challenge: Challenge,
+    isFocused: Boolean,
     onContinue: () -> Unit,
+    onPause: () -> Unit,
     onAbandon: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -186,7 +188,11 @@ internal fun ChallengeInfoModal(
 
         Spacer(modifier = Modifier.height(Spacing.Large))
         if (challenge.type == ChallengeType.ROUTE) {
-            PrimaryActionButton(text = "CONTINUE CHALLENGE", onClick = onContinue)
+            if (isFocused) {
+                PrimaryActionButton(text = "PAUSE CHALLENGE", onClick = onPause)
+            } else {
+                PrimaryActionButton(text = "CONTINUE CHALLENGE", onClick = onContinue)
+            }
             Spacer(modifier = Modifier.height(Spacing.Small))
         }
         DestructiveActionButton(text = "ABANDON CHALLENGE", onClick = onAbandon)

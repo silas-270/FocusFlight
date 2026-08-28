@@ -74,15 +74,16 @@ private val DistancePresetsKm = listOf(5_000.0, 10_000.0, 20_000.0)
 fun CreateChallengeScreen(
     viewModel: ChallengesViewModel,
     onBackClick: () -> Unit,
-    onCreated: () -> Unit
+    onCreated: (isRoute: Boolean) -> Unit
 ) {
     var kind by remember { mutableStateOf(CustomKind.ROUTE) }
     val startResult by viewModel.startResult.collectAsState()
 
     LaunchedEffect(startResult) {
-        if (startResult is StartChallengeResult.Started) {
+        val result = startResult
+        if (result is StartChallengeResult.Started) {
             viewModel.clearStartResult()
-            onCreated()
+            onCreated(result.challenge.type == com.example.focusflight.data.model.ChallengeType.ROUTE)
         }
     }
 

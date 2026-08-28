@@ -40,6 +40,9 @@ class ChallengeLandingTest {
             throw NotImplementedError("unused in this test")
         override suspend fun abandonChallenge(id: Int) = Unit
 
+        override fun pausedFlightStore(challengeId: Int): PausedFlightStore =
+            throw NotImplementedError("unused in this test")
+
         override suspend fun advanceRouteChallenge(challengeId: Int, newPositionIata: String): Challenge? {
             advancedRouteCalls.add(challengeId to newPositionIata)
             return null

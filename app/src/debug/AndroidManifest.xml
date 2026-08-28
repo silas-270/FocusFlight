@@ -14,6 +14,13 @@
                 <action android:name="com.example.focusflight.PERF_SCENARIO" />
             </intent-filter>
         </receiver>
+        <receiver
+            android:name=".engine.live.DebugSeedReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.example.focusflight.SEED_ACHIEVEMENTS" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>

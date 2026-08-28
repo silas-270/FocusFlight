@@ -144,25 +144,28 @@ internal fun ModalTitle(text: String) {
 }
 
 /**
- * Shown before a Route challenge's flight, because the outcome is genuinely surprising from the
- * player's seat: a real flight lands somewhere, yet the main Story Mode position does not move.
- * Saying so up front beats letting them discover it afterwards.
+ * Shown before a Free Mode flight, since the flight looks exactly like a Story Mode one from the
+ * cockpit, but none of it is recorded against
+ * your progress. Free Mode is filtered out of achievement evaluation (see
+ * `AchievementProgress`, which keeps to STORY-tagged flights), is a no-op for challenge crediting
+ * (`processLandingForChallenges`), and never moves your position - so landing somewhere new does
+ * not become your home airport. Better said here than discovered after an hour in the air.
  */
 @Composable
-internal fun RouteContinueConfirmModal(challenge: Challenge, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+internal fun FreeModeNoticeModal(onConfirm: () -> Unit, onDismiss: () -> Unit) {
     ScrimCardModal(onScrimTap = onDismiss) {
-        ModalTitle("SCOPED FLIGHT")
+        ModalTitle("FREE MODE")
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "This flight is scoped to \"${challenge.name}\" - it won't move your main Story Mode position. " +
-                "You're continuing from ${challenge.positionIata ?: "your current position on this challenge"}.",
+            text = "This flight won't be counted. It earns no progress toward challenges or " +
+                "achievements, and where you land won't become your home airport.",
             style = MaterialTheme.typography.bodyMedium,
             color = Haze
         )
         Spacer(modifier = Modifier.height(24.dp))
         ModalButtonRow(
             dismissText = "CANCEL",
-            confirmText = "CONTINUE",
+            confirmText = "FLY",
             onDismiss = onDismiss,
             onConfirm = onConfirm
         )

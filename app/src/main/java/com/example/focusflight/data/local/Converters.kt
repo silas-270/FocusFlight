@@ -5,6 +5,7 @@ import com.example.focusflight.data.model.ChallengeSource
 import com.example.focusflight.data.model.ChallengeStatus
 import com.example.focusflight.data.model.ChallengeType
 import com.example.focusflight.data.model.FlightMode
+import com.example.focusflight.data.model.PausedFlight
 import com.example.focusflight.data.model.SetMemberKind
 
 /**
@@ -58,4 +59,13 @@ class Converters {
     @TypeConverter
     fun toStringSet(value: String): Set<String> =
         if (value.isBlank()) emptySet() else value.split(",").toSet()
+
+    /** `Challenge.pausedFlight` - the same pipe-delimited format
+     *  [PreferencesRepository][com.example.focusflight.data.repository.PreferencesRepository]
+     *  uses for the Story/Free slot, so there's one (de)serialization to trust, not two. */
+    @TypeConverter
+    fun fromPausedFlight(value: PausedFlight?): String? = value?.serialize()
+
+    @TypeConverter
+    fun toPausedFlight(value: String?): PausedFlight? = value?.let { PausedFlight.parse(it) }
 }

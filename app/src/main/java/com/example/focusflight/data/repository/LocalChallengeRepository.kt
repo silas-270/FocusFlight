@@ -10,6 +10,7 @@ import com.example.focusflight.data.model.ChallengeStatus
 import com.example.focusflight.data.model.ChallengeType
 import com.example.focusflight.data.model.CuratedChallengeCatalog
 import com.example.focusflight.data.model.CuratedChallengeSets
+import com.example.focusflight.data.model.PausedFlight
 import com.example.focusflight.data.model.SetMemberKind
 import kotlinx.coroutines.flow.Flow
 
@@ -159,6 +160,20 @@ class LocalChallengeRepository(
         )
         challengeDao.update(updated)
         return updated
+    }
+
+    override fun pausedFlightStore(challengeId: Int): PausedFlightStore = object : PausedFlightStore {
+        override suspend fun get(): PausedFlight? = challengeDao.getById(challengeId)?.pausedFlight
+
+        override suspend fun save(flight: PausedFlight) {
+            val challenge = challengeDao.getById(challengeId) ?: return
+            challengeDao.update(challenge.copy(pausedFlight = flight))
+        }
+
+        override suspend fun clear() {
+            val challenge = challengeDao.getById(challengeId) ?: return
+            challengeDao.update(challenge.copy(pausedFlight = null))
+        }
     }
 
     override suspend fun creditEligibleFlight(destIata: String, distanceKm: Double) {

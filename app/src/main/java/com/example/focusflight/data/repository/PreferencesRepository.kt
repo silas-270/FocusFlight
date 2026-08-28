@@ -1,80 +1,7 @@
 package com.example.focusflight.data.repository
 
 import android.content.Context
-import com.example.focusflight.data.model.FlightMode
-
-/**
- * The in-progress flight resumable from the Hub's "RESUME FLIGHT" button, persisted so it
- * survives the app being killed and restarted. Carries the full booking context - not just
- * [destIata]/[durationMin] as it did pre-Phase-2 - so a resumed flight reproduces exactly what
- * was booked: the correct origin (which, for a Free Mode flight, is never assumed to equal
- * `currentAirport`) and the correct [mode], so `InFlightViewModel.completeFlight()` branches
- * correctly on landing instead of silently resuming as STORY (the Phase 1 gap flagged in
- * docs/design/codebase-map.md).
- */
-data class ActiveFlightContext(
-    val flightNumber: String,
-    val originIata: String,
-    val destIata: String,
-    val durationMin: Int,
-    val mode: FlightMode,
-    /** Which Route challenge this CHALLENGE-tagged session is scoped to (see
-     *  docs/design/challenges.md#persistence--route-scoping) - null for STORY/FREE. Threading
-     *  this through resume (not just the initial nav args) matters so a resumed CHALLENGE
-     *  flight - started from the Hub's quest log - still advances the right challenge's position
-     *  pointer on landing instead of silently losing its scoping if the app is backgrounded
-     *  mid-flight. */
-    val challengeId: Int? = null
-) {
-    fun serialize(): String =
-        listOf(flightNumber, originIata, destIata, durationMin.toString(), mode.name, challengeId?.toString() ?: "-1")
-            .joinToString("|")
-
-    companion object {
-        /**
-         * Parses the persisted string. Accepts today's 6-field format, the Phase 2 5-field
-         * format (implicitly no challenge scoping), and the pre-Phase-2 3-field format
-         * (`flightNo|destIata|durationMin`, implicitly always STORY with an implicit origin of
-         * `currentAirport`) so a context saved by an older build of the app still resumes
-         * correctly instead of crashing/dropping silently. [currentAirportIata] supplies the
-         * missing origin in the legacy 3-field case only.
-         */
-        fun parse(raw: String, currentAirportIata: String?): ActiveFlightContext? {
-            val parts = raw.split("|")
-            return when (parts.size) {
-                6 -> {
-                    val duration = parts[3].toIntOrNull() ?: return null
-                    val mode = runCatching { FlightMode.valueOf(parts[4]) }.getOrDefault(FlightMode.STORY)
-                    val challengeId = parts[5].toIntOrNull()?.takeIf { it >= 0 }
-                    ActiveFlightContext(parts[0], parts[1], parts[2], duration, mode, challengeId)
-                }
-                5 -> {
-                    val duration = parts[3].toIntOrNull() ?: return null
-                    val mode = runCatching { FlightMode.valueOf(parts[4]) }.getOrDefault(FlightMode.STORY)
-                    ActiveFlightContext(parts[0], parts[1], parts[2], duration, mode)
-                }
-                3 -> {
-                    val duration = parts[2].toIntOrNull() ?: return null
-                    ActiveFlightContext(parts[0], currentAirportIata ?: "STR", parts[1], duration, FlightMode.STORY)
-                }
-                else -> null
-            }
-        }
-    }
-}
-
-/** A saved camera perspective: mode (0=Free/1=Tracking/2=Cockpit) plus position/rotation,
- *  matching CesiumLiveJniBridge.nativeGetCameraPose()'s array layout. */
-data class CameraPose(
-    val mode: Int,
-    val x: Double,
-    val y: Double,
-    val z: Double,
-    val qx: Double,
-    val qy: Double,
-    val qz: Double,
-    val qw: Double
-)
+import com.example.focusflight.data.model.PausedFlight
 
 class PreferencesRepository(context: Context) {
     companion object {
@@ -82,6 +9,8 @@ class PreferencesRepository(context: Context) {
         private const val KEY_ONBOARDING_COMPLETED = "onboarding_completed"
         private const val KEY_HOME_AIRPORT = "home_airport_iata"
         private const val KEY_CURRENT_AIRPORT = "current_airport_iata"
+        private const val KEY_FOCUSED_ROUTE_CHALLENGE_ID = "focused_route_challenge_id"
+        private const val KEY_PAUSED_FLIGHT = "paused_flight"
 
         // docs/design/story-mode.md's two distinct home-base cooldowns (see HomeBaseCooldown) -
         // deliberately two separate keys, not one, since the two actions' cooldowns reset
@@ -138,70 +67,45 @@ class PreferencesRepository(context: Context) {
         prefs.edit().putLong(KEY_LAST_HOME_BASE_CHANGED_AT, timestampMs).apply()
     }
 
-    fun saveActiveFlightProgress(flightNo: String, elapsedMs: Long) {
-        prefs.edit().putLong("active_flight_$flightNo", elapsedMs).apply()
-    }
+    /**
+     * The Story/Free slot's in-progress (paused) flight - the Hub's "RESUME FLIGHT" button's
+     * data source whenever no challenge is focused (see `HubViewModel`). A Route challenge's own
+     * paused flight is never stored here - see `Challenge.pausedFlight` and
+     * `ChallengeRepository.pausedFlightStore` for that slot's equivalent - so the two can never
+     * clobber each other.
+     */
+    val pausedFlightStore: PausedFlightStore = object : PausedFlightStore {
+        override suspend fun get(): PausedFlight? {
+            val raw = prefs.getString(KEY_PAUSED_FLIGHT, null) ?: return null
+            return PausedFlight.parse(raw)
+        }
 
-    fun getActiveFlightProgress(flightNo: String): Long? {
-        val key = "active_flight_$flightNo"
-        return if (prefs.contains(key)) prefs.getLong(key, 0L) else null
-    }
+        override suspend fun save(flight: PausedFlight) {
+            prefs.edit().putString(KEY_PAUSED_FLIGHT, flight.serialize()).apply()
+        }
 
-    fun clearActiveFlightProgress(flightNo: String) {
-        prefs.edit().remove("active_flight_$flightNo").apply()
-    }
-
-    fun saveActiveFlightContext(
-        flightNo: String,
-        originIata: String,
-        destIata: String,
-        durationMin: Int,
-        mode: FlightMode,
-        challengeId: Int? = null
-    ) {
-        prefs.edit().putString(
-            "active_flight_context",
-            ActiveFlightContext(flightNo, originIata, destIata, durationMin, mode, challengeId).serialize()
-        ).apply()
-    }
-
-    fun getActiveFlightContext(): ActiveFlightContext? {
-        val str = prefs.getString("active_flight_context", null) ?: return null
-        return ActiveFlightContext.parse(str, getCurrentAirport())
-    }
-
-    fun clearActiveFlightContext() {
-        prefs.edit().remove("active_flight_context").apply()
-    }
-
-    fun saveActiveFlightCamera(flightNo: String, pose: CameraPose) {
-        val packed = listOf(
-            pose.mode, pose.x, pose.y, pose.z, pose.qx, pose.qy, pose.qz, pose.qw
-        ).joinToString("|")
-        prefs.edit().putString("active_flight_camera_$flightNo", packed).apply()
-    }
-
-    fun getActiveFlightCamera(flightNo: String): CameraPose? {
-        val str = prefs.getString("active_flight_camera_$flightNo", null) ?: return null
-        val parts = str.split("|")
-        if (parts.size != 8) return null
-        return try {
-            CameraPose(
-                mode = parts[0].toInt(),
-                x = parts[1].toDouble(),
-                y = parts[2].toDouble(),
-                z = parts[3].toDouble(),
-                qx = parts[4].toDouble(),
-                qy = parts[5].toDouble(),
-                qz = parts[6].toDouble(),
-                qw = parts[7].toDouble()
-            )
-        } catch (e: NumberFormatException) {
-            null
+        override suspend fun clear() {
+            prefs.edit().remove(KEY_PAUSED_FLIGHT).apply()
         }
     }
 
-    fun clearActiveFlightCamera(flightNo: String) {
-        prefs.edit().remove("active_flight_camera_$flightNo").apply()
+    /**
+     * The Route challenge currently "focused" on the Hub - i.e. whose airport/progress the Hub
+     * shows in place of [getCurrentAirport]. Purely a display concern: it never touches the
+     * challenge's own row (see [ChallengeRepository.abandonChallenge] for actual deletion), so
+     * clearing this is a pause, not a reset - the challenge keeps its saved position and can be
+     * refocused later.
+     */
+    fun getFocusedRouteChallengeId(): Int? {
+        val id = prefs.getInt(KEY_FOCUSED_ROUTE_CHALLENGE_ID, -1)
+        return if (id >= 0) id else null
+    }
+
+    fun setFocusedRouteChallengeId(id: Int) {
+        prefs.edit().putInt(KEY_FOCUSED_ROUTE_CHALLENGE_ID, id).apply()
+    }
+
+    fun clearFocusedRouteChallengeId() {
+        prefs.edit().remove(KEY_FOCUSED_ROUTE_CHALLENGE_ID).apply()
     }
 }
