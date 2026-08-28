@@ -5,10 +5,14 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.focusflight.data.model.Airport
+import com.example.focusflight.data.model.Challenge
+import com.example.focusflight.data.model.ChallengeStatus
+import com.example.focusflight.data.model.ChallengeType
 import com.example.focusflight.data.model.FlightLog
 import com.example.focusflight.data.model.FlightStats
-import com.example.focusflight.data.repository.ActiveFlightContext
+import com.example.focusflight.data.model.PausedFlight
 import com.example.focusflight.data.repository.AirportRepository
+import com.example.focusflight.data.repository.ChallengeRepository
 import com.example.focusflight.data.repository.FlightLogRepository
 import com.example.focusflight.data.repository.PreferencesRepository
 import com.example.focusflight.engine.headless.CesiumHeadlessMapRenderer
@@ -23,11 +27,18 @@ class HubViewModel(
     private val airportRepository: AirportRepository,
     private val preferencesRepository: PreferencesRepository,
     private val flightLogRepository: FlightLogRepository,
+    private val challengeRepository: ChallengeRepository,
     private val cacheDir: File
 ) : ViewModel() {
 
     private val _currentAirport = MutableStateFlow<Airport?>(null)
     val currentAirport: StateFlow<Airport?> = _currentAirport.asStateFlow()
+
+    /** The Route challenge currently focused on the Hub (its position/progress drives
+     *  [currentAirport] and the globe/progress-strip below), or null when the Hub is showing the
+     *  normal story-mode airport. See PreferencesRepository.getFocusedRouteChallengeId's doc. */
+    private val _focusedChallenge = MutableStateFlow<Challenge?>(null)
+    val focusedChallenge: StateFlow<Challenge?> = _focusedChallenge.asStateFlow()
 
     private val _flightStats = MutableStateFlow(FlightStats())
     val flightStats: StateFlow<FlightStats> = _flightStats.asStateFlow()
@@ -41,8 +52,8 @@ class HubViewModel(
     private val _isRendering = MutableStateFlow(false)
     val isRendering: StateFlow<Boolean> = _isRendering.asStateFlow()
 
-    private val _activeFlightContext = MutableStateFlow<ActiveFlightContext?>(null)
-    val activeFlightContext: StateFlow<ActiveFlightContext?> = _activeFlightContext.asStateFlow()
+    private val _pausedFlight = MutableStateFlow<PausedFlight?>(null)
+    val pausedFlight: StateFlow<PausedFlight?> = _pausedFlight.asStateFlow()
 
     private val _mapRenderError = MutableStateFlow<String?>(null)
     val mapRenderError: StateFlow<String?> = _mapRenderError.asStateFlow()
@@ -64,18 +75,32 @@ class HubViewModel(
 
     private fun loadData() {
         viewModelScope.launch(Dispatchers.IO) {
-            val baseIata = preferencesRepository.getCurrentAirport()
+            val focused = resolveFocusedChallenge()
+            _focusedChallenge.value = focused
+
+            // A focused Route challenge takes over the displayed airport (its own position
+            // pointer) - the Hub shows "where the challenge is", not the story-mode base - until
+            // the player explicitly exits it. See exitFocusedChallenge().
+            val baseIata = focused?.positionIata ?: preferencesRepository.getCurrentAirport()
             if (baseIata != null) {
                 val airport = airportRepository.getAirportByIata(baseIata)
                 _currentAirport.value = airport
-                
-                _activeFlightContext.value = preferencesRepository.getActiveFlightContext()
-                
+
+                // A focused challenge's paused flight (its own row, not the global STORY/FREE
+                // slot below) drives Resume/Book here - so switching focus never shows a Resume
+                // button for a flight that belongs to a different mode/challenge. See
+                // Challenge.pausedFlight's doc.
+                _pausedFlight.value = if (focused != null) {
+                    focused.pausedFlight
+                } else {
+                    preferencesRepository.pausedFlightStore.get()
+                }
+
                 if (airport != null) {
                     generateRouteMap(airport)
                 }
             }
-            
+
             // Load real flight stats from Room
             try {
                 val stats = flightLogRepository.getFlightStats()
@@ -121,18 +146,42 @@ class HubViewModel(
             generateRouteMap(origin)
         }
     }
+
+    /** Reads the focused-challenge pref and validates it still points at something focusable -
+     *  an ACTIVE Route challenge. Self-heals a stale pref (abandoned/completed elsewhere) by
+     *  clearing it, so a leftover id never silently strands the Hub. */
+    private suspend fun resolveFocusedChallenge(): Challenge? {
+        val id = preferencesRepository.getFocusedRouteChallengeId() ?: return null
+        val challenge = challengeRepository.getChallenge(id)
+        val stillFocusable = challenge != null &&
+            challenge.type == ChallengeType.ROUTE &&
+            challenge.status == ChallengeStatus.ACTIVE
+        if (!stillFocusable) {
+            preferencesRepository.clearFocusedRouteChallengeId()
+            return null
+        }
+        return challenge
+    }
+
+    /** Pauses the focused challenge: the Hub reverts to the story-mode airport, but the challenge
+     *  itself is untouched - still ACTIVE, at its saved position - and can be refocused later. */
+    fun exitFocusedChallenge() {
+        preferencesRepository.clearFocusedRouteChallengeId()
+        refresh()
+    }
 }
 
 class HubViewModelFactory(
     private val airportRepository: AirportRepository,
     private val preferencesRepository: PreferencesRepository,
     private val flightLogRepository: FlightLogRepository,
+    private val challengeRepository: ChallengeRepository,
     private val cacheDir: File
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(HubViewModel::class.java)) {
-            return HubViewModel(airportRepository, preferencesRepository, flightLogRepository, cacheDir) as T
+            return HubViewModel(airportRepository, preferencesRepository, flightLogRepository, challengeRepository, cacheDir) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

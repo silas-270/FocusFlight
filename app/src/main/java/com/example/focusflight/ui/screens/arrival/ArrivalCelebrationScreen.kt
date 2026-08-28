@@ -70,10 +70,10 @@ fun ArrivalCelebrationScreen(
 
     // Compute styling details based on rank
     val inkColor = when (rank) {
-        "GLOBETROTTER" -> Amber // Gold/Amber
-        "COMMANDER" -> Color(0xFF2563EB) // Cobalt Blue
-        "CAPTAIN" -> Color(0xFF10B981) // Emerald Green
-        else -> Color(0xFF94A3B8) // Slate Grey
+        "GLOBETROTTER" -> Amber
+        "COMMANDER" -> com.example.focusflight.ui.theme.RankCommander
+        "CAPTAIN" -> com.example.focusflight.ui.theme.RankCaptain
+        else -> com.example.focusflight.ui.theme.RankFirstOfficer
     }
 
     val currentDateStr = remember {

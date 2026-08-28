@@ -63,6 +63,14 @@ data class Challenge(
     @ColumnInfo(name = "target_distance_km") val targetDistanceKm: Double? = null,
     @ColumnInfo(name = "cumulative_distance_km") val cumulativeDistanceKm: Double = 0.0,
 
+    // ── Route only: this challenge's own in-progress (paused) flight, independent of Story
+    // Mode's and every other challenge's - see PreferencesRepository.getPausedFlight for the
+    // Story/Free equivalent. One field, not several: a PausedFlight already carries its own
+    // originIata (== this challenge's positionIata at the time it was booked), elapsed time, and
+    // camera framing - see PausedFlight's own doc for why that's one model instead of pieces
+    // scattered across separately-keyed stores. Stored via a Room TypeConverter (Converters.kt).
+    @ColumnInfo(name = "paused_flight") val pausedFlight: PausedFlight? = null,
+
     @ColumnInfo(name = "started_at") val startedAt: Long = System.currentTimeMillis(),
     @ColumnInfo(name = "completed_at") val completedAt: Long? = null
 )

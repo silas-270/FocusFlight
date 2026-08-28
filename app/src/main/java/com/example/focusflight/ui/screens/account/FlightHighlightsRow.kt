@@ -19,9 +19,14 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.StrokeCap
@@ -38,6 +43,7 @@ import com.example.focusflight.ui.theme.Green
 import com.example.focusflight.ui.theme.Haze
 import com.example.focusflight.ui.theme.OffWhite
 import com.example.focusflight.ui.theme.Slate
+import java.util.Locale
 import kotlin.math.floor
 
 private val equatorLapColors = listOf(Amber, Green)
@@ -92,13 +98,8 @@ private fun LongestFlightCard(flight: FlightLog?, modifier: Modifier = Modifier)
         ) {
             if (flight != null) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = com.example.focusflight.util.formatMiles(flight.distanceKm),
-                        style = MaterialTheme.typography.displaySmall.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace
-                        ),
-                        color = Amber
+                    AutoResizingMilesText(
+                        text = com.example.focusflight.util.formatMiles(flight.distanceKm)
                     )
                     Spacer(Modifier.height(4.dp))
                     Row(
@@ -141,6 +142,37 @@ private fun LongestFlightCard(flight: FlightLog?, modifier: Modifier = Modifier)
 }
 
 @Composable
+private fun AutoResizingMilesText(
+    text: String,
+    modifier: Modifier = Modifier
+) {
+    var fontSize by remember(text) { mutableStateOf(26.sp) }
+    var readyToDraw by remember(text) { mutableStateOf(false) }
+
+    Text(
+        text = text,
+        modifier = modifier.drawWithContent {
+            if (readyToDraw) drawContent()
+        },
+        maxLines = 1,
+        softWrap = false,
+        color = Amber,
+        style = MaterialTheme.typography.displaySmall.copy(
+            fontSize = fontSize,
+            fontWeight = FontWeight.Bold,
+            fontFamily = FontFamily.Monospace
+        ),
+        onTextLayout = { textLayoutResult ->
+            if (textLayoutResult.didOverflowWidth && fontSize > 12.sp) {
+                fontSize = (fontSize.value - 1f).sp
+            } else {
+                readyToDraw = true
+            }
+        }
+    )
+}
+
+@Composable
 private fun EquatorProgressCard(ratio: Double, modifier: Modifier = Modifier) {
     Column(
         modifier = modifier
@@ -167,7 +199,7 @@ private fun EquatorProgressCard(ratio: Double, modifier: Modifier = Modifier) {
             fraction = 1f
         }
         val lapColor = equatorLapColors[lapIndex % equatorLapColors.size]
-        val percentText = "%,.0f%%".format(safeRatio * 100)
+        val percentText = String.format(Locale.US, "%.1f%%", safeRatio * 100)
 
         Box(
             modifier = Modifier
@@ -207,6 +239,8 @@ private fun EquatorProgressCard(ratio: Double, modifier: Modifier = Modifier) {
                 }
                 Text(
                     text = percentText,
+                    maxLines = 1,
+                    softWrap = false,
                     style = MaterialTheme.typography.titleMedium.copy(
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace

@@ -47,15 +47,11 @@ import com.example.focusflight.ui.theme.DeepNavy
 import com.example.focusflight.ui.theme.Green
 import com.example.focusflight.ui.theme.Haze
 import com.example.focusflight.ui.theme.Midnight
+import com.example.focusflight.ui.theme.ChallengeGold
 import com.example.focusflight.ui.theme.OffWhite
 import com.example.focusflight.ui.theme.Spacing
 import kotlinx.coroutines.delay
 import kotlin.random.Random
-
-/** Gold the progress bar (and title) turn once a challenge completes - deliberately distinct from
- *  [Amber] (the app's everyday accent) so this one moment reads as a step up from ordinary
- *  progress, per challenges.md's "turns golden". */
-private val ChallengeGold = Color(0xFFFFD700)
 
 /**
  * The dedicated completion celebration (docs/design/challenges.md's "Completion celebration") -

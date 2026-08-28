@@ -6,9 +6,11 @@ import androidx.lifecycle.viewModelScope
 import com.example.focusflight.data.model.AchievementStatus
 import com.example.focusflight.data.model.Airport
 import com.example.focusflight.data.model.Challenge
+import com.example.focusflight.data.model.ChallengeType
 import com.example.focusflight.data.repository.AchievementsRepository
 import com.example.focusflight.data.repository.AirportRepository
 import com.example.focusflight.data.repository.ChallengeRepository
+import com.example.focusflight.data.repository.PreferencesRepository
 import com.example.focusflight.data.repository.StartChallengeResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
@@ -32,7 +34,8 @@ import kotlinx.coroutines.withContext
 class ChallengesViewModel(
     private val challengeRepository: ChallengeRepository,
     private val airportRepository: AirportRepository,
-    private val achievementsRepository: AchievementsRepository
+    private val achievementsRepository: AchievementsRepository,
+    private val preferencesRepository: PreferencesRepository
 ) : ViewModel() {
 
     /** Active challenges (cap of 3), reactively updated - drives the three slots directly.
@@ -78,6 +81,13 @@ class ChallengesViewModel(
     private val _startResult = MutableStateFlow<StartChallengeResult?>(null)
     val startResult: StateFlow<StartChallengeResult?> = _startResult.asStateFlow()
 
+    /** The Route challenge currently focused on the Hub, if any - lets the info modal offer
+     *  "PAUSE" instead of "CONTINUE" for that one. Seeded from the pref and kept in sync by every
+     *  method here that changes it, since this screen can stay open across a pause/focus change
+     *  (unlike Hub, which re-reads the pref fresh on every [PreferencesRepository] read). */
+    private val _focusedChallengeId = MutableStateFlow(preferencesRepository.getFocusedRouteChallengeId())
+    val focusedChallengeId: StateFlow<Int?> = _focusedChallengeId.asStateFlow()
+
     // ── Custom Route creation: origin/destination airport search ────────────────────────
     // Structurally identical to FlightSearchViewModel's Free-Mode origin picker (debounced
     // search over AirportRepository.searchAirports()) - reused here twice, once per endpoint,
@@ -121,7 +131,9 @@ class ChallengesViewModel(
 
     fun startCurated(catalogId: String) {
         viewModelScope.launch {
-            _startResult.value = challengeRepository.startCuratedChallenge(catalogId)
+            val result = challengeRepository.startCuratedChallenge(catalogId)
+            _startResult.value = result
+            focusIfRoute(result)
         }
     }
 
@@ -130,9 +142,36 @@ class ChallengesViewModel(
     fun startCustomRoute(origin: Airport, dest: Airport) {
         val name = "${origin.municipality} → ${dest.municipality}"
         viewModelScope.launch {
-            _startResult.value = challengeRepository.startCustomRouteChallenge(origin.iataCode, dest.iataCode, name)
+            val result = challengeRepository.startCustomRouteChallenge(origin.iataCode, dest.iataCode, name)
+            _startResult.value = result
             clearRouteSearch()
+            focusIfRoute(result)
         }
+    }
+
+    private fun focusIfRoute(result: StartChallengeResult) {
+        if (result is StartChallengeResult.Started && result.challenge.type == ChallengeType.ROUTE) {
+            preferencesRepository.setFocusedRouteChallengeId(result.challenge.id)
+            _focusedChallengeId.value = result.challenge.id
+        }
+    }
+
+    /** Focuses an existing Route challenge on the Hub - called right before navigating into the
+     *  scoped flight-search session for "continue"/"resume", so the Hub already reflects it on
+     *  return. */
+    fun focusRouteChallenge(id: Int) {
+        preferencesRepository.setFocusedRouteChallengeId(id)
+        _focusedChallengeId.value = id
+    }
+
+    /** Pauses the currently-focused challenge - the Hub reverts to the story-mode airport, but
+     *  the challenge itself (including any paused flight on it) is untouched. Same semantics as
+     *  `HubViewModel.exitFocusedChallenge()`, offered here too since the info modal's "PAUSE
+     *  CHALLENGE" action (shown only for the currently-focused one) is reachable from this
+     *  screen without going via the Hub. */
+    fun pauseFocusedChallenge() {
+        preferencesRepository.clearFocusedRouteChallengeId()
+        _focusedChallengeId.value = null
     }
 
     fun startCustomDistance(targetKm: Double) {
@@ -160,12 +199,13 @@ fun formatKm(km: Double): String {
 class ChallengesViewModelFactory(
     private val challengeRepository: ChallengeRepository,
     private val airportRepository: AirportRepository,
-    private val achievementsRepository: AchievementsRepository
+    private val achievementsRepository: AchievementsRepository,
+    private val preferencesRepository: PreferencesRepository
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(ChallengesViewModel::class.java)) {
-            return ChallengesViewModel(challengeRepository, airportRepository, achievementsRepository) as T
+            return ChallengesViewModel(challengeRepository, airportRepository, achievementsRepository, preferencesRepository) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

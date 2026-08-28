@@ -9,7 +9,6 @@ import androidx.paging.PagingData
 import androidx.paging.cachedIn
 import com.example.focusflight.data.model.AchievementStatus
 import com.example.focusflight.data.model.Airport
-import com.example.focusflight.data.model.ContinentStats
 import com.example.focusflight.data.model.FlightHighlights
 import com.example.focusflight.data.model.FlightLog
 import com.example.focusflight.data.model.FlightSortOrder
@@ -19,6 +18,8 @@ import com.example.focusflight.data.repository.AirportRepository
 import com.example.focusflight.data.repository.FlightLogRepository
 import com.example.focusflight.data.repository.PreferencesRepository
 import com.example.focusflight.data.repository.UserRepository
+import com.example.focusflight.ui.screens.account.AchievementTier
+import com.example.focusflight.ui.screens.account.achievementTier
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
@@ -53,7 +54,6 @@ data class AccountUiState(
     
     // Map Data
     val allVisitedCountries: Set<String> = emptySet(),
-    val continentStats: List<ContinentStats> = emptyList(),
     val completedContinents: Set<String> = emptySet(),
     val countryToContinent: Map<String, String> = emptyMap(),
     val mapPaths: List<com.example.focusflight.ui.map.CountryPath> = emptyList(),
@@ -267,13 +267,20 @@ class AccountViewModel(
                 // `unlockedAt` stamp, which the Passport's badges sort by.
                 val achievements = achievementsRepository.evaluateBoard(geography, history)
 
-                // Only the earned ones reach the Passport, newest first. Anything without a
-                // recorded unlock time sorts last - that can only be an achievement earned before
-                // unlock-time persistence existed and not yet re-stamped.
+                // Only the earned ones reach the Passport, sorted by difficulty (gold first,
+                // then silver, then bronze), and newest-first within each tier.
                 val unlockedAchievements =
                     (achievements.geographic + achievements.distance + achievements.behavioral)
                         .filter { it.isUnlocked }
-                        .sortedByDescending { it.unlockedAt ?: Long.MIN_VALUE }
+                        .sortedWith(
+                            compareBy<AchievementStatus> {
+                                when (achievementTier(it)) {
+                                    AchievementTier.GOLD -> 0
+                                    AchievementTier.SILVER -> 1
+                                    AchievementTier.BRONZE -> 2
+                                }
+                            }.thenByDescending { it.unlockedAt ?: Long.MIN_VALUE }
+                        )
 
                 _uiState.update { state ->
                     state.copy(
@@ -282,7 +289,6 @@ class AccountViewModel(
                         airportsVisited = stats.airportsVisited,
                         flightHistory = history,
                         allVisitedCountries = geography.visitedCountries,
-                        continentStats = geography.continentStats,
                         completedContinents = geography.completedContinents,
                         countryToContinent = geography.countryToContinent,
                         mapPaths = mapPaths,

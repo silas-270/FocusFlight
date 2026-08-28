@@ -4,7 +4,6 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -34,10 +33,10 @@ import com.example.focusflight.data.model.progressFraction
 import com.example.focusflight.ui.components.RingProgress
 import com.example.focusflight.ui.components.challengeTypeIcon
 import com.example.focusflight.ui.theme.Amber
-import com.example.focusflight.ui.theme.Border
 import com.example.focusflight.ui.theme.DeepNavy
 import com.example.focusflight.ui.theme.Haze
 import com.example.focusflight.ui.theme.OffWhite
+import com.example.focusflight.ui.theme.Slate
 import com.example.focusflight.ui.theme.Spacing
 import com.example.focusflight.data.repository.MAX_ACTIVE_CHALLENGES
 
@@ -81,12 +80,12 @@ private fun RowScope.EmptySlot(onClick: () -> Unit) {
             .weight(1f)
             .aspectRatio(1f)
             .clip(RoundedCornerShape(16.dp))
-            // Darker than the filled slot's DeepNavy so an open slot reads as a recess rather
-            // than a card with nothing in it - but NOT flat Midnight, which is the screen
-            // background itself and made the slot invisible entirely. The border does most of
-            // the work of showing there is something here to fill.
-            .background(DeepNavy.copy(alpha = 0.35f))
-            .border(1.dp, Border, RoundedCornerShape(16.dp))
+            // Borderless, so flat Slate has to carry the slot on its own. It can't be a dimmed
+            // DeepNavy "recess" any more - without the outline that read as nothing at all
+            // against Midnight - so an open slot goes one step *brighter* than the filled
+            // slot's DeepNavy instead. Slate is the palette's secondary-container tone and is
+            // already the empty/neutral surface elsewhere (modal buttons, picker rows).
+            .background(Slate)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {

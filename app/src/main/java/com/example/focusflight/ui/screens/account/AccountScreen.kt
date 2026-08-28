@@ -14,7 +14,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.AirplanemodeActive
 import androidx.compose.material.icons.outlined.EmojiEvents
-import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.StarHalf
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -73,6 +72,7 @@ fun AccountScreen(
     // screen, same reasoning as every other ScrimCardModal use in this codebase.
     var showReturnHomeModal by remember { mutableStateOf(false) }
     var showChangeHomeBaseModal by remember { mutableStateOf(false) }
+    var showTravelMapModal by remember { mutableStateOf(false) }
     // Hoisted out of ProfileHeroCard so it survives the card scrolling out of the LazyColumn's
     // viewport and back in.
     var heroExpanded by remember { mutableStateOf(false) }
@@ -148,31 +148,24 @@ fun AccountScreen(
                     )
                 }
 
-                // ── Stats Row (2x2 Grid) ──────────────────────────────────────
-                item { StatsGrid2x2(uiState) }
-
                 // ── Travel Map ────────────────────────────────────────────────
-                item { TravelMapCard(uiState) }
-
-                // ── Continent Progress ────────────────────────────────────────
-                item { SectionHeader(icon = Icons.Outlined.Public, title = "CONTINENT COVERAGE") }
-                item { ContinentProgressCard(uiState.continentStats) }
-
-                // ── Flight Highlights ─────────────────────────────────────────
-                item { SectionHeader(icon = Icons.Outlined.StarHalf, title = "FLIGHT HIGHLIGHTS") }
-                item { FlightHighlightsRow(uiState.highlights) }
+                // Straight under the hero card: shows the whole playthrough at a glance.
+                // Tap to open world exploration modal detail.
+                item { TravelMapCard(uiState, onClick = { showTravelMapModal = true }) }
 
                 // ── Achievements ─────────────────────────────────────────────
-                // Earned badges only - a trophy case. Unearned goals moved to the Challenges
-                // screen, where they sit alongside active challenges (the same kind of thing: a
-                // goal you haven't finished). The completed-challenges log moved there too.
-                item { SectionHeader(icon = Icons.Outlined.EmojiEvents, title = "ACHIEVEMENTS") }
+                // Earned badges only - a trophy case, sorted by difficulty (gold, silver, bronze).
+                item { SectionHeader(title = "ACHIEVEMENTS") }
                 item {
                     AchievementBadgeGrid(
                         achievements = uiState.unlockedAchievements,
                         onBadgeClick = { selectedBadge = it }
                     )
                 }
+
+                // ── Flight Highlights ─────────────────────────────────────────
+                item { SectionHeader(title = "FLIGHT HIGHLIGHTS") }
+                item { FlightHighlightsRow(uiState.highlights) }
 
                 // ── Flight History Header + Sorting Bar ───────────────────────
                 item {
@@ -181,10 +174,7 @@ fun AccountScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        SectionHeader(
-                            icon = Icons.Outlined.AirplanemodeActive,
-                            title = "FLIGHT HISTORY"
-                        )
+                        SectionHeader(title = "FLIGHT HISTORY")
                         SortDropdown(
                             currentOrder = uiState.sortOrder,
                             onOrderSelected = { viewModel.setSortOrder(it) }
@@ -262,6 +252,18 @@ fun AccountScreen(
                 showChangeHomeBaseModal = false
             },
             onDismiss = { showChangeHomeBaseModal = false }
+        )
+    }
+
+    if (showTravelMapModal) {
+        val totalCountries = remember(uiState.mapPaths, uiState.countryToContinent) {
+            val fromPaths = uiState.mapPaths.map { it.countryCode }.filter { it.isNotBlank() }.distinct().size
+            if (fromPaths > 0) fromPaths else if (uiState.countryToContinent.isNotEmpty()) uiState.countryToContinent.size else 195
+        }
+        TravelMapDetailModal(
+            visitedCountriesCount = uiState.allVisitedCountries.size,
+            totalCountriesCount = totalCountries,
+            onDismiss = { showTravelMapModal = false }
         )
     }
     }

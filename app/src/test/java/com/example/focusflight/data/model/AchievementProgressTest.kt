@@ -270,4 +270,56 @@ class AchievementProgressTest {
         assertEquals(DistanceAchievementCatalog.ALL.size, board.distance.size)
         assertEquals(4, board.behavioral.size)
     }
+
+    // ── Achievement Tier Sorting ─────────────────────────────────────────────────────────
+
+    @Test
+    fun `achievement tier sorting correctly orders gold then silver then bronze`() {
+        val goldItem = AchievementStatus(
+            id = "geo_all_countries",
+            displayName = "Globetrotter",
+            description = "Every country",
+            category = AchievementCategory.GEOGRAPHIC,
+            current = 1.0,
+            target = 1.0,
+            unitLabel = "countries",
+            isUnlocked = true,
+            unlockedAt = 1000L
+        )
+        val silverItem = AchievementStatus(
+            id = "dist_40075_round_the_world",
+            displayName = "Circumnavigator",
+            description = "Fly 40,075 km",
+            category = AchievementCategory.DISTANCE,
+            current = 40075.0,
+            target = 40075.0,
+            unitLabel = "km",
+            isUnlocked = true,
+            unlockedAt = 2000L
+        )
+        val bronzeItem = AchievementStatus(
+            id = AchievementProgress.FIRST_FLIGHT_ID,
+            displayName = "First Flight",
+            description = "Complete first flight",
+            category = AchievementCategory.BEHAVIORAL,
+            current = 1.0,
+            target = 1.0,
+            unitLabel = "",
+            isUnlocked = true,
+            unlockedAt = 3000L
+        )
+
+        val list = listOf(bronzeItem, goldItem, silverItem)
+        val sorted = list.sortedWith(
+            compareBy<AchievementStatus> {
+                when (com.example.focusflight.ui.screens.account.achievementTier(it)) {
+                    com.example.focusflight.ui.screens.account.AchievementTier.GOLD -> 0
+                    com.example.focusflight.ui.screens.account.AchievementTier.SILVER -> 1
+                    com.example.focusflight.ui.screens.account.AchievementTier.BRONZE -> 2
+                }
+            }.thenByDescending { it.unlockedAt ?: Long.MIN_VALUE }
+        )
+
+        assertEquals(listOf(goldItem, silverItem, bronzeItem), sorted)
+    }
 }

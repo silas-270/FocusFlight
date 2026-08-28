@@ -38,48 +38,22 @@ import java.util.Locale
 
 @Composable
 internal fun StatsGrid2x2(state: AccountUiState) {
-    val hoursInt = state.totalMinutes / 60
-    val minutesInt = state.totalMinutes % 60
-    val timeStr = String.format(Locale.US, "%02d:%02d", hoursInt, minutesInt)
-
-    Column(
+    Row(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            StatCard(
-                modifier = Modifier.weight(1f),
-                value = state.totalFlights.toString(),
-                label = "FLIGHTS",
-                icon = Icons.Outlined.AirplanemodeActive
-            )
-            StatCard(
-                modifier = Modifier.weight(1f),
-                value = timeStr,
-                label = "HOURS",
-                icon = Icons.Outlined.Schedule
-            )
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            StatCard(
-                modifier = Modifier.weight(1f),
-                value = state.airportsVisited.toString(),
-                label = "AIRPORTS",
-                icon = Icons.Outlined.FlightLand
-            )
-            StatCard(
-                modifier = Modifier.weight(1f),
-                value = state.allVisitedCountries.size.toString(),
-                label = "COUNTRIES",
-                icon = Icons.Outlined.Language
-            )
-        }
+        StatCard(
+            modifier = Modifier.weight(1f),
+            value = state.totalFlights.toString(),
+            label = "FLIGHTS",
+            icon = Icons.Outlined.AirplanemodeActive
+        )
+        StatCard(
+            modifier = Modifier.weight(1f),
+            value = state.airportsVisited.toString(),
+            label = "AIRPORTS",
+            icon = Icons.Outlined.FlightLand
+        )
     }
 }
 

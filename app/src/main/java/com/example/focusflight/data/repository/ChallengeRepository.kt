@@ -59,6 +59,15 @@ interface ChallengeRepository {
     suspend fun advanceRouteChallenge(challengeId: Int, newPositionIata: String): Challenge?
 
     /**
+     * The paused-flight slot for Route challenge [challengeId] - a CHALLENGE-tagged session
+     * scoped to it, kept on the challenge's own row (see [Challenge.pausedFlight]) so switching
+     * Hub focus (or pausing back to Story Mode) never clobbers it, mirroring
+     * [PreferencesRepository.pausedFlightStore] for STORY/FREE. Always returns a usable store even
+     * if [challengeId] doesn't (currently) exist - its operations are just no-ops in that case.
+     */
+    fun pausedFlightStore(challengeId: Int): PausedFlightStore
+
+    /**
      * Credits [destIata]/[distanceKm] toward every active Distance and Set-completion challenge
      * (never Route - Route only moves via [advanceRouteChallenge]'s explicit scoping). Meant to
      * be called for every eligible flight (STORY or CHALLENGE, never FREE - see

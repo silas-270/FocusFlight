@@ -99,7 +99,7 @@ fun resolveLandingOutcome(before: List<Challenge>, after: List<Challenge>): Land
 
 /**
  * Bridges the challenge-check result across the InFlight -> ArrivalCelebration -> (tick-up |
- * completion) navigation hop, the same way `PreferencesRepository`'s `ActiveFlightContext` already
+ * completion) navigation hop, the same way `PreferencesRepository`'s `PausedFlight` already
  * bridges other per-session state across screens/ViewModels. A plain nav arg can't carry a result
  * shaped like [LandingResult] (a sealed class with a different field set per case, including a
  * float pair) without an ugly string-encoding scheme, and this only ever needs to reach the next

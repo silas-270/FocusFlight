@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.focusflight.data.model.Airport
+import com.example.focusflight.data.model.CameraPose
 import com.example.focusflight.data.model.Challenge
 import com.example.focusflight.data.model.FlightMode
 import com.example.focusflight.data.model.FlightRoute
@@ -12,6 +13,7 @@ import com.example.focusflight.data.repository.ChallengeRepository
 import com.example.focusflight.data.repository.FlightLogRepository
 import com.example.focusflight.data.repository.LandingResult
 import com.example.focusflight.data.repository.LandingResultChannel
+import com.example.focusflight.data.repository.PausedFlightStore
 import com.example.focusflight.data.repository.PreferencesRepository
 import com.example.focusflight.data.repository.processLandingForChallenges
 import com.example.focusflight.data.repository.resolveLandingOutcome
@@ -85,6 +87,16 @@ class InFlightViewModel(
     private val renderScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mapRenderer = CesiumHeadlessMapRenderer(cacheDir)
 
+    /** Where this session's paused flight lives: the global Story/Free slot, or this specific
+     *  Route challenge's own row. Picked once here instead of re-branching on mode/challengeId
+     *  on every read/write/clear - see [PausedFlightStore]'s own doc. */
+    private val pausedFlightStore: PausedFlightStore =
+        if (mode == FlightMode.CHALLENGE && challengeId != null) {
+            challengeRepository.pausedFlightStore(challengeId)
+        } else {
+            preferencesRepository.pausedFlightStore
+        }
+
     init {
         // A fresh nav entry (new flight, or resuming one) always means a fresh ViewModel
         // instance - clear out whatever the *previous* flight's landing left behind so a stale
@@ -92,29 +104,35 @@ class InFlightViewModel(
         landingResultChannel.reset()
 
         val totalSec = durationMin * 60L
-        val savedProgress = preferencesRepository.getActiveFlightProgress(flightNumber)
-        val initialElapsedMs = savedProgress ?: -3000L
-        val savedCamera = preferencesRepository.getActiveFlightCamera(flightNumber)
 
-        _uiState.value = InFlightState(
-            timeRemainingSeconds = totalSec - (initialElapsedMs.coerceAtLeast(0L) / 1000L),
-            timeElapsedMs = initialElapsedMs, // 3 second start hold if not saved
-            totalDurationSeconds = totalSec,
-            timeElapsedSeconds = initialElapsedMs.coerceAtLeast(0L) / 1000L,
-            restoredCameraMode = savedCamera?.mode
-        )
-        loadFlightDetails()
-        startTimer()
+        // Reading the paused flight (for its elapsed time / camera, if any) is a suspend Room
+        // call for CHALLENGE sessions - see pausedFlightStore - so the rest of what used to run
+        // synchronously in init now runs after it resolves, in the same order as before.
+        viewModelScope.launch {
+            val saved = pausedFlightStore.get()
+            val initialElapsedMs = saved?.elapsedMs ?: -3000L
+            val savedCamera = saved?.camera
 
-        // Only present when resuming a flight that was previously saved with a camera pose —
-        // a brand-new flight never has one, so the engine's own default framing applies
-        // unchanged. Mode is set first so it's already correct by the time the pose lands.
-        if (savedCamera != null) {
-            com.example.focusflight.engine.live.CesiumLiveJniBridge.nativeSetCameraMode(savedCamera.mode)
-            com.example.focusflight.engine.live.CesiumLiveJniBridge.nativeSetCameraPose(
-                savedCamera.x, savedCamera.y, savedCamera.z,
-                savedCamera.qx, savedCamera.qy, savedCamera.qz, savedCamera.qw
+            _uiState.value = InFlightState(
+                timeRemainingSeconds = totalSec - (initialElapsedMs.coerceAtLeast(0L) / 1000L),
+                timeElapsedMs = initialElapsedMs, // 3 second start hold if not saved
+                totalDurationSeconds = totalSec,
+                timeElapsedSeconds = initialElapsedMs.coerceAtLeast(0L) / 1000L,
+                restoredCameraMode = savedCamera?.mode
             )
+            loadFlightDetails()
+            startTimer()
+
+            // Only present when resuming a flight that was previously saved with a camera pose —
+            // a brand-new flight never has one, so the engine's own default framing applies
+            // unchanged. Mode is set first so it's already correct by the time the pose lands.
+            if (savedCamera != null) {
+                com.example.focusflight.engine.live.CesiumLiveJniBridge.nativeSetCameraMode(savedCamera.mode)
+                com.example.focusflight.engine.live.CesiumLiveJniBridge.nativeSetCameraPose(
+                    savedCamera.x, savedCamera.y, savedCamera.z,
+                    savedCamera.qx, savedCamera.qy, savedCamera.qz, savedCamera.qw
+                )
+            }
         }
     }
 
@@ -123,15 +141,15 @@ class InFlightViewModel(
      *  (e.g. ON_STOP), not on a timer — this only needs to be current when the user leaves. */
     fun saveCameraState() {
         val pose = com.example.focusflight.engine.live.CesiumLiveJniBridge.nativeGetCameraPose()
-        if (pose.size >= 8) {
-            preferencesRepository.saveActiveFlightCamera(
-                flightNumber,
-                com.example.focusflight.data.repository.CameraPose(
-                    mode = pose[0].toInt(),
-                    x = pose[1], y = pose[2], z = pose[3],
-                    qx = pose[4], qy = pose[5], qz = pose[6], qw = pose[7]
-                )
-            )
+        if (pose.size < 8) return
+        val camera = CameraPose(
+            mode = pose[0].toInt(),
+            x = pose[1], y = pose[2], z = pose[3],
+            qx = pose[4], qy = pose[5], qz = pose[6], qw = pose[7]
+        )
+        viewModelScope.launch {
+            val current = pausedFlightStore.get() ?: return@launch
+            pausedFlightStore.save(current.copy(camera = camera))
         }
     }
 
@@ -171,12 +189,19 @@ class InFlightViewModel(
                 val deltaMs = now - lastTickTime
                 lastTickTime = now
                 
+                // Persisting elapsed time can be a suspend Room write (CHALLENGE sessions), so it
+                // can't happen inside _uiState.update {}'s lambda - computed here, then actually
+                // written just below, still inside this same timer coroutine. Same reason
+                // completeFlight() (now suspend) is called after the update rather than inside it.
+                var elapsedToPersist: Long? = null
+                var justCompleted = false
+
                 _uiState.update { state ->
                     val newElapsedMs = state.timeElapsedMs + deltaMs
                     val totalMs = state.totalDurationSeconds * 1000L
-                    
+
                     if (newElapsedMs >= totalMs + 3000L) { // Added 3 second end hold
-                        completeFlight()
+                        justCompleted = true
                         state.copy(
                             timeRemainingSeconds = 0,
                             timeElapsedSeconds = state.totalDurationSeconds,
@@ -195,7 +220,7 @@ class InFlightViewModel(
                         val newRemainingSec = state.totalDurationSeconds - newElapsedSec
 
                         if (newElapsedSec != state.timeElapsedSeconds) {
-                            preferencesRepository.saveActiveFlightProgress(flightNumber, newElapsedMs)
+                            elapsedToPersist = newElapsedMs
                         }
 
                         var currentLat = state.currentLat
@@ -222,8 +247,16 @@ class InFlightViewModel(
                         )
                     }
                 }
+
+                elapsedToPersist?.let { persistElapsed(it) }
+                if (justCompleted) completeFlight()
             }
         }
+    }
+
+    private suspend fun persistElapsed(elapsedMs: Long) {
+        val current = pausedFlightStore.get() ?: return
+        pausedFlightStore.save(current.copy(elapsedMs = elapsedMs))
     }
 
     fun pauseTimer() {
@@ -233,22 +266,24 @@ class InFlightViewModel(
     }
 
     fun skipFlight() {
-        completeFlight()
-        _uiState.update { state ->
-            state.copy(
-                timeRemainingSeconds = 0,
-                timeElapsedSeconds = state.totalDurationSeconds,
-                timeElapsedMs = state.totalDurationSeconds * 1000L,
-                progress = 1.0f,
-                isRunning = false,
-                isCompleted = true
-            )
+        viewModelScope.launch {
+            completeFlight()
+            _uiState.update { state ->
+                state.copy(
+                    timeRemainingSeconds = 0,
+                    timeElapsedSeconds = state.totalDurationSeconds,
+                    timeElapsedMs = state.totalDurationSeconds * 1000L,
+                    progress = 1.0f,
+                    isRunning = false,
+                    isCompleted = true
+                )
+            }
         }
     }
 
     /** Shared landing/completion sequence: stop the timer, persist the new `currentAirport`
-     *  (STORY only - see below), clear this flight's saved progress/camera, kick off the
-     *  destination pre-render, write the logbook entry (always, tagged with [mode]), run the
+     *  (STORY only - see below), clear this session's paused flight (see [pausedFlightStore]),
+     *  kick off the destination pre-render, write the logbook entry (always, tagged with [mode]), run the
      *  post-landing achievement/challenge check, and snap the native engine to 100% progress.
      *  Invoked by both the normal timer-completion branch and the debug [skipFlight] shortcut
      *  so the two paths can't drift out of sync. Does not touch [_uiState] — each call site
@@ -259,7 +294,7 @@ class InFlightViewModel(
      *  stubbed - see [checkAchievementsAndChallenges]). Every flight is STORY today (Free Mode
      *  and Challenges don't exist yet), so the STORY branch is the only one exercised in
      *  practice - but the branch is real, not a placeholder. */
-    private fun completeFlight() {
+    private suspend fun completeFlight() {
         timerJob?.cancel()
         timerJob = null
 
@@ -269,8 +304,7 @@ class InFlightViewModel(
             preferencesRepository.setCurrentAirport(destIata)
         }
 
-        preferencesRepository.clearActiveFlightProgress(flightNumber)
-        preferencesRepository.clearActiveFlightCamera(flightNumber)
+        pausedFlightStore.clear()
         preRenderDestinationMap()
         saveFlightLog()
         checkAchievementsAndChallenges()

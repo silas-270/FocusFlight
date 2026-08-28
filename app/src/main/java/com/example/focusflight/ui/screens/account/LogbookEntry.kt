@@ -76,9 +76,9 @@ internal object PaperGrainTexture {
             val fy = rng.nextFloat()
             val falpha = rng.nextFloat()
             val argb = if (falpha > 0.6f) {
-                Color(0xFF8B6914).copy(alpha = falpha * 0.08f) // warm dark speck
+                com.example.focusflight.ui.theme.LogbookGrainDark.copy(alpha = falpha * 0.08f) // warm dark speck
             } else {
-                Color(0xFFFFFFE0).copy(alpha = falpha * 0.18f) // lighter highlight
+                com.example.focusflight.ui.theme.LogbookGrainLight.copy(alpha = falpha * 0.18f) // lighter highlight
             }
             paint.color = argb.toArgb()
             canvas.drawCircle(
@@ -96,11 +96,11 @@ internal object PaperGrainTexture {
     }
 }
 
-// ── Shared paper palette (used by both LogPaperCard's own drawing and callers' content) ────
-internal val LogbookInkDark   = Color(0xFF1A1208)   // near-black ink
-internal val LogbookInkMid    = Color(0xFF6B5033)   // warm sepia mid-tone
-internal val LogbookInkFaint  = Color(0xFFB09870)   // faded sepia labels
-internal val LogbookMarginRed = Color(0xFFCC1C1C)   // bright red margin / rubber-stamp color
+// ── Shared paper palette (re-exported from ui.theme for backwards compatibility) ────
+internal val LogbookInkDark   = com.example.focusflight.ui.theme.LogbookInkDark
+internal val LogbookInkMid    = com.example.focusflight.ui.theme.LogbookInkMid
+internal val LogbookInkFaint  = com.example.focusflight.ui.theme.LogbookInkFaint
+internal val LogbookMarginRed = com.example.focusflight.ui.theme.LogbookMarginRed
 
 /**
  * The logbook's paper-card chrome — parchment texture, ruled lines, red margin line, and the
@@ -117,8 +117,8 @@ internal fun LogPaperCard(
     content: @Composable RowScope.() -> Unit
 ) {
     // ── Paper palette (local to the Canvas drawing below) ──────────────────
-    val parchment      = Color(0xFFF5E6C0)   // aged cream
-    val parchmentDark  = Color(0xFFEDD89A)   // slightly more yellowed patch
+    val parchment      = com.example.focusflight.ui.theme.LogbookParchment
+    val parchmentDark  = com.example.focusflight.ui.theme.LogbookParchmentDark
     val ruleBlue       = Color(0xFF8EB4D4).copy(alpha = 0.55f)   // classic ink-blue lines
     val marginRed      = LogbookMarginRed
 
