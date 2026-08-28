@@ -1,6 +1,7 @@
 package com.example.focusflight
 
 import android.os.Bundle
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import android.util.Log
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -33,10 +34,12 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.focusflight.data.local.AppDatabase
 import com.example.focusflight.data.local.airport.AirportRouteSqliteDataSource
+import com.example.focusflight.data.model.ChallengeType
 import com.example.focusflight.data.model.FlightMode
 import com.example.focusflight.data.model.PausedFlight
 import com.example.focusflight.data.repository.AchievementsRepository
 import com.example.focusflight.data.repository.AirportRepository
+import com.example.focusflight.data.repository.ChallengeOutcome
 import com.example.focusflight.data.repository.ChallengeRepository
 import com.example.focusflight.data.repository.LocalAchievementsRepository
 import com.example.focusflight.data.repository.LandingResult
@@ -53,8 +56,7 @@ import com.example.focusflight.engine.live.CesiumLiveJniBridge
 import com.example.focusflight.engine.live.PendingFlightLoader
 import com.example.focusflight.ui.Screen
 import com.example.focusflight.ui.screens.arrival.ArrivalCelebrationScreen
-import com.example.focusflight.ui.screens.challenge.ChallengeCompletionScreen
-import com.example.focusflight.ui.screens.challenge.ChallengeProgressScreen
+import com.example.focusflight.ui.screens.challenge.ChallengeOutcomeScreen
 import com.example.focusflight.ui.screens.checkin.CheckInScreen
 import com.example.focusflight.ui.screens.flightsearch.FlightSearchScreen
 import com.example.focusflight.ui.screens.inflight.InFlightScreen
@@ -115,6 +117,11 @@ class CesiumGameActivity : GameActivity() {
     private val landingResultChannel = LandingResultChannel()
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Must run before super.onCreate() - it's what swaps the manifest's
+        // Theme.FocusFlight.Starting (the branded splash) over to Theme.CesiumTheme (postSplashScreenTheme)
+        // once the window is ready. GameActivity extends AppCompatActivity, so this ComponentActivity
+        // extension applies the same as any other activity.
+        installSplashScreen()
         super.onCreate(savedInstanceState)
 
         // Keep screen on during flight
@@ -374,7 +381,7 @@ class CesiumGameActivity : GameActivity() {
                                             // being silently overridden.
                                             val originIata = route.originIata
                                             val flightNo = "FF-${kotlin.math.abs(route.destIata.hashCode()) % 1000 + 100}"
-                                            val durationMin = route.flightTimeMin
+                                            val durationMin = route.durationMin
                                             withContext(Dispatchers.IO) {
                                                 pendingFlightLoader.loadPendingFlight(originIata, route.destIata, durationMin)
                                             }
@@ -528,32 +535,19 @@ class CesiumGameActivity : GameActivity() {
                                         // LandingResultChannel's doc for why Pending is never itself acted on.
                                         coroutineScope.launch {
                                             when (val outcome = landingResultChannel.result.first { it != LandingResult.Pending }) {
-                                                is LandingResult.ChallengeCompleted -> {
+                                                is LandingResult.ChallengesAffected -> {
                                                     // A completed Route challenge is no longer ACTIVE, so it can
                                                     // no longer be focused - clear the pref rather than leave it
                                                     // stale (HubViewModel would self-heal this anyway, but this
                                                     // avoids the round-trip).
-                                                    if (outcome.type == com.example.focusflight.data.model.ChallengeType.ROUTE) {
-                                                        preferencesRepository.clearFocusedRouteChallengeId()
-                                                    }
-                                                    navController.navigate(Screen.ChallengeCompletion.route) {
+                                                    outcome.outcomes.filterIsInstance<ChallengeOutcome.Completed>()
+                                                        .filter { it.type == ChallengeType.ROUTE }
+                                                        .forEach { preferencesRepository.clearFocusedRouteChallengeId() }
+
+                                                    navController.navigate(Screen.ChallengeOutcome.route) {
                                                         popUpTo(Screen.ArrivalCelebration.route) { inclusive = true }
                                                     }
                                                 }
-                                                is LandingResult.ChallengeAdvanced ->
-                                                    if (outcome.type == com.example.focusflight.data.model.ChallengeType.ROUTE) {
-                                                        // Route's per-leg progress is now shown persistently on
-                                                        // the Hub's own progress strip - no separate tick-up
-                                                        // screen needed for it (unlike Distance/Set-completion,
-                                                        // which still get one below).
-                                                        navController.navigate(Screen.Hub.route) {
-                                                            popUpTo(Screen.Hub.route) { inclusive = true }
-                                                        }
-                                                    } else {
-                                                        navController.navigate(Screen.ChallengeProgress.route) {
-                                                            popUpTo(Screen.ArrivalCelebration.route) { inclusive = true }
-                                                        }
-                                                    }
                                                 LandingResult.None, LandingResult.Pending ->
                                                     navController.navigate(Screen.Hub.route) {
                                                         popUpTo(Screen.Hub.route) { inclusive = true }
@@ -564,28 +558,12 @@ class CesiumGameActivity : GameActivity() {
                                 )
                             }
 
-                            // ── Challenge per-leg tick-up (Phase 3b) ──
-                            composable(Screen.ChallengeProgress.route) {
-                                val outcome = landingResultChannel.result.value as? LandingResult.ChallengeAdvanced
-                                ChallengeProgressScreen(
-                                    challengeName = outcome?.name ?: "",
-                                    challengeType = outcome?.type ?: com.example.focusflight.data.model.ChallengeType.DISTANCE,
-                                    oldProgress = outcome?.oldProgress ?: 0f,
-                                    newProgress = outcome?.newProgress ?: 0f,
-                                    onContinue = {
-                                        navController.navigate(Screen.Hub.route) {
-                                            popUpTo(Screen.Hub.route) { inclusive = true }
-                                        }
-                                    }
-                                )
-                            }
-
-                            // ── Challenge completion celebration (Phase 3b) ──
-                            composable(Screen.ChallengeCompletion.route) {
-                                val outcome = landingResultChannel.result.value as? LandingResult.ChallengeCompleted
-                                ChallengeCompletionScreen(
-                                    challengeName = outcome?.name ?: "",
-                                    challengeType = outcome?.type ?: com.example.focusflight.data.model.ChallengeType.DISTANCE,
+                            // ── Challenge outcome (per-leg tick-up and/or completion) ──
+                            composable(Screen.ChallengeOutcome.route) {
+                                val outcomes = (landingResultChannel.result.value as? LandingResult.ChallengesAffected)
+                                    ?.outcomes.orEmpty()
+                                ChallengeOutcomeScreen(
+                                    outcomes = outcomes,
                                     onContinue = {
                                         navController.navigate(Screen.Hub.route) {
                                             popUpTo(Screen.Hub.route) { inclusive = true }

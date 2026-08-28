@@ -47,11 +47,8 @@ object AchievementProgress {
                 is GeographicAchievementGoal.AllContinents -> {
                     val total = geo.continentStats.size
                     val current = geo.continentStats.count { it.visitedCountries.isNotEmpty() }
-                    AchievementStatus(
-                        id = goal.id,
+                    goal.toStatus(
                         category = AchievementCategory.GEOGRAPHIC,
-                        displayName = goal.displayName,
-                        description = goal.description,
                         current = current.toDouble(),
                         target = total.toDouble(),
                         unitLabel = "continents",
@@ -61,11 +58,8 @@ object AchievementProgress {
                 is GeographicAchievementGoal.AllCountries -> {
                     val total = geo.continentStats.sumOf { it.totalCountries }
                     val current = geo.visitedCountries.size
-                    AchievementStatus(
-                        id = goal.id,
+                    goal.toStatus(
                         category = AchievementCategory.GEOGRAPHIC,
-                        displayName = goal.displayName,
-                        description = goal.description,
                         current = current.toDouble(),
                         target = total.toDouble(),
                         unitLabel = "countries",
@@ -76,11 +70,8 @@ object AchievementProgress {
                     val stat = geo.continentStats.find { it.continentCode == goal.continentCode }
                     val total = stat?.totalCountries ?: 0
                     val current = stat?.visitedCountries?.size ?: 0
-                    AchievementStatus(
-                        id = goal.id,
+                    goal.toStatus(
                         category = AchievementCategory.GEOGRAPHIC,
-                        displayName = goal.displayName,
-                        description = goal.description,
                         current = current.toDouble(),
                         target = total.toDouble(),
                         unitLabel = "countries",
@@ -93,11 +84,8 @@ object AchievementProgress {
     fun evaluateDistance(flightHistory: List<FlightLog>): List<AchievementStatus> {
         val storyDistanceKm = flightHistory.filter { it.mode == FlightMode.STORY }.sumOf { it.distanceKm }
         return DistanceAchievementCatalog.ALL.map { milestone ->
-            AchievementStatus(
-                id = milestone.id,
+            milestone.toStatus(
                 category = AchievementCategory.DISTANCE,
-                displayName = milestone.displayName,
-                description = milestone.description,
                 current = storyDistanceKm,
                 target = milestone.targetKm,
                 unitLabel = "km",

@@ -146,6 +146,7 @@ dependencies {
     implementation("net.java.dev.jna:jna:5.14.0@aar")
     implementation("androidx.games:games-activity:3.0.4")
     implementation("androidx.appcompat:appcompat:1.7.0")
+    implementation("androidx.core:core-splashscreen:1.2.0")
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.navigation.compose)

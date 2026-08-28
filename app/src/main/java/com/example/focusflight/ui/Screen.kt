@@ -39,15 +39,14 @@ sealed class Screen(val route: String) {
     }
 
     // The second beat of docs/design/mechanics.md's post-landing pipeline step 5 - reached from
-    // ArrivalCelebration's "continue" only when Phase 3b's `LandingResultChannel` resolved to a
-    // ChallengeAdvanced/ChallengeCompleted outcome for this landing (never on Story/Free Mode
-    // landings with no active challenge progress, which go straight to Hub as before). Argument-
-    // less: both screens read the resolved outcome directly off the shared, Activity-scoped
+    // ArrivalCelebration's "continue" only when `LandingResultChannel` resolved to a
+    // ChallengesAffected outcome for this landing (never on Story/Free Mode landings with no
+    // active challenge progress, which go straight to Hub as before). Argument-less: the screen
+    // reads the resolved outcome list directly off the shared, Activity-scoped
     // `LandingResultChannel` (see `CesiumGameActivity`) rather than round-tripping its fields
     // through nav args - the result only ever needs to reach the very next screen in the same
     // process, the same reasoning `PausedFlight` already bridges other per-session state on.
-    object ChallengeProgress : Screen("challenge_progress")
-    object ChallengeCompletion : Screen("challenge_completion")
+    object ChallengeOutcome : Screen("challenge_outcome")
 
     object Account : Screen("account")
 

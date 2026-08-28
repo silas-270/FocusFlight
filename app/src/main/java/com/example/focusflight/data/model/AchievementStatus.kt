@@ -38,3 +38,31 @@ data class AchievementStatus(
     val progress: Float
         get() = if (target > 0.0) (current / target).toFloat().coerceIn(0f, 1f) else if (isUnlocked) 1f else 0f
 }
+
+/**
+ * The `id`/`displayName`/`description` metadata shared by every achievement catalog entry
+ * ([DistanceAchievementMilestone], [GeographicAchievementGoal]) - lets [toStatus] carry that
+ * copy-through once instead of [AchievementProgress] repeating it at each evaluation site.
+ */
+interface AchievementCatalogEntry {
+    val id: String
+    val displayName: String
+    val description: String
+}
+
+fun AchievementCatalogEntry.toStatus(
+    category: AchievementCategory,
+    current: Double,
+    target: Double,
+    unitLabel: String,
+    isUnlocked: Boolean
+): AchievementStatus = AchievementStatus(
+    id = id,
+    category = category,
+    displayName = displayName,
+    description = description,
+    current = current,
+    target = target,
+    unitLabel = unitLabel,
+    isUnlocked = isUnlocked
+)

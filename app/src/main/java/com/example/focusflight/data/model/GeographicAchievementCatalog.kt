@@ -11,10 +11,10 @@ package com.example.focusflight.data.model
  * coverage - see [GeographicAchievementCatalog.ALL].
  */
 sealed class GeographicAchievementGoal(
-    val id: String,
-    val displayName: String,
-    val description: String
-) {
+    override val id: String,
+    override val displayName: String,
+    override val description: String
+) : AchievementCatalogEntry {
     /** Every continent *reached* (at least one country visited in it) - the same "touched, not
      *  fully covered" bar as the equivalent Set-completion challenge's `all_continents`
      *  definition (see [CuratedChallengeSets.ALL_CONTINENTS]), not [ContinentStats.isCompleted]

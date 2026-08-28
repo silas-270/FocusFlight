@@ -89,7 +89,7 @@ class LegacyFlightLogMigratorTest {
         originIata = "STR",
         destIata = destIata,
         distanceKm = distanceKm,
-        flightTimeMin = 120,
+        durationMin = 120,
         carriers = "",
         destName = "",
         destMunicipality = "",

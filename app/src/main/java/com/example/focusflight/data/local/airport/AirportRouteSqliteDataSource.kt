@@ -275,7 +275,7 @@ class AirportRouteSqliteDataSource(private val context: Context) {
                                 originIata = cursor.getString(originCol) ?: "",
                                 destIata = cursor.getString(destCol) ?: "",
                                 distanceKm = cursor.getDouble(distCol),
-                                flightTimeMin = cursor.getInt(timeCol),
+                                durationMin = cursor.getInt(timeCol),
                                 carriers = cursor.getString(carriersCol) ?: "",
                                 destName = cursor.getString(nameCol) ?: "",
                                 destMunicipality = cursor.getString(munCol) ?: "",

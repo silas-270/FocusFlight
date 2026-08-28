@@ -19,7 +19,7 @@ interface FlightLogDao {
     suspend fun getFlightHistory(userId: Int): List<FlightLog>
 
     @Query("SELECT * FROM flight_log WHERE user_id = :userId ORDER BY completed_at DESC LIMIT :limit")
-    suspend fun getRecentFlights(userId: Int, limit: Int = 5): List<FlightLog>
+    suspend fun getRecentFlights(userId: Int, limit: Int): List<FlightLog>
 
     @Query("SELECT COUNT(*) FROM flight_log WHERE user_id = :userId")
     suspend fun getTotalFlights(userId: Int): Int

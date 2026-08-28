@@ -12,27 +12,26 @@ import com.example.focusflight.data.model.Airport
 import com.example.focusflight.data.model.FlightHighlights
 import com.example.focusflight.data.model.FlightLog
 import com.example.focusflight.data.model.FlightSortOrder
+import com.example.focusflight.data.model.FlightStats
 import com.example.focusflight.data.model.HomeBaseCooldown
 import com.example.focusflight.data.repository.AchievementsRepository
 import com.example.focusflight.data.repository.AirportRepository
 import com.example.focusflight.data.repository.FlightLogRepository
 import com.example.focusflight.data.repository.PreferencesRepository
 import com.example.focusflight.data.repository.UserRepository
+import com.example.focusflight.domain.AirportSearchController
+import com.example.focusflight.ui.components.airportpicker.resolveSuggestedAirports
 import com.example.focusflight.ui.screens.account.AchievementTier
 import com.example.focusflight.ui.screens.account.achievementTier
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -45,10 +44,8 @@ data class AccountUiState(
     val joinDateFormatted: String = "",
     
     // Passport/Stats Data
-    val totalFlights: Int = 0,
-    val totalMinutes: Int = 0,
-    val airportsVisited: Int = 0,
-    
+    val stats: FlightStats = FlightStats(),
+
     // Flight History (used for map paths/stats)
     val flightHistory: List<FlightLog> = emptyList(),
     
@@ -80,7 +77,7 @@ data class AccountUiState(
     val isLoading: Boolean = true
 )
 
-@OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
+@OptIn(ExperimentalCoroutinesApi::class)
 class AccountViewModel(
     private val context: android.content.Context,
     private val userRepository: UserRepository,
@@ -94,24 +91,26 @@ class AccountViewModel(
     val uiState: StateFlow<AccountUiState> = _uiState.asStateFlow()
 
     // ── Change-home-base airport picker (docs/design/story-mode.md) ─────────────────────
-    // Structurally identical to FlightSearchViewModel's Free Mode origin picker
-    // (observeOriginSearch/onOriginSearchQueryChanged/selectOrigin) and OnboardingViewModel's
-    // debounced airport search - the third call site of the same "search any airport by free
-    // text" pattern, reusing OriginSearchPanel as the UI per the phase brief rather than building
-    // a new picker component.
-    private val _homeBaseSearchQuery = MutableStateFlow("")
-    val homeBaseSearchQuery: StateFlow<String> = _homeBaseSearchQuery.asStateFlow()
+    // Shares AirportSearchController with OnboardingViewModel's home-airport search and
+    // FlightSearchViewModel's Free Mode origin picker - all three search any airport by free
+    // text, reusing the shared ui/components/airportpicker two-step "search -> confirm on map"
+    // components as the UI rather than building a new picker from scratch.
+    private val homeBaseSearch = AirportSearchController(airportRepository, viewModelScope)
+    val homeBaseSearchQuery: StateFlow<String> = homeBaseSearch.query
+    val homeBaseSearchResults: StateFlow<List<Airport>> = homeBaseSearch.results
 
-    private val _homeBaseSearchResults = MutableStateFlow<List<Airport>>(emptyList())
-    val homeBaseSearchResults: StateFlow<List<Airport>> = _homeBaseSearchResults.asStateFlow()
+    // Same FRA/LHR/BER/MUC tiles Onboarding and Free Flight's origin picker show before a search
+    // is typed, so Change Home Base's picker looks identical to theirs.
+    private val _homeBaseSuggestions = MutableStateFlow<List<Airport>>(emptyList())
+    val homeBaseSuggestions: StateFlow<List<Airport>> = _homeBaseSuggestions.asStateFlow()
 
     fun onHomeBaseSearchQueryChanged(query: String) {
-        _homeBaseSearchQuery.value = query
+        homeBaseSearch.onQueryChanged(query)
     }
 
     private fun clearHomeBaseSearch() {
-        _homeBaseSearchQuery.value = ""
-        _homeBaseSearchResults.value = emptyList()
+        homeBaseSearch.onQueryChanged("")
+        homeBaseSearch.clearResults()
     }
 
     private val dateFormat = SimpleDateFormat("MMM yyyy", Locale.US)
@@ -133,21 +132,13 @@ class AccountViewModel(
     init {
         loadData()
         refreshHomeBaseCooldowns()
+        viewModelScope.launch(Dispatchers.IO) {
+            _homeBaseSuggestions.value = resolveSuggestedAirports(airportRepository)
+        }
         // Off the UI thread, well before the user can scroll a fast fling down to the
         // logbook (see PaperGrainTexture's doc comment).
         viewModelScope.launch(Dispatchers.Default) {
             com.example.focusflight.ui.screens.account.PaperGrainTexture.warm()
-        }
-        viewModelScope.launch {
-            _homeBaseSearchQuery
-                .debounce(300)
-                .collectLatest { query ->
-                    _homeBaseSearchResults.value = if (query.trim().length >= 2) {
-                        withContext(Dispatchers.IO) { airportRepository.searchAirports(query) }
-                    } else {
-                        emptyList()
-                    }
-                }
         }
     }
 
@@ -284,9 +275,7 @@ class AccountViewModel(
 
                 _uiState.update { state ->
                     state.copy(
-                        totalFlights = stats.totalFlights,
-                        totalMinutes = stats.totalMinutes,
-                        airportsVisited = stats.airportsVisited,
+                        stats = stats,
                         flightHistory = history,
                         allVisitedCountries = geography.visitedCountries,
                         completedContinents = geography.completedContinents,

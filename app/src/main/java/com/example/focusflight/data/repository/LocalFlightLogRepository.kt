@@ -3,6 +3,7 @@ package com.example.focusflight.data.repository
 import androidx.paging.PagingSource
 import com.example.focusflight.data.local.FlightLogDao
 import com.example.focusflight.data.local.UserProfileDao
+import com.example.focusflight.data.local.requireProfileId
 import com.example.focusflight.data.model.FlightLog
 import com.example.focusflight.data.model.FlightHighlights
 import com.example.focusflight.data.model.FlightMode
@@ -16,11 +17,6 @@ class LocalFlightLogRepository(
     private val userProfileDao: UserProfileDao
 ) : FlightLogRepository {
 
-    private suspend fun getUserId(): Int {
-        return userProfileDao.getProfile()?.id
-            ?: throw IllegalStateException("No user profile found. Create a profile first.")
-    }
-
     override suspend fun logFlight(
         flightNumber: String,
         originIata: String,
@@ -29,7 +25,7 @@ class LocalFlightLogRepository(
         distanceKm: Double,
         mode: FlightMode
     ): FlightLog {
-        val userId = getUserId()
+        val userId = userProfileDao.requireProfileId()
         val log = FlightLog(
             userId = userId,
             flightNumber = flightNumber,
@@ -51,17 +47,17 @@ class LocalFlightLogRepository(
     }
 
     override suspend fun getFlightHistory(): List<FlightLog> {
-        val userId = getUserId()
+        val userId = userProfileDao.requireProfileId()
         return flightLogDao.getFlightHistory(userId)
     }
 
     override suspend fun getRecentFlights(limit: Int): List<FlightLog> {
-        val userId = getUserId()
+        val userId = userProfileDao.requireProfileId()
         return flightLogDao.getRecentFlights(userId, limit)
     }
 
     override suspend fun getFlightStats(): FlightStats {
-        val userId = getUserId()
+        val userId = userProfileDao.requireProfileId()
         val totalFlights = flightLogDao.getTotalFlights(userId)
         val totalMinutes = flightLogDao.getTotalMinutes(userId)
         val distinctDest = flightLogDao.getDistinctDestinations(userId)
@@ -73,7 +69,7 @@ class LocalFlightLogRepository(
     }
 
     override fun getFlightsPagingSource(sortOrder: FlightSortOrder): PagingSource<Int, FlightLog> {
-        val userId = kotlinx.coroutines.runBlocking { getUserId() }
+        val userId = kotlinx.coroutines.runBlocking { userProfileDao.requireProfileId() }
         return when (sortOrder) {
             FlightSortOrder.DATE_DESC -> flightLogDao.getFlightsPagedDateDesc(userId)
             FlightSortOrder.DATE_ASC -> flightLogDao.getFlightsPagedDateAsc(userId)
@@ -84,7 +80,7 @@ class LocalFlightLogRepository(
     }
 
     override suspend fun getFlightHighlights(): FlightHighlights {
-        val userId = getUserId()
+        val userId = userProfileDao.requireProfileId()
         val longest = flightLogDao.getLongestFlight(userId)
         val mostVisitedIata = flightLogDao.getMostVisitedIata(userId)
         val mostVisitedCount = mostVisitedIata?.let { flightLogDao.getVisitCount(userId, it) } ?: 0

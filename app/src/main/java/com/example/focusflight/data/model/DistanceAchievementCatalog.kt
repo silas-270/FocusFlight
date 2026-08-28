@@ -8,11 +8,11 @@ package com.example.focusflight.data.model
  * [DistanceAchievementCatalog.ALL] - not an exhaustive ladder.
  */
 data class DistanceAchievementMilestone(
-    val id: String,
-    val displayName: String,
-    val description: String,
+    override val id: String,
+    override val displayName: String,
+    override val description: String,
     val targetKm: Double
-)
+) : AchievementCatalogEntry
 
 object DistanceAchievementCatalog {
     val ALL: List<DistanceAchievementMilestone> = listOf(

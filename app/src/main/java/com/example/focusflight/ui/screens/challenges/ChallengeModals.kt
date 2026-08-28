@@ -35,6 +35,9 @@ import com.example.focusflight.data.model.ChallengeType
 import com.example.focusflight.data.model.CuratedChallengeCatalog
 import com.example.focusflight.data.model.progressFraction
 import com.example.focusflight.ui.components.ChallengeProgressBar
+import com.example.focusflight.ui.components.DestructiveActionButton
+import com.example.focusflight.ui.components.ModalTitle
+import com.example.focusflight.ui.components.PrimaryActionButton
 import com.example.focusflight.ui.components.ScrimCardModal
 import com.example.focusflight.ui.components.challengeTypeIcon
 import com.example.focusflight.ui.components.challengeTypeLabel

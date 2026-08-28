@@ -44,13 +44,13 @@ internal fun StatsGrid2x2(state: AccountUiState) {
     ) {
         StatCard(
             modifier = Modifier.weight(1f),
-            value = state.totalFlights.toString(),
+            value = state.stats.totalFlights.toString(),
             label = "FLIGHTS",
             icon = Icons.Outlined.AirplanemodeActive
         )
         StatCard(
             modifier = Modifier.weight(1f),
-            value = state.airportsVisited.toString(),
+            value = state.stats.airportsVisited.toString(),
             label = "AIRPORTS",
             icon = Icons.Outlined.FlightLand
         )

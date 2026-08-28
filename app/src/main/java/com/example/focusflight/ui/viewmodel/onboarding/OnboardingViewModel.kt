@@ -7,17 +7,14 @@ import com.example.focusflight.data.model.Airport
 import com.example.focusflight.data.repository.AirportRepository
 import com.example.focusflight.data.repository.PreferencesRepository
 import com.example.focusflight.data.repository.UserRepository
+import com.example.focusflight.domain.AirportSearchController
 import com.example.focusflight.engine.headless.CesiumHeadlessMapRenderer
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
 
-@OptIn(FlowPreview::class)
 class OnboardingViewModel(
     private val airportRepository: AirportRepository,
     private val preferencesRepository: PreferencesRepository,
@@ -25,39 +22,20 @@ class OnboardingViewModel(
     private val cacheDir: java.io.File
 ) : ViewModel() {
 
-    private val _searchQuery = MutableStateFlow("")
-    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
-
-    private val _searchResults = MutableStateFlow<List<Airport>>(emptyList())
-    val searchResults: StateFlow<List<Airport>> = _searchResults.asStateFlow()
+    private val airportSearch = AirportSearchController(airportRepository, viewModelScope)
+    val searchQuery: StateFlow<String> = airportSearch.query
+    val searchResults: StateFlow<List<Airport>> = airportSearch.results
 
     private val _selectedAirport = MutableStateFlow<Airport?>(null)
     val selectedAirport: StateFlow<Airport?> = _selectedAirport.asStateFlow()
 
     private val mapRenderer = CesiumHeadlessMapRenderer(cacheDir)
 
-    init {
-        viewModelScope.launch {
-            _searchQuery
-                .debounce(300)
-                .collectLatest { query ->
-                    if (query.trim().length >= 2) {
-                        val results = kotlinx.coroutines.withContext(Dispatchers.IO) {
-                            airportRepository.searchAirports(query)
-                        }
-                        _searchResults.value = results
-                    } else {
-                        _searchResults.value = emptyList()
-                    }
-                }
-        }
-    }
-
     fun onQueryChanged(newQuery: String) {
-        _searchQuery.value = newQuery
+        airportSearch.onQueryChanged(newQuery)
         val selected = _selectedAirport.value
-        if (selected != null && 
-            !selected.name.contains(newQuery, ignoreCase = true) && 
+        if (selected != null &&
+            !selected.name.contains(newQuery, ignoreCase = true) &&
             !selected.iataCode.equals(newQuery, ignoreCase = true)) {
             _selectedAirport.value = null
         }
@@ -65,8 +43,8 @@ class OnboardingViewModel(
 
     fun selectAirport(airport: Airport) {
         _selectedAirport.value = airport
-        _searchQuery.value = "${airport.municipality} (${airport.iataCode})"
-        _searchResults.value = emptyList()
+        airportSearch.onQueryChanged("${airport.municipality} (${airport.iataCode})")
+        airportSearch.clearResults()
         preRenderMap(airport)
     }
 
@@ -75,8 +53,8 @@ class OnboardingViewModel(
             val airport = airportRepository.getAirportByIata(iataCode)
             if (airport != null) {
                 _selectedAirport.value = airport
-                _searchQuery.value = "${airport.municipality} (${airport.iataCode})"
-                _searchResults.value = emptyList()
+                airportSearch.onQueryChanged("${airport.municipality} (${airport.iataCode})")
+                airportSearch.clearResults()
                 preRenderMap(airport)
             }
         }
@@ -84,7 +62,7 @@ class OnboardingViewModel(
 
     fun clearSelection() {
         _selectedAirport.value = null
-        _searchQuery.value = ""
+        airportSearch.onQueryChanged("")
     }
 
     fun saveHomeAirport(): Boolean {
@@ -115,13 +93,7 @@ class OnboardingViewModel(
 
     private fun preRenderMap(airport: Airport) {
         viewModelScope.launch(Dispatchers.IO) {
-            val outboundRoutes = airportRepository.getOutboundRoutes(airport.iataCode)
-            val result = mapRenderer.renderRouteMap(
-                centerIata = airport.iataCode,
-                centerLat = airport.lat,
-                centerLon = airport.lon,
-                outboundRoutes = outboundRoutes
-            )
+            val result = mapRenderer.renderRouteMapForAirport(airportRepository, airport)
             if (result is CesiumHeadlessMapRenderer.Result.Success) {
                 android.util.Log.d("OnboardingViewModel", "Pre-rendered onboarding map for ${airport.iataCode} to ${result.path}")
             }

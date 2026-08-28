@@ -106,7 +106,7 @@ fun SelectionCard(route: FlightRoute, isSelected: Boolean, onClick: () -> Unit) 
 
             // Bottom: Duration
             Text(
-                text = formatTime(route.flightTimeMin),
+                text = formatTime(route.durationMin),
                 color = Haze,
                 fontFamily = FontFamily.SansSerif,
                 fontSize = 16.sp

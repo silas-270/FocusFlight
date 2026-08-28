@@ -32,6 +32,13 @@ object Spacing {
     val ExtraLarge: Dp = 32.dp
 }
 
+object Radius {
+    val Small: Dp = 12.dp
+    val Medium: Dp = 14.dp
+    val Large: Dp = 16.dp
+    val ExtraLarge: Dp = 20.dp
+}
+
 @Composable
 fun FocusFlightTheme(
     content: @Composable () -> Unit

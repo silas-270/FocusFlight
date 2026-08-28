@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.focusflight.data.model.Airport
 import com.example.focusflight.data.model.FlightRoute
 import com.example.focusflight.data.repository.AirportRepository
+import com.example.focusflight.domain.loadRouteContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -46,17 +47,10 @@ class CheckInViewModel(
     // screen and the in-flight session after it.
     private fun loadFlightDetails() {
         viewModelScope.launch(Dispatchers.IO) {
-            val origin = airportRepository.getAirportByIata(originIata)
-            _originAirport.value = origin
-
-            val dest = airportRepository.getAirportByIata(destIata)
-            _destAirport.value = dest
-
-            if (origin != null && dest != null) {
-                val routes = airportRepository.getOutboundRoutes(originIata = origin.iataCode, searchQuery = destIata)
-                val route = routes.find { it.destIata == destIata }
-                _routeDetails.value = route
-            }
+            val context = loadRouteContext(airportRepository, originIata, destIata)
+            _originAirport.value = context.origin
+            _destAirport.value = context.dest
+            _routeDetails.value = context.route
         }
     }
 }

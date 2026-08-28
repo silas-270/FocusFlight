@@ -17,6 +17,7 @@ import com.example.focusflight.data.repository.PausedFlightStore
 import com.example.focusflight.data.repository.PreferencesRepository
 import com.example.focusflight.data.repository.processLandingForChallenges
 import com.example.focusflight.data.repository.resolveLandingOutcome
+import com.example.focusflight.domain.loadRouteContext
 import com.example.focusflight.engine.headless.CesiumHeadlessMapRenderer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -160,18 +161,13 @@ class InFlightViewModel(
     // one place that has to stop assuming the two are the same.
     private fun loadFlightDetails() {
         viewModelScope.launch(Dispatchers.IO) {
-            val origin = airportRepository.getAirportByIata(originIata)
-            _originAirport.value = origin
+            val context = loadRouteContext(airportRepository, originIata, destIata)
+            _originAirport.value = context.origin
+            _destAirport.value = context.dest
+            _routeDetails.value = context.route
 
-            val dest = airportRepository.getAirportByIata(destIata)
-            _destAirport.value = dest
-
-            if (origin != null && dest != null) {
-                val routes = airportRepository.getOutboundRoutes(originIata = origin.iataCode, searchQuery = destIata)
-                val route = routes.find { it.destIata == destIata }
-                _routeDetails.value = route
-
-                // Initialize coordinates to origin
+            // Initialize coordinates to origin
+            context.origin?.let { origin ->
                 _uiState.update { it.copy(currentLat = origin.lat, currentLon = origin.lon) }
             }
         }
@@ -359,14 +355,8 @@ class InFlightViewModel(
     private fun preRenderDestinationMap() {
         renderJob = renderScope.launch {
             val dest = airportRepository.getAirportByIata(destIata) ?: return@launch
-            val outboundRoutes = airportRepository.getOutboundRoutes(dest.iataCode)
             android.util.Log.d("InFlightViewModel", "Pre-rendering map for destination ${dest.iataCode}...")
-            val result = mapRenderer.renderRouteMap(
-                centerIata = dest.iataCode,
-                centerLat = dest.lat,
-                centerLon = dest.lon,
-                outboundRoutes = outboundRoutes
-            )
+            val result = mapRenderer.renderRouteMapForAirport(airportRepository, dest)
             when (result) {
                 is CesiumHeadlessMapRenderer.Result.Success ->
                     android.util.Log.d("InFlightViewModel", "Pre-rendering succeeded: ${result.path}")

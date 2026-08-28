@@ -3,4 +3,17 @@
 
     <style name="Theme.FocusFlight" parent="android:Theme.Material.Light.NoActionBar" />
     <style name="Theme.CesiumTheme" parent="Theme.AppCompat.NoActionBar" />
+
+    <!-- Cold-start splash: set as CesiumGameActivity's manifest theme so the OS shows this
+         branding (GameActivity extends AppCompatActivity, so androidx.core:core-splashscreen's
+         installSplashScreen() applies here same as any ComponentActivity) instead of the bare
+         default icon-on-white. Swaps to Theme.CesiumTheme automatically once installSplashScreen()
+         is called in onCreate(). No windowSplashScreenAnimatedIcon override - custom vectors kept
+         getting clipped by the OS's adaptive-icon-style mask regardless of safe-zone padding, so
+         this intentionally omits it and lets the system fall back to the app's own launcher icon,
+         which is already correctly pre-masked. -->
+    <style name="Theme.FocusFlight.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/splash_background</item>
+        <item name="postSplashScreenTheme">@style/Theme.CesiumTheme</item>
+    </style>
 </resources>

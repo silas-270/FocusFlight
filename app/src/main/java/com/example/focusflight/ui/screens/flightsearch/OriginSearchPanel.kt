@@ -15,12 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -31,14 +26,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.example.focusflight.data.model.Airport
-import com.example.focusflight.ui.theme.Amber
+import com.example.focusflight.ui.components.CaptionLabel
+import com.example.focusflight.ui.components.SearchTextField
 import com.example.focusflight.ui.theme.Border
 import com.example.focusflight.ui.theme.DeepNavy
 import com.example.focusflight.ui.theme.Haze
 import com.example.focusflight.ui.theme.OffWhite
-import com.example.focusflight.ui.theme.Slate
 import com.example.focusflight.ui.theme.Spacing
 
 /**
@@ -58,49 +52,13 @@ fun OriginSearchPanel(
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
-        Text(
-            text = "FLY FROM ANYWHERE",
-            style = MaterialTheme.typography.labelSmall.copy(
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.sp
-            ),
-            color = Haze
-        )
+        CaptionLabel(text = "FLY FROM ANYWHERE")
         Spacer(modifier = Modifier.height(Spacing.Small))
-        OutlinedTextField(
+        SearchTextField(
             value = query,
             onValueChange = onQueryChange,
-            modifier = Modifier.fillMaxWidth(),
-            placeholder = {
-                Text(
-                    text = "Search origin airport…",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = Haze,
-                    modifier = Modifier.padding(start = 4.dp)
-                )
-            },
-            leadingIcon = {
-                Icon(
-                    imageVector = Icons.Outlined.Search,
-                    contentDescription = "Search",
-                    tint = Haze,
-                    modifier = Modifier.size(24.dp)
-                )
-            },
-            singleLine = true,
-            shape = RoundedCornerShape(16.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = Slate,
-                unfocusedContainerColor = DeepNavy,
-                cursorColor = Amber,
-                focusedBorderColor = Amber,
-                unfocusedBorderColor = Border.copy(alpha = 0.3f),
-                focusedTextColor = OffWhite,
-                unfocusedTextColor = OffWhite,
-                focusedLeadingIconColor = Amber,
-                unfocusedLeadingIconColor = Haze
-            ),
-            textStyle = MaterialTheme.typography.bodyLarge
+            placeholder = "Search origin airport…",
+            unfocusedBorderColor = Border.copy(alpha = 0.3f)
         )
 
         Spacer(modifier = Modifier.height(Spacing.Medium))

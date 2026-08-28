@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.FlightTakeoff
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -39,6 +38,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.focusflight.ui.components.BackTopAppBar
 import com.example.focusflight.ui.theme.Amber
 import com.example.focusflight.ui.theme.Border
 import com.example.focusflight.ui.theme.DeepNavy
@@ -62,30 +62,7 @@ fun CheckInScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        "CHECK-IN",
-                        style = MaterialTheme.typography.labelLarge.copy(
-                            letterSpacing = 3.sp,
-                            fontWeight = FontWeight.Bold
-                        ),
-                        color = Amber
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(
-                            Icons.AutoMirrored.Outlined.ArrowBack,
-                            contentDescription = "Back",
-                            tint = OffWhite
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Midnight
-                )
-            )
+            BackTopAppBar(title = "CHECK-IN", onBackClick = onBackClick)
         },
         containerColor = Midnight
     ) { paddingValues ->
@@ -250,7 +227,7 @@ fun CheckInScreen(
                             color = Haze,
                             letterSpacing = 1.sp
                         )
-                        val durationMin = routeDetails?.flightTimeMin ?: 0
+                        val durationMin = routeDetails?.durationMin ?: 0
                         val hours = durationMin / 60
                         val minutes = durationMin % 60
                         val durationText = if (hours > 0) "${hours}h ${minutes}m" else "${minutes}m"
@@ -349,7 +326,7 @@ fun CheckInScreen(
             // Action: Start Flight
             Button(
                 onClick = {
-                    val durationMin = routeDetails?.flightTimeMin ?: 0
+                    val durationMin = routeDetails?.durationMin ?: 0
                     if (durationMin > 0) {
                         onStartFlight(viewModel.flightNumber, viewModel.destIata, durationMin)
                     }
