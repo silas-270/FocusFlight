@@ -40,11 +40,58 @@ class AirportRouteSqliteDataSource(private val context: Context) {
         }
     }
 
+    /**
+     * One long-lived read-only connection, opened on first use and deliberately never closed.
+     *
+     * This used to open and close the 4MB `flights.db` on *every single query* - and every airport
+     * lookup, route fetch and runway lookup in the app goes through here, several per screen. The
+     * file is a read-only bundled asset that no code path ever writes, so there is nothing to
+     * flush and no reason to reopen it; `SQLiteDatabase` does its own internal locking, which
+     * makes a shared read-only handle safe to use concurrently from the IO dispatcher.
+     *
+     * Held for the process lifetime rather than reference-counted: the alternative buys nothing
+     * (the connection is wanted again within milliseconds on every screen) and reintroduces the
+     * close/reopen cost this exists to remove.
+     */
+    @Volatile
+    private var connection: SQLiteDatabase? = null
+
     private fun getReadableDatabase(): SQLiteDatabase {
-        ensureDatabaseCopied()
-        return SQLiteDatabase.openDatabase(dbPath.absolutePath, null, SQLiteDatabase.OPEN_READONLY)
+        connection?.let { if (it.isOpen) return it }
+        return synchronized(this) {
+            connection?.takeIf { it.isOpen } ?: run {
+                ensureDatabaseCopied()
+                SQLiteDatabase.openDatabase(dbPath.absolutePath, null, SQLiteDatabase.OPEN_READONLY)
+                    .also { connection = it }
+            }
+        }
     }
 
+    /**
+     * Immutable reference data, so this is memoised for the process lifetime after the first
+     * successful read. It was a `SELECT DISTINCT` full-table scan over the whole airports table on
+     * every Passport and Flight Search open, for an answer that cannot change between app updates.
+     *
+     * Assigned only on success. A failure throws (see [AirportDataException]) and therefore cannot
+     * be memoised - which is the entire reason that distinction had to exist before this cache
+     * could: pinning an empty map here would wipe the visited-country denominator permanently.
+     */
+    @Volatile
+    private var cachedContinentCountryMap: Map<String, Set<String>>? = null
+
+    /**
+     * Airports never change within a build, and [getAirportByIata] is the single hottest query in
+     * the app - the Hub, check-in, in-flight, challenge crediting and the landing pipeline all
+     * resolve codes through it, three times over in `advanceRouteChallenge` alone. Only successful
+     * lookups are cached; an unknown code stays a miss, which keeps the cache free of entries that
+     * exist only to record an absence.
+     */
+    private val airportByIataCache = android.util.LruCache<String, Airport>(128)
+
+    // Stays lenient on failure (log + empty list) on purpose: a typo-ahead search that finds
+    // nothing is an ordinary answer the picker already renders as "no results", so a failure is
+    // no worse than a miss and nothing downstream caches it. See [AirportDataException] for why
+    // only the two aggregate queries had to stop doing this.
     fun searchAirports(query: String): List<Airport> {
         if (query.trim().length < 2) return emptyList()
         val airportsList = mutableListOf<Airport>()
@@ -110,13 +157,15 @@ class AirportRouteSqliteDataSource(private val context: Context) {
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error querying database", e)
-        } finally {
-            db.close()
         }
         return airportsList
     }
 
+    // Lenient on failure (log + null) on purpose: every caller already has to handle an unknown
+    // IATA code, so a null here lands in a branch that exists regardless, and the answer is per-
+    // airport rather than a global truth anything caches. See [AirportDataException].
     fun getAirportByIata(iataCode: String): Airport? {
+        airportByIataCache.get(iataCode)?.let { return it }
         val db = getReadableDatabase()
         val sql = "SELECT * FROM airports WHERE iata_code = ? LIMIT 1"
         try {
@@ -148,17 +197,18 @@ class AirportRouteSqliteDataSource(private val context: Context) {
                         isoRegion = cursor.getString(regionCol) ?: "",
                         municipality = cursor.getString(munCol) ?: "",
                         type = cursor.getString(typeCol) ?: ""
-                    )
+                    ).also { airportByIataCache.put(iataCode, it) }
                 }
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error querying database by IATA", e)
-        } finally {
-            db.close()
         }
         return null
     }
 
+    // Lenient on failure (log + empty list) on purpose: plenty of airports genuinely have no
+    // runway rows in the reference data, so callers already treat "none" as normal and degrade to
+    // a generic approach rather than showing an error. See [AirportDataException].
     fun getRunwaysForAirport(airportId: Int): List<Runway> {
         val runways = mutableListOf<Runway>()
         val db = getReadableDatabase()
@@ -210,14 +260,17 @@ class AirportRouteSqliteDataSource(private val context: Context) {
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error querying runways", e)
-        } finally {
-            db.close()
         }
         return runways
     }
 
 
 
+    // Throws on failure rather than returning empty, unlike the other per-item lookups. A routeless
+    // origin IS an ordinary answer here - but it is not an inert one: Story Mode reacts to it by
+    // rehoming the pilot to LHR and *writing* `currentAirport`. A swallowed failure would therefore
+    // teleport someone out of their airport because a query briefly broke, and persist it. Empty
+    // has to mean empty wherever a caller acts on it. See [AirportDataException].
     fun getOutboundRoutes(
         originIata: String,
         searchQuery: String = "",
@@ -289,13 +342,13 @@ class AirportRouteSqliteDataSource(private val context: Context) {
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error querying outbound routes", e)
-        } finally {
-            db.close()
+            throw AirportDataException("Failed to query outbound routes from $originIata", e)
         }
         return routesList
     }
 
     fun getContinentCountryMap(): Map<String, Set<String>> {
+        cachedContinentCountryMap?.let { return it }
         val map = mutableMapOf<String, MutableSet<String>>()
         val db = getReadableDatabase()
         val sql = "SELECT DISTINCT continent, iso_country FROM airports WHERE type IN ('large_airport', 'medium_airport') AND iso_country != '' AND continent != ''"
@@ -315,11 +368,15 @@ class AirportRouteSqliteDataSource(private val context: Context) {
                 }
             }
         } catch (e: Exception) {
+            // Throws rather than returning the partially-filled map: this is the denominator for
+            // every Geographic achievement ("12/54 countries in Europe"), so a short map doesn't
+            // read as an error, it reads as a smaller world in which the player has done better
+            // than they have. There is no value here that means "the query failed", which is
+            // exactly what [AirportDataException] exists to express.
             Log.e(TAG, "Error querying continent country map", e)
-        } finally {
-            db.close()
+            throw AirportDataException("Failed to query continent/country map", e)
         }
-        return map
+        return map.also { cachedContinentCountryMap = it }
     }
 
     fun getCountriesForAirports(iatas: List<String>): Set<String> {
@@ -345,9 +402,12 @@ class AirportRouteSqliteDataSource(private val context: Context) {
                 }
             }
         } catch (e: Exception) {
+            // Throws rather than returning what was collected so far: the caller asked about a
+            // non-empty list of flown-to airports, so anything short of the real answer silently
+            // un-visits countries the player has actually been to - a wiped passport with no
+            // error. The empty-input case above is the only legitimate empty result.
             Log.e(TAG, "Error querying countries for airports", e)
-        } finally {
-            db.close()
+            throw AirportDataException("Failed to query countries for ${iatas.size} airports", e)
         }
         return countries
     }

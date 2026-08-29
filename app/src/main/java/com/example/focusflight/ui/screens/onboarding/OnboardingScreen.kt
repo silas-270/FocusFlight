@@ -32,6 +32,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
@@ -58,6 +59,7 @@ import com.example.focusflight.ui.theme.Midnight
 import com.example.focusflight.ui.theme.OffWhite
 import com.example.focusflight.ui.theme.Spacing
 import com.example.focusflight.ui.viewmodel.onboarding.OnboardingViewModel
+import kotlinx.coroutines.launch
 
 
 @Composable
@@ -68,6 +70,7 @@ fun OnboardingScreen(
     val searchQuery by viewModel.searchQuery.collectAsState()
     val searchResults by viewModel.searchResults.collectAsState()
     val selectedAirport by viewModel.selectedAirport.collectAsState()
+    val onboardingScope = rememberCoroutineScope()
 
     Box(
         modifier = Modifier
@@ -165,8 +168,15 @@ fun OnboardingScreen(
             // ── CTA Button ──────────────────────────────────────────
             Button(
                 onClick = {
-                    if (viewModel.saveHomeAirport()) {
-                        onOnboardingComplete()
+                    // Navigate only once the profile row is actually written. saveHomeAirport()
+                    // now awaits that write and reports failure, and nothing pops this screen
+                    // until it returns - so this scope cannot be torn down mid-write, and a
+                    // failed write leaves the pilot here to retry rather than stranding them in a
+                    // half-onboarded app.
+                    onboardingScope.launch {
+                        if (viewModel.saveHomeAirport()) {
+                            onOnboardingComplete()
+                        }
                     }
                 },
                 modifier = Modifier

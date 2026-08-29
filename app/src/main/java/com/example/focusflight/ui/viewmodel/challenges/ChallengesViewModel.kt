@@ -1,5 +1,6 @@
 package com.example.focusflight.ui.viewmodel.challenges
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -8,7 +9,8 @@ import com.example.focusflight.data.model.Airport
 import com.example.focusflight.data.model.Challenge
 import com.example.focusflight.data.model.ChallengeType
 import com.example.focusflight.data.model.PausedFlight
-import com.example.focusflight.data.repository.AchievementsRepository
+import com.example.focusflight.data.local.airport.AirportDataException
+import com.example.focusflight.data.repository.PilotProgressRepository
 import com.example.focusflight.data.repository.AirportRepository
 import com.example.focusflight.data.repository.ChallengeRepository
 import com.example.focusflight.data.repository.PreferencesRepository
@@ -31,7 +33,7 @@ import kotlinx.coroutines.launch
 class ChallengesViewModel(
     private val challengeRepository: ChallengeRepository,
     private val airportRepository: AirportRepository,
-    private val achievementsRepository: AchievementsRepository,
+    private val pilotProgressRepository: PilotProgressRepository,
     private val preferencesRepository: PreferencesRepository
 ) : ViewModel() {
 
@@ -71,22 +73,25 @@ class ChallengesViewModel(
 
     init {
         viewModelScope.launch(Dispatchers.IO) {
-            // Re-read both derived lists whenever the active set changes - covers starting,
-            // abandoning, and completing a challenge without a second subscription. On IO because
-            // the achievement board's geography derivation reaches the airport SQLite DB.
-            activeChallenges.collect { refreshDerivedLists() }
+            // The completed-challenge log still keys off the active set - a challenge can only
+            // reach that list by leaving this one, so the emission is an exact signal.
+            activeChallenges.collect { _completedChallenges.value = challengeRepository.listCompletedChallenges() }
+        }
+        viewModelScope.launch {
+            // The achievement board is no longer re-derived here. It used to call loadBoard() on
+            // every activeChallenges emission - re-reading the entire flight history and
+            // re-scanning the airports DB - which duplicated, exactly, the work the Passport was
+            // doing separately. Both now read one shared derivation that is already warm.
+            pilotProgressRepository.progress.collect { progress ->
+                val board = progress?.achievements ?: return@collect
+                _unfinishedAchievements.value = (board.geographic + board.distance + board.behavioral)
+                    .filterNot { it.isUnlocked }
+                    .sortedByDescending { it.progress }
+            }
         }
         viewModelScope.launch {
             _pausedFreeFlight.value = preferencesRepository.pausedFreeFlightStore.get()
         }
-    }
-
-    private suspend fun refreshDerivedLists() {
-        _completedChallenges.value = challengeRepository.listCompletedChallenges()
-        val board = achievementsRepository.loadBoard()
-        _unfinishedAchievements.value = (board.geographic + board.distance + board.behavioral)
-            .filterNot { it.isUnlocked }
-            .sortedByDescending { it.progress }
     }
 
     /** Result of the most recent start attempt (curated or custom) - surfaced once (e.g. a
@@ -194,13 +199,13 @@ fun formatKm(km: Double): String {
 class ChallengesViewModelFactory(
     private val challengeRepository: ChallengeRepository,
     private val airportRepository: AirportRepository,
-    private val achievementsRepository: AchievementsRepository,
+    private val pilotProgressRepository: PilotProgressRepository,
     private val preferencesRepository: PreferencesRepository
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(ChallengesViewModel::class.java)) {
-            return ChallengesViewModel(challengeRepository, airportRepository, achievementsRepository, preferencesRepository) as T
+            return ChallengesViewModel(challengeRepository, airportRepository, pilotProgressRepository, preferencesRepository) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

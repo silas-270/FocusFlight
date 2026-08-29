@@ -1,14 +1,22 @@
 package com.example.focusflight.data.repository
 
 import android.content.Context
+import android.content.SharedPreferences
 import com.example.focusflight.data.model.FlightMode
 import com.example.focusflight.data.model.PausedFlight
 
-class PreferencesRepository(context: Context) {
+/**
+ * Primary constructor takes [SharedPreferences] directly so JVM unit tests can drive it with
+ * `FakeSharedPreferences` instead of needing an Android [Context]. Production uses the [Context]
+ * secondary constructor below and is unaffected.
+ */
+class PreferencesRepository(private val prefs: SharedPreferences) {
+
+    constructor(context: Context) : this(context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE))
+
     companion object {
         private const val PREFS_NAME = "focus_flight_prefs"
         private const val KEY_ONBOARDING_COMPLETED = "onboarding_completed"
-        private const val KEY_HOME_AIRPORT = "home_airport_iata"
         private const val KEY_CURRENT_AIRPORT = "current_airport_iata"
         private const val KEY_FOCUSED_ROUTE_CHALLENGE_ID = "focused_route_challenge_id"
         private const val KEY_PAUSED_FLIGHT = "paused_flight"
@@ -21,8 +29,6 @@ class PreferencesRepository(context: Context) {
         private const val KEY_LAST_HOME_BASE_CHANGED_AT = "last_home_base_changed_at"
     }
 
-    private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-
     fun isOnboardingCompleted(): Boolean {
         return prefs.getBoolean(KEY_ONBOARDING_COMPLETED, false)
     }
@@ -31,16 +37,15 @@ class PreferencesRepository(context: Context) {
         prefs.edit().putBoolean(KEY_ONBOARDING_COMPLETED, completed).apply()
     }
 
-    fun getHomeAirport(): String? {
-        return prefs.getString(KEY_HOME_AIRPORT, null)
-    }
-
-    fun setHomeAirport(iata: String) {
-        prefs.edit().putString(KEY_HOME_AIRPORT, iata).apply()
-    }
-
+    /**
+     * The pilot's current position. No longer falls back to the home airport: home lives in Room
+     * now, so the fallback cannot be resolved synchronously here. Callers that want
+     * "current, or home if unset" use
+     * [com.example.focusflight.domain.resolveCurrentAirportIata], which owns that rule in one
+     * place rather than hiding it inside a getter.
+     */
     fun getCurrentAirport(): String? {
-        return prefs.getString(KEY_CURRENT_AIRPORT, getHomeAirport())
+        return prefs.getString(KEY_CURRENT_AIRPORT, null)
     }
 
     fun setCurrentAirport(iata: String) {

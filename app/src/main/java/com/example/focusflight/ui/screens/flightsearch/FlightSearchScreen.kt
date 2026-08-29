@@ -76,6 +76,7 @@ fun FlightSearchScreen(
     val filteredRoutes by viewModel.filteredRoutes.collectAsState()
     val selectedRoute by viewModel.selectedRoute.collectAsState()
     val originAirport by viewModel.originAirport.collectAsState()
+    val originRehomedTo by viewModel.originRehomedTo.collectAsState()
     val searchMode by viewModel.searchMode.collectAsState()
     val airportSearchQuery by viewModel.airportSearchQuery.collectAsState()
     val airportSearchResults by viewModel.airportSearchResults.collectAsState()
@@ -167,6 +168,23 @@ fun FlightSearchScreen(
                 .padding(bottom = Spacing.Large),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+
+            // Story Mode's origin is locked, so an origin with no outbound routes at all is a dead
+            // end the pilot cannot navigate out of - the app rehomes them to LHR and rewrites their
+            // current airport to match. That is a real change to their position, and it used to
+            // happen with nothing on screen to say so. See FlightSearchViewModel.originRehomedTo.
+            originRehomedTo?.let { iata ->
+                Text(
+                    text = "No departures from your last airport - you've been rerouted to $iata.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Amber,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = Spacing.Large)
+                        .padding(bottom = Spacing.Small)
+                )
+            }
 
             // 2. Tactical 2D Route Map (expands to take available vertical space, no border, consistent padding)
             RouteMap(

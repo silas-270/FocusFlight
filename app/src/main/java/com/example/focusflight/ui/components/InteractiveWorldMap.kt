@@ -45,6 +45,49 @@ private class MergedMapPaths(
     val unvisitedStroke: androidx.compose.ui.graphics.Path
 )
 
+/**
+ * Single-entry memo for [buildMergedMapPaths], keyed on the inputs that actually vary.
+ *
+ * The `remember` at the call site only survives as long as the composition, and both screens that
+ * draw this map own a ViewModel that is destroyed on `popBackStack` - so every reopen of the
+ * Passport rebuilt all ~1000 country sub-paths from scratch, on the composition thread, for a
+ * result identical to the one just thrown away. The merge inputs only change when the pilot
+ * actually visits somewhere new.
+ *
+ * One entry rather than a map: the Passport and Flight Search draw the same visited-set as each
+ * other, so a second slot would never be used. Guarded because compositions on different threads
+ * could in principle both miss at once - the worst case is a duplicated merge, never a torn read.
+ */
+private object MergedMapPathsCache {
+    private data class Key(
+        val mapPaths: List<CountryPath>,
+        val visitedCountries: Set<String>,
+        val countryToContinent: Map<String, String>,
+        val completedContinents: Set<String>
+    )
+
+    private var key: Key? = null
+    private var value: MergedMapPaths? = null
+
+    fun get(
+        mapPaths: List<CountryPath>,
+        visitedCountries: Set<String>,
+        countryToContinent: Map<String, String>,
+        completedContinents: Set<String>
+    ): MergedMapPaths {
+        val requested = Key(mapPaths, visitedCountries, countryToContinent, completedContinents)
+        synchronized(this) {
+            if (key == requested) value?.let { return it }
+        }
+        val merged = buildMergedMapPaths(mapPaths, visitedCountries, countryToContinent, completedContinents)
+        synchronized(this) {
+            key = requested
+            value = merged
+        }
+        return merged
+    }
+}
+
 private fun buildMergedMapPaths(
     mapPaths: List<CountryPath>,
     visitedCountries: Set<String>,
@@ -104,7 +147,7 @@ fun InteractiveWorldMap(
     animationProgress: Float = 0f
 ) {
     val merged = remember(mapPaths, visitedCountries, countryToContinent, completedContinents) {
-        buildMergedMapPaths(mapPaths, visitedCountries, countryToContinent, completedContinents)
+        MergedMapPathsCache.get(mapPaths, visitedCountries, countryToContinent, completedContinents)
     }
 
     Box(

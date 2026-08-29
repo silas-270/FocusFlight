@@ -2,6 +2,7 @@ package com.example.focusflight.domain
 
 import com.example.focusflight.data.model.Airport
 import com.example.focusflight.data.model.FlightRoute
+import com.example.focusflight.data.local.airport.AirportDataException
 import com.example.focusflight.data.repository.AirportRepository
 
 /** The origin/destination/route triad a flight screen needs to render - fetched together since
@@ -24,9 +25,19 @@ suspend fun loadRouteContext(
 ): RouteContext {
     val origin = airportRepository.getAirportByIata(originIata)
     val dest = airportRepository.getAirportByIata(destIata)
+    // A missing route degrades gracefully everywhere downstream (CheckIn shows the ticket without
+    // a distance, InFlight logs the flight with distanceKm = 0.0), so a failed lookup is treated
+    // the same as "no such route" rather than propagating. Both callers resolve this inside a
+    // plain `viewModelScope.launch`, where an escaping throw would be uncaught and take the
+    // process down - and neither has anything better to do with the failure than carry on.
     val route = if (origin != null && dest != null) {
-        airportRepository.getOutboundRoutes(originIata = origin.iataCode, searchQuery = destIata)
-            .find { it.destIata == destIata }
+        try {
+            airportRepository.getOutboundRoutes(originIata = origin.iataCode, searchQuery = destIata)
+                .find { it.destIata == destIata }
+        } catch (e: AirportDataException) {
+            android.util.Log.e("RouteContext", "Route lookup failed for $originIata->$destIata", e)
+            null
+        }
     } else {
         null
     }

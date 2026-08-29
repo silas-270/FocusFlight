@@ -20,7 +20,15 @@ interface FlightLogRepository {
     fun getFlightHistoryFlow(): Flow<List<FlightLog>>
     suspend fun getFlightHistory(): List<FlightLog>
     suspend fun getRecentFlights(limit: Int = 5): List<FlightLog>
-    suspend fun getFlightStats(): FlightStats
+    /**
+     * Hub/Passport headline numbers. [homeAirportIata] is only used by `airportsVisited`, which is
+     * a *geography* stat and therefore STORY-scoped with home counted once; `totalFlights` and
+     * `totalMinutes` stay mode-blind, because a Free Mode flight really was flown. Callers should
+     * resolve the parameter through
+     * [resolveHomeAirportIata][com.example.focusflight.domain.resolveHomeAirportIata] rather than
+     * reading a profile field directly - null means "no home base yet", not "unknown".
+     */
+    suspend fun getFlightStats(homeAirportIata: String?): FlightStats
     fun getFlightsPagingSource(sortOrder: FlightSortOrder): PagingSource<Int, FlightLog>
     suspend fun getFlightHighlights(): FlightHighlights
 }

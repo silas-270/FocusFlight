@@ -85,7 +85,24 @@ class InFlightViewModel(
     val uiState: StateFlow<InFlightState> = _uiState.asStateFlow()
 
     private var timerJob: Job? = null
-    private val renderScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /**
+     * Everything the landing must finish even though this ViewModel is about to be destroyed.
+     *
+     * `InFlightScreen` navigates to the arrival celebration the instant `isCompleted` flips, with
+     * `popUpTo(InFlight) { inclusive = true }` - which pops this nav entry and cancels
+     * [viewModelScope]. Any post-landing work launched there is therefore racing its own
+     * destruction. Losing that race used to mean, in ascending order of damage: a lost destination
+     * pre-render; a flight missing from the logbook while `currentAirport` had already moved; a
+     * challenge landing that never got credited; and worst, a [landingResultChannel] left on
+     * `Pending` forever, which hangs `ArrivalCelebration`'s `first { it != Pending }` and leaves
+     * the pilot on a screen whose only button does nothing.
+     *
+     * So the landing pipeline runs here instead - a scope this ViewModel does not own the
+     * lifetime of - and [onCleared] joins its jobs before tearing it down. The render job already
+     * worked this way; the writes that actually matter did not.
+     */
+    private val landingScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mapRenderer = CesiumHeadlessMapRenderer(cacheDir)
 
     /** Where this session's paused flight lives: the global Story/Free slot, or this specific
@@ -277,33 +294,69 @@ class InFlightViewModel(
         }
     }
 
-    /** Shared landing/completion sequence: stop the timer, persist the new `currentAirport`
-     *  (STORY only - see below), clear this session's paused flight (see [pausedFlightStore]),
-     *  kick off the destination pre-render, write the logbook entry (always, tagged with [mode]), run the
-     *  post-landing achievement/challenge check, and snap the native engine to 100% progress.
-     *  Invoked by both the normal timer-completion branch and the debug [skipFlight] shortcut
-     *  so the two paths can't drift out of sync. Does not touch [_uiState] — each call site
-     *  applies its own (identical) completed-state update.
+    /**
+     * Shared landing/completion sequence: stop the timer, kick off the destination pre-render,
+     * then run docs/design/mechanics.md's post-landing pipeline in [landingScope] - step 2
+     * (logbook), step 3 (`currentAirport`/visited-set, STORY only, and only if step 2 succeeded),
+     * step 4 (achievement/challenge check) - and snap the native engine to 100% progress.
+     * Invoked by both the normal timer-completion branch and the debug [skipFlight] shortcut so
+     * the two paths can't drift out of sync. Does not touch [_uiState] - each call site applies
+     * its own (identical) completed-state update.
      *
-     *  Follows docs/design/mechanics.md's post-landing pipeline: step 2 (logbook, always) →
-     *  step 3 (currentAirport/visited-set, STORY only) → step 4 (achievement/challenge check,
-     *  stubbed - see [checkAchievementsAndChallenges]). Every flight is STORY today (Free Mode
-     *  and Challenges don't exist yet), so the STORY branch is the only one exercised in
-     *  practice - but the branch is real, not a placeholder. */
-    private suspend fun completeFlight() {
+     * Returns as soon as the work is *launched*; it does not wait for it. That is deliberate -
+     * this is called from the timer coroutine, which lives in `viewModelScope` and is about to be
+     * cancelled. [landingScope] is what actually carries the work to completion.
+     *
+     * ORDERING ASSUMPTION, relied on for correctness: this must be called before, or synchronously
+     * with, the `isCompleted = true` state emission that triggers navigation. [onCleared] cancels
+     * [landingScope], so a landing launched *after* that point would be silently dropped. Today
+     * both call sites satisfy this with no suspension point in between (the timer branch sets
+     * `elapsedToPersist` only in the not-completed case, so nothing suspends between the update
+     * and this call). If you ever add a suspending step before this, the landing becomes
+     * droppable - gate [onCleared]'s cancel on a "landing started" flag instead.
+     */
+    private fun completeFlight() {
         timerJob?.cancel()
         timerJob = null
 
-        // Step 3: only a STORY-tagged session moves the player's main position/visited-set.
-        // FREE and CHALLENGE sessions are logged (below) but never touch currentAirport.
-        if (mode == FlightMode.STORY) {
-            preferencesRepository.setCurrentAirport(destIata)
+        // Independent of the data writes below and by far the slowest step (a native render), so
+        // it starts immediately and runs alongside them rather than queueing behind them - the
+        // destination map wants to be ready by the time the arrival sequence ends.
+        renderJob = landingScope.launch { preRenderDestinationMap() }
+
+        // The data writes, strictly sequential because their ORDER is the invariant. Previously
+        // these were three independent `viewModelScope.launch`es with `setCurrentAirport` run
+        // synchronously first, which meant the pilot's position could move to a destination whose
+        // flight never reached the logbook - a divergence nothing in the app can repair, since
+        // the logbook is the only record of how they got anywhere.
+        landingJob = landingScope.launch {
+            // Step 2: the logbook entry is the flight's only durable record, so it goes first and
+            // everything else is conditional on it.
+            val logged = saveFlightLog()
+
+            if (logged) {
+                // Step 3: only a STORY-tagged session moves the player's main position/visited-set.
+                // FREE and CHALLENGE sessions are logged (above) but never touch currentAirport.
+                if (mode == FlightMode.STORY) {
+                    preferencesRepository.setCurrentAirport(destIata)
+                }
+                pausedFlightStore.clear()
+            } else {
+                // Deliberately leaving both the position and the paused flight alone. Staying at
+                // the origin with the flight still resumable is a consistent state the pilot can
+                // act on; standing at a destination with no flight explaining it is not.
+                android.util.Log.e(
+                    "InFlightViewModel",
+                    "Landing not committed for $originIata->$destIata: logbook write failed, leaving position and paused flight untouched"
+                )
+            }
+
+            // Step 4: always runs, even if the logbook write failed - it is what resolves
+            // [landingResultChannel], and an unresolved channel hangs the arrival screen (see
+            // [landingScope]). A landing that could not be logged simply has nothing to credit.
+            checkAchievementsAndChallenges(creditChallenges = logged)
         }
 
-        pausedFlightStore.clear()
-        preRenderDestinationMap()
-        saveFlightLog()
-        checkAchievementsAndChallenges()
         com.example.focusflight.engine.live.CesiumLiveJniBridge.nativeSetProgress(1.0)
     }
 
@@ -329,15 +382,22 @@ class InFlightViewModel(
     // `FlightSearchViewModel` already use for `visitedCountries`/`completedContinents`), not
     // checked/persisted here after every landing - there's no "just unlocked" flag to set, and
     // no new Room migration needed for this feature.
-    private fun checkAchievementsAndChallenges() {
+    private suspend fun checkAchievementsAndChallenges(creditChallenges: Boolean) {
         val distanceKm = _routeDetails.value?.distanceKm ?: 0.0
-        viewModelScope.launch(Dispatchers.IO) {
+
+        // Every exit path from here MUST leave [landingResultChannel] resolved. The arrival
+        // screen's "continue" awaits `first { it != Pending }` with no fallback of its own, so an
+        // unpublished channel is not a degraded result - it is a dead button on a screen the
+        // pilot cannot leave. That is why this is one try/catch around the whole body rather than
+        // per-query error handling: whatever goes wrong, the landing sequence still moves.
+        try {
             // FREE never reaches processLandingForChallenges's own checks anyway (it's a no-op
             // for FREE), but short-circuiting here too skips two DB round trips and resolves the
             // channel near-instantly rather than leaving it Pending until a query completes.
-            if (mode == FlightMode.FREE) {
+            // A landing whose logbook write failed is treated the same way: nothing to credit.
+            if (mode == FlightMode.FREE || !creditChallenges) {
                 landingResultChannel.publish(LandingResult.None)
-                return@launch
+                return
             }
 
             val before: List<Challenge> = challengeRepository.listActiveChallenges()
@@ -347,53 +407,68 @@ class InFlightViewModel(
             // every completion invisible to the diff. See resolveLandingOutcome's own note.
             val after: List<Challenge> = before.mapNotNull { challengeRepository.getChallenge(it.id) }
             landingResultChannel.publish(resolveLandingOutcome(before, after))
+        } catch (e: Exception) {
+            // Includes CancellationException on the way out: if this scope is being torn down
+            // mid-check, publishing None is still strictly better than leaving the arrival screen
+            // waiting on a value that can now never arrive.
+            android.util.Log.e("InFlightViewModel", "Post-landing challenge check failed", e)
+            landingResultChannel.publish(LandingResult.None)
         }
     }
 
+    // Both launched into [landingScope] by completeFlight(), and both joined in [onCleared] -
+    // they are the reason that scope exists rather than being viewModelScope work.
     private var renderJob: kotlinx.coroutines.Job? = null
+    private var landingJob: kotlinx.coroutines.Job? = null
 
-    private fun preRenderDestinationMap() {
-        renderJob = renderScope.launch {
-            val dest = airportRepository.getAirportByIata(destIata) ?: return@launch
-            android.util.Log.d("InFlightViewModel", "Pre-rendering map for destination ${dest.iataCode}...")
-            val result = mapRenderer.renderRouteMapForAirport(airportRepository, dest)
-            when (result) {
-                is CesiumHeadlessMapRenderer.Result.Success ->
-                    android.util.Log.d("InFlightViewModel", "Pre-rendering succeeded: ${result.path}")
-                is CesiumHeadlessMapRenderer.Result.Failure ->
-                    android.util.Log.e("InFlightViewModel", "Pre-rendering failed: ${result.message}")
-            }
+    /** Body only - the caller owns which scope this runs in (see completeFlight). */
+    private suspend fun preRenderDestinationMap() {
+        val dest = airportRepository.getAirportByIata(destIata) ?: return
+        android.util.Log.d("InFlightViewModel", "Pre-rendering map for destination ${dest.iataCode}...")
+        val result = mapRenderer.renderRouteMapForAirport(airportRepository, dest)
+        when (result) {
+            is CesiumHeadlessMapRenderer.Result.Success ->
+                android.util.Log.d("InFlightViewModel", "Pre-rendering succeeded: ${result.path}")
+            is CesiumHeadlessMapRenderer.Result.Failure ->
+                android.util.Log.e("InFlightViewModel", "Pre-rendering failed: ${result.message}")
         }
     }
 
-    private fun saveFlightLog() {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val route = _routeDetails.value
-                val distanceKm = route?.distanceKm ?: 0.0
+    /**
+     * Writes the logbook entry. Returns whether it actually landed - the caller gates the
+     * position write on it, so this must never report success it didn't achieve. Body only; the
+     * caller owns the scope.
+     */
+    private suspend fun saveFlightLog(): Boolean = try {
+        val route = _routeDetails.value
+        val distanceKm = route?.distanceKm ?: 0.0
 
-                flightLogRepository.logFlight(
-                    flightNumber = flightNumber,
-                    originIata = originIata,
-                    destIata = destIata,
-                    durationMin = durationMin,
-                    distanceKm = distanceKm,
-                    mode = mode
-                )
-            } catch (e: Exception) {
-                android.util.Log.e("InFlightViewModel", "Error saving flight log to Room", e)
-            }
-        }
+        flightLogRepository.logFlight(
+            flightNumber = flightNumber,
+            originIata = originIata,
+            destIata = destIata,
+            durationMin = durationMin,
+            distanceKm = distanceKm,
+            mode = mode
+        )
+        true
+    } catch (e: Exception) {
+        android.util.Log.e("InFlightViewModel", "Error saving flight log to Room", e)
+        false
     }
 
     override fun onCleared() {
         super.onCleared()
         timerJob?.cancel()
-        
-        // Wait for the render job to finish (if any) before cancelling the scope
-        renderScope.launch {
+
+        // Let the landing finish before tearing its scope down. This runs on [landingScope]
+        // itself, so it is not affected by viewModelScope having just been cancelled - which is
+        // the whole point: at this moment the nav entry is already popped and viewModelScope is
+        // gone, while the logbook write and challenge check may still be in flight.
+        landingScope.launch {
+            landingJob?.join()
             renderJob?.join()
-            renderScope.cancel()
+            landingScope.cancel()
         }
     }
 }
