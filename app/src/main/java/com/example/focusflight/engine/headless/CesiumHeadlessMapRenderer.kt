@@ -3,6 +3,7 @@ package com.example.focusflight.engine.headless
 import android.util.Log
 import com.example.focusflight.data.model.Airport
 import com.example.focusflight.data.model.FlightRoute
+import com.example.focusflight.data.local.airport.AirportDataException
 import com.example.focusflight.data.repository.AirportRepository
 import java.io.File
 
@@ -29,7 +30,15 @@ class CesiumHeadlessMapRenderer(private val cacheDir: File) {
         airport: Airport,
         reuseCachedFile: Boolean = false
     ): Result {
-        val outboundRoutes = airportRepository.getOutboundRoutes(airport.iataCode)
+        // Every caller runs this in a background scope whose failure surfaces as a retryable
+        // "map unavailable" state, so a broken route query belongs in [Result.Failure] rather than
+        // thrown into a coroutine that has no handler for it.
+        val outboundRoutes = try {
+            airportRepository.getOutboundRoutes(airport.iataCode)
+        } catch (e: AirportDataException) {
+            Log.e(TAG, "Route fetch failed for ${airport.iataCode}", e)
+            return Result.Failure("Failed to load routes.")
+        }
         return renderRouteMap(airport.iataCode, airport.lat, airport.lon, outboundRoutes, reuseCachedFile)
     }
 

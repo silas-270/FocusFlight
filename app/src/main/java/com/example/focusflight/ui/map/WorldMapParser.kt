@@ -14,7 +14,24 @@ data class CountryPath(
 )
 
 object WorldMapParser {
+    /**
+     * Volatile because [warm] now parses this from a background thread at app start while the
+     * Passport and Flight Search may read it from theirs. A benign double-parse was always
+     * possible and remains so (the result is identical either way); what this rules out is a
+     * reader seeing a half-published list.
+     */
+    @Volatile
     private var cachedMap: List<CountryPath>? = null
+
+    /**
+     * Parses the world map ahead of the first screen that needs it. The SVG is ~73KB and yields
+     * roughly a thousand vector paths, and it used to be parsed lazily on whichever screen the
+     * pilot opened first - which was usually the Passport, on the very load already doing the most
+     * work. Doing it once at startup costs nothing visible and takes it off that path entirely.
+     */
+    fun warm(context: Context) {
+        parseWorldMap(context)
+    }
 
     fun parseWorldMap(context: Context): List<CountryPath> {
         cachedMap?.let { return it }

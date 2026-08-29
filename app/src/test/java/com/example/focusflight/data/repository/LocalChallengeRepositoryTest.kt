@@ -24,7 +24,7 @@ import org.junit.Test
  * position-pointer scoping (including the accepted decreasing-progress case), Distance
  * accumulation, and Set-completion crediting (including its "starts fresh per instance"
  * isolation guarantee) - all via hand-written fakes for [ChallengeDao]/[UserProfileDao]/
- * [AirportRepository], the same pattern LegacyFlightLogMigratorTest uses for the DAO-adjacent
+ * [AirportRepository], the same fake-collaborator pattern the other repository tests use for
  * repository interfaces.
  */
 class LocalChallengeRepositoryTest {

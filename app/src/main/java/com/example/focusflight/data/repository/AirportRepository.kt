@@ -34,8 +34,14 @@ interface AirportRepository {
     fun getVisitedGeography(flightHistory: List<FlightLog>, homeAirportIata: String?): VisitedGeography {
         val storyFlights = flightHistory.filter { it.mode == FlightMode.STORY }
         val visitedIatas = storyFlights.map { it.destIata }.toMutableList()
-        if (homeAirportIata != null) {
-            visitedIatas.add(homeAirportIata)
+        // Blank is treated as "no home base", not as an airport code. Callers reach the home
+        // airport by different routes - some through `domain.resolveHomeAirportIata` (which
+        // already normalises blank to null), some by reading the profile field directly - and
+        // without this they would disagree about what an empty field means. Normalising at the
+        // one place that consumes the value keeps them consistent regardless of how they got it.
+        val homeIata = homeAirportIata?.takeIf { it.isNotBlank() }
+        if (homeIata != null) {
+            visitedIatas.add(homeIata)
         }
         val uniqueVisitedIatas = visitedIatas.distinct()
 

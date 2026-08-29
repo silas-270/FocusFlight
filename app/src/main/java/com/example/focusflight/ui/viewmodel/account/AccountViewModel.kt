@@ -14,7 +14,7 @@ import com.example.focusflight.data.model.FlightLog
 import com.example.focusflight.data.model.FlightSortOrder
 import com.example.focusflight.data.model.FlightStats
 import com.example.focusflight.data.model.HomeBaseCooldown
-import com.example.focusflight.data.repository.AchievementsRepository
+import com.example.focusflight.data.repository.PilotProgressRepository
 import com.example.focusflight.data.repository.AirportRepository
 import com.example.focusflight.data.repository.FlightLogRepository
 import com.example.focusflight.data.repository.PreferencesRepository
@@ -80,6 +80,37 @@ data class AccountUiState(
     val isLoading: Boolean = true
 )
 
+/**
+ * Outcome of one [AccountViewModel.returnHome] / [AccountViewModel.changeHomeBase] attempt.
+ *
+ * Both actions are fire-and-forget from the UI's point of view (they stay in `viewModelScope`, so
+ * they survive the Account screen leaving composition) *and* both re-check their cooldown inside
+ * the coroutine, because the screen's copy of eligibility can be stale or racy. That combination
+ * used to mean the celebration screens were shown optimistically at the call site for a teleport /
+ * home-base change the ViewModel had silently refused. Everything the celebration needs now comes
+ * back through here instead, so "we celebrated" and "it actually happened" can no longer diverge.
+ *
+ * [HomeBaseSet] carries the [Airport] it wrote rather than letting the screen re-read
+ * `uiState.homeAirport`: that field is fed by the Room profile flow, which has not necessarily
+ * re-emitted by the time the celebration draws.
+ *
+ * [Ineligible] and [Failed] are both "show no celebration" for the UI, and are kept apart only so
+ * the distinction (refused by a cooldown vs. a write that broke) stays legible at the call site.
+ */
+sealed interface HomeBaseActionResult {
+    /** The teleport happened: `currentAirport` is now the home base. */
+    object ReturnedHome : HomeBaseActionResult
+
+    /** The home base is now [airport] - the value written, not a re-read of any state. */
+    data class HomeBaseSet(val airport: Airport) : HomeBaseActionResult
+
+    /** Refused by the re-checked cooldown. The pilot's state is untouched. */
+    object Ineligible : HomeBaseActionResult
+
+    /** Attempted but broken - no home airport to return to, or a store write that threw. */
+    object Failed : HomeBaseActionResult
+}
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class AccountViewModel(
     private val context: android.content.Context,
@@ -87,11 +118,60 @@ class AccountViewModel(
     private val flightLogRepository: FlightLogRepository,
     private val airportRepository: AirportRepository,
     private val preferencesRepository: PreferencesRepository,
-    private val achievementsRepository: AchievementsRepository
+    private val pilotProgressRepository: PilotProgressRepository,
+    private val cacheDir: java.io.File
 ) : ViewModel() {
+
+    private val mapRenderer = com.example.focusflight.engine.headless.CesiumHeadlessMapRenderer(cacheDir)
+
+    /**
+     * Starts rendering the home base's globe the moment the return-home animation begins, rather
+     * than waiting for the teleport to commit.
+     *
+     * By the time this is called the outcome is already decided: the animation is not dismissible,
+     * and it ends by attempting the teleport. So there are ten seconds of guaranteed idle time in
+     * which the very image the Hub is about to ask for can be produced. Previously nothing started
+     * until the animation finished, and the pilot then watched a second loading state for a render
+     * that could have been done already.
+     *
+     * Runs in `viewModelScope` and is entirely best-effort: it only ever populates the same file
+     * cache `HubViewModel` reads through, so if it is slow, fails, or the pilot leaves, the Hub
+     * renders exactly as it does today. Nothing downstream waits on it.
+     *
+     * Deliberately does NOT re-check the cooldown. This writes no state - the worst case for
+     * rendering a map the teleport then refuses is a warm cache entry for the pilot's own home
+     * base, which is the one airport most worth having warm anyway.
+     */
+    fun prepareReturnHome() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val homeIata = com.example.focusflight.domain.resolveHomeAirportIata(userRepository) ?: return@launch
+            val homeAirport = airportRepository.getAirportByIata(homeIata) ?: return@launch
+            when (val result = mapRenderer.renderRouteMapForAirport(airportRepository, homeAirport, reuseCachedFile = true)) {
+                is com.example.focusflight.engine.headless.CesiumHeadlessMapRenderer.Result.Success ->
+                    android.util.Log.d("AccountViewModel", "Return-home map ready (fromCache=${result.fromCache})")
+                is com.example.focusflight.engine.headless.CesiumHeadlessMapRenderer.Result.Failure ->
+                    android.util.Log.w("AccountViewModel", "Return-home pre-render failed: ${result.message}")
+            }
+        }
+    }
 
     private val _uiState = MutableStateFlow(AccountUiState())
     val uiState: StateFlow<AccountUiState> = _uiState.asStateFlow()
+
+    /** Outcome of the most recent [returnHome]/[changeHomeBase] attempt, or null for "idle". Every
+     *  exit path of both actions writes here - including the cooldown re-check bails, which used to
+     *  `return@launch` silently while the screen had already started celebrating. Read once by the
+     *  Account screen and then cleared via [consumeHomeBaseActionResult], so a celebration can't
+     *  replay on an unrelated recomposition or a config change, the same one-shot convention
+     *  ChallengesViewModel's `startResult` uses. */
+    private val _homeBaseActionResult = MutableStateFlow<HomeBaseActionResult?>(null)
+    val homeBaseActionResult: StateFlow<HomeBaseActionResult?> = _homeBaseActionResult.asStateFlow()
+
+    /** Marks the current [homeBaseActionResult] as handled. Called by the screen once it has shown
+     *  (or deliberately not shown) the matching celebration. */
+    fun consumeHomeBaseActionResult() {
+        _homeBaseActionResult.value = null
+    }
 
     // ── Change-home-base airport picker (docs/design/story-mode.md) ─────────────────────
     // Shares AirportSearchController with OnboardingViewModel's home-airport search and
@@ -158,9 +238,17 @@ class AccountViewModel(
             val now = System.currentTimeMillis()
             val lastReturnHome = preferencesRepository.getLastReturnHomeAt()
             val lastHomeBaseChanged = preferencesRepository.getLastHomeBaseChangedAt()
+            // Resolved before the update rather than inside it. `MutableStateFlow.update` is a
+            // compare-and-set loop that may run its lambda more than once under contention, and
+            // its contract is that the lambda is pure - resolving the current airport there would
+            // put a suspending database read on a path that can legally be retried. It compiles
+            // (update is inline) which is exactly what makes it easy to get wrong.
+            val currentIata =
+                com.example.focusflight.domain.resolveCurrentAirportIata(preferencesRepository, userRepository)
+                    .orEmpty()
             _uiState.update { state ->
                 state.copy(
-                    currentAirportIata = preferencesRepository.getCurrentAirport().orEmpty(),
+                    currentAirportIata = currentIata,
                     returnHomeEligible = HomeBaseCooldown.isEligible(now, lastReturnHome, HomeBaseCooldown.RETURN_HOME_COOLDOWN_DAYS),
                     returnHomeRemainingMillis = HomeBaseCooldown.remainingMillis(now, lastReturnHome, HomeBaseCooldown.RETURN_HOME_COOLDOWN_DAYS),
                     changeHomeBaseEligible = HomeBaseCooldown.isEligible(now, lastHomeBaseChanged, HomeBaseCooldown.CHANGE_HOME_BASE_COOLDOWN_DAYS),
@@ -176,42 +264,79 @@ class AccountViewModel(
      * no FlightLog row, no FlightMode tag. Just an instant cut of `currentAirport` to the home
      * base, gated by the 7-day cooldown checked again here (not just at the UI-disabled-state
      * layer) so a stale/racy UI state can't bypass it.
+     *
+     * Because of that re-check this can refuse work the screen already asked for, so every exit
+     * path reports through [homeBaseActionResult] - the "WELCOME BACK" celebration is driven off
+     * that result rather than off the tap that started the teleport animation.
      */
     fun returnHome() {
         viewModelScope.launch(Dispatchers.IO) {
             val now = System.currentTimeMillis()
             val lastReturnHome = preferencesRepository.getLastReturnHomeAt()
-            if (!HomeBaseCooldown.isEligible(now, lastReturnHome, HomeBaseCooldown.RETURN_HOME_COOLDOWN_DAYS)) return@launch
-            val homeIata = preferencesRepository.getHomeAirport() ?: return@launch
+            if (!HomeBaseCooldown.isEligible(now, lastReturnHome, HomeBaseCooldown.RETURN_HOME_COOLDOWN_DAYS)) {
+                _homeBaseActionResult.value = HomeBaseActionResult.Ineligible
+                return@launch
+            }
+            // No home base to teleport to at all - not a cooldown refusal but a broken profile
+            // (onboarding always writes one), so it reports as a failure rather than as Ineligible.
+            val homeIata = com.example.focusflight.domain.resolveHomeAirportIata(userRepository)
+            if (homeIata == null) {
+                _homeBaseActionResult.value = HomeBaseActionResult.Failed
+                return@launch
+            }
 
             preferencesRepository.setCurrentAirport(homeIata)
             preferencesRepository.setLastReturnHomeAt(now)
             refreshHomeBaseCooldowns()
+            _homeBaseActionResult.value = HomeBaseActionResult.ReturnedHome
         }
     }
 
     /**
      * Change-home-base (docs/design/story-mode.md), gated by its own separate 30-day cooldown -
-     * never the same clock as [returnHome]'s 7-day one. Updates both stores that carry the home
-     * airport today, the same pair `OnboardingViewModel.saveHomeAirport()` writes at onboarding:
-     * `PreferencesRepository` (origin-lock/return-home read from here) and the Room `UserProfile`
-     * row (the Passport header's display value, via `userRepository.updateHomeAirport`).
+     * never the same clock as [returnHome]'s 7-day one. Writes the home airport to exactly one
+     * store - the Room `UserProfile` row - which every reader now resolves through
+     * [com.example.focusflight.domain.resolveHomeAirportIata]. It used to write
+     * `SharedPreferences` first and Room second, which is how the two could end up disagreeing.
+     *
+     * The cooldown timestamp still lives in prefs, and is now written only *after* the Room write
+     * succeeds: burning the 30-day cooldown for a change that did not happen would be the worst
+     * of both outcomes.
+     *
+     * Like [returnHome], the re-checked cooldown means this can refuse work the picker already
+     * asked for, so every exit path reports through [homeBaseActionResult] and the "HOME BASE SET"
+     * celebration is driven off that result instead of off the airport tap.
      */
     fun changeHomeBase(airport: Airport) {
         viewModelScope.launch(Dispatchers.IO) {
             val now = System.currentTimeMillis()
             val lastChanged = preferencesRepository.getLastHomeBaseChangedAt()
-            if (!HomeBaseCooldown.isEligible(now, lastChanged, HomeBaseCooldown.CHANGE_HOME_BASE_COOLDOWN_DAYS)) return@launch
+            if (!HomeBaseCooldown.isEligible(now, lastChanged, HomeBaseCooldown.CHANGE_HOME_BASE_COOLDOWN_DAYS)) {
+                _homeBaseActionResult.value = HomeBaseActionResult.Ineligible
+                return@launch
+            }
 
-            preferencesRepository.setHomeAirport(airport.iataCode)
-            preferencesRepository.setLastHomeBaseChangedAt(now)
-            try {
+            // The one write that defines the new home base. Nothing else is touched until it has
+            // actually landed, so a failure here leaves the pilot exactly as they were rather than
+            // half-changed.
+            val roomWriteFailed = try {
                 userRepository.updateHomeAirport(airport.iataCode)
+                false
             } catch (e: Exception) {
                 android.util.Log.e("AccountViewModel", "Failed to update home airport", e)
+                true
             }
+            if (!roomWriteFailed) {
+                preferencesRepository.setLastHomeBaseChangedAt(now)
+            }
+
             clearHomeBaseSearch()
             refreshHomeBaseCooldowns()
+            _homeBaseActionResult.value = if (roomWriteFailed) {
+                HomeBaseActionResult.Failed
+            } else {
+                HomeBaseActionResult.HomeBaseSet(airport)
+            }
         }
     }
 
@@ -240,38 +365,30 @@ class AccountViewModel(
             }
         }
 
-        // Collect flight history and calculate map stats + highlights
+        // Everything derived from the flight log now arrives pre-computed and already warm from
+        // PilotProgressRepository, which derives it once for the whole app instead of each screen
+        // rebuilding its own copy on every visit. This block used to BE that derivation - a full
+        // history read, a visited-geography scan over the airports DB, an achievement evaluation
+        // and seven aggregate queries, all re-run from scratch every time the Passport opened,
+        // because this ViewModel is destroyed on popBackStack. That is what made the screen slow.
+        //
+        // Failure handling moved with it: the shared flow simply does not emit on a failed
+        // derivation, so the last good snapshot stays on screen rather than the Passport blanking
+        // out or spinning forever.
         viewModelScope.launch(Dispatchers.IO) {
-            // Load SVG map paths once
+            // Still resolved here, not in the shared snapshot: the SVG paths are a rendering
+            // concern with no dependency on the pilot's data, and they are already warm from
+            // WorldMapParser.warm() at app start.
             val mapPaths = com.example.focusflight.ui.map.WorldMapParser.parseWorldMap(context)
 
-            flightLogRepository.getFlightHistoryFlow().collect { history ->
-                // 1. Get base aggregates from Room
-                val stats = flightLogRepository.getFlightStats()
-                
-                // 2. Fetch specific Flight Highlights
-                val highlights = flightLogRepository.getFlightHighlights()
-
-                // 3. Fetch home airport for the visited-set calculation
-                val profile = userRepository.getProfile()
-                val homeIata = profile?.homeAirportIata
-
-                // 4. Derive visited countries / continent breakdown (shared with FlightSearchViewModel)
-                val geography = airportRepository.getVisitedGeography(history, homeIata)
-
-                // 5. Achievements - still computed on-demand from the same STORY-scoped geography
-                // + full flight history every other card above already uses. `history` is
-                // unfiltered (every mode), but AchievementProgress.evaluateDistance/
-                // evaluateBehavioral filter to STORY internally themselves, mirroring
-                // getVisitedGeography's own filtering. Routed through AchievementsRepository
-                // rather than AchievementProgress directly so each status also carries its
-                // `unlockedAt` stamp, which the Passport's badges sort by.
-                val achievements = achievementsRepository.evaluateBoard(geography, history)
+            pilotProgressRepository.progress.collect { progress ->
+                if (progress == null) return@collect
 
                 // Only the earned ones reach the Passport, sorted by difficulty (gold first,
                 // then silver, then bronze), and newest-first within each tier.
+                val board = progress.achievements
                 val unlockedAchievements =
-                    (achievements.geographic + achievements.distance + achievements.behavioral)
+                    (board.geographic + board.distance + board.behavioral)
                         .filter { it.isUnlocked }
                         .sortedWith(
                             compareBy<AchievementStatus> {
@@ -285,13 +402,13 @@ class AccountViewModel(
 
                 _uiState.update { state ->
                     state.copy(
-                        stats = stats,
-                        flightHistory = history,
-                        allVisitedCountries = geography.visitedCountries,
-                        completedContinents = geography.completedContinents,
-                        countryToContinent = geography.countryToContinent,
+                        stats = progress.stats,
+                        flightHistory = progress.history,
+                        allVisitedCountries = progress.geography.visitedCountries,
+                        completedContinents = progress.geography.completedContinents,
+                        countryToContinent = progress.geography.countryToContinent,
                         mapPaths = mapPaths,
-                        highlights = highlights,
+                        highlights = progress.highlights,
                         unlockedAchievements = unlockedAchievements,
                         isLoading = false
                     )
@@ -323,12 +440,13 @@ class AccountViewModelFactory(
     private val flightLogRepository: FlightLogRepository,
     private val airportRepository: AirportRepository,
     private val preferencesRepository: PreferencesRepository,
-    private val achievementsRepository: AchievementsRepository
+    private val pilotProgressRepository: PilotProgressRepository,
+    private val cacheDir: java.io.File
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(AccountViewModel::class.java)) {
-            return AccountViewModel(context, userRepository, flightLogRepository, airportRepository, preferencesRepository, achievementsRepository) as T
+            return AccountViewModel(context, userRepository, flightLogRepository, airportRepository, preferencesRepository, pilotProgressRepository, cacheDir) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

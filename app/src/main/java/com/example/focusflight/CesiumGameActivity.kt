@@ -24,6 +24,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -47,9 +48,9 @@ import com.example.focusflight.data.repository.LandingResultChannel
 import com.example.focusflight.data.repository.LocalAirportRepository
 import com.example.focusflight.data.repository.LocalChallengeRepository
 import com.example.focusflight.data.repository.FlightLogRepository
-import com.example.focusflight.data.repository.LegacyFlightLogMigrator
 import com.example.focusflight.data.repository.LocalFlightLogRepository
 import com.example.focusflight.data.repository.LocalUserRepository
+import com.example.focusflight.data.repository.PilotProgressRepository
 import com.example.focusflight.data.repository.PreferencesRepository
 import com.example.focusflight.data.repository.UserRepository
 import com.example.focusflight.engine.live.CesiumLiveJniBridge
@@ -77,11 +78,14 @@ import com.example.focusflight.ui.viewmodel.inflight.InFlightViewModelFactory
 import com.example.focusflight.ui.viewmodel.onboarding.OnboardingViewModel
 import com.example.focusflight.ui.viewmodel.onboarding.OnboardingViewModelFactory
 import com.google.androidgamesdk.GameActivity
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** Loads a paused flight's pending-flight data and navigates straight into InFlight with it -
  *  the shared body behind both the Hub's "RESUME FLIGHT" button and the Challenges screen's
@@ -100,6 +104,13 @@ private suspend fun resumeFlight(
     )
 }
 
+/**
+ * How long the arrival screen will wait for the post-landing challenge check before giving up and
+ * sending the pilot to the Hub anyway. Generous on purpose - it exists to bound a pathological
+ * case, not to race a healthy check, which resolves in well under this on any device.
+ */
+private const val LANDING_RESULT_TIMEOUT_MS = 5000L
+
 class CesiumGameActivity : GameActivity() {
 
     private lateinit var airportRepository: AirportRepository
@@ -109,6 +120,11 @@ class CesiumGameActivity : GameActivity() {
     private lateinit var flightLogRepository: FlightLogRepository
     private lateinit var challengeRepository: ChallengeRepository
     private lateinit var achievementsRepository: AchievementsRepository
+    private lateinit var pilotProgressRepository: PilotProgressRepository
+
+    /** Outlives every ViewModel on purpose - it is what keeps the shared derivation warm across
+     *  navigation, which is the entire point of PilotProgressRepository. Cancelled in onDestroy. */
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     // Bridges the post-landing challenge-check result across the InFlight -> ArrivalCelebration
     // -> (tick-up | completion) navigation hop (Phase 3b - see LandingResultChannel's doc). Needs
@@ -151,16 +167,37 @@ class CesiumGameActivity : GameActivity() {
             flightLogRepository
         )
 
+        pilotProgressRepository = PilotProgressRepository(
+            userRepository,
+            flightLogRepository,
+            airportRepository,
+            achievementsRepository,
+            appScope
+        )
+
         // Copy reference database asset on first run
         airportRepository.ensureDatabaseCopied()
-
-        // Migrate SharedPreferences flight logs to Room (one-time)
-        migrateFlightLogsIfNeeded()
 
         // Attach the lifecycle observer ONCE before Compose content is set.
         // This is not re-triggered on recomposition because it targets the Activity lifecycle,
         // not the Compose recomposition lifecycle.
         lifecycle.addObserver(CesiumEngineManager())
+
+        // Keep the home base's rendered globe out of the cache's eviction pool for as long as it
+        // is the home base - see MapImageCache.pinnedIatas. Re-read from the profile flow rather
+        // than set once, so changing home base moves the pin with it.
+        lifecycleScope.launch {
+            userRepository.getProfileFlow().collect { profile ->
+                val home = profile?.homeAirportIata?.takeIf { it.isNotBlank() }
+                com.example.focusflight.engine.headless.MapImageCache.pinnedIatas = setOfNotNull(home)
+            }
+        }
+
+        // Parse the world-map SVG before any screen asks for it - see WorldMapParser.warm.
+        // Dispatchers.Default rather than IO: this is CPU-bound path parsing, not file I/O.
+        lifecycleScope.launch(Dispatchers.Default) {
+            com.example.focusflight.ui.map.WorldMapParser.warm(applicationContext)
+        }
 
         val composeView = ComposeView(this).apply {
             setContent {
@@ -251,7 +288,7 @@ class CesiumGameActivity : GameActivity() {
                             // ── Hub ──
                             composable(Screen.Hub.route) {
                                 val viewModel: HubViewModel = viewModel(
-                                    factory = HubViewModelFactory(airportRepository, preferencesRepository, flightLogRepository, challengeRepository, cacheDir)
+                                    factory = HubViewModelFactory(airportRepository, preferencesRepository, userRepository, flightLogRepository, challengeRepository, pilotProgressRepository, cacheDir)
                                 )
                                 val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
                                 com.example.focusflight.ui.screens.hub.HubScreen(
@@ -277,7 +314,7 @@ class CesiumGameActivity : GameActivity() {
                             // ── Challenges (modes/goals surface) ──
                             composable(Screen.Challenges.route) {
                                 val challengesViewModel: ChallengesViewModel = viewModel(
-                                    factory = ChallengesViewModelFactory(challengeRepository, airportRepository, achievementsRepository, preferencesRepository)
+                                    factory = ChallengesViewModelFactory(challengeRepository, airportRepository, pilotProgressRepository, preferencesRepository)
                                 )
                                 val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
                                 com.example.focusflight.ui.screens.challenges.ChallengesScreen(
@@ -324,7 +361,7 @@ class CesiumGameActivity : GameActivity() {
                             // ── Custom challenge creation ──
                             composable(Screen.CreateChallenge.route) {
                                 val challengesViewModel: ChallengesViewModel = viewModel(
-                                    factory = ChallengesViewModelFactory(challengeRepository, airportRepository, achievementsRepository, preferencesRepository)
+                                    factory = ChallengesViewModelFactory(challengeRepository, airportRepository, pilotProgressRepository, preferencesRepository)
                                 )
                                 com.example.focusflight.ui.screens.challenges.CreateChallengeScreen(
                                     viewModel = challengesViewModel,
@@ -366,7 +403,7 @@ class CesiumGameActivity : GameActivity() {
                                     ?.takeIf { it >= 0 }
 
                                 val viewModel: FlightSearchViewModel = viewModel(
-                                    factory = FlightSearchViewModelFactory(applicationContext, airportRepository, preferencesRepository, userRepository, flightLogRepository, challengeRepository, mode, challengeId)
+                                    factory = FlightSearchViewModelFactory(applicationContext, airportRepository, preferencesRepository, userRepository, challengeRepository, pilotProgressRepository, mode, challengeId)
                                 )
                                 val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
 
@@ -447,9 +484,25 @@ class CesiumGameActivity : GameActivity() {
                                         } else {
                                             preferencesRepository.pausedFlightStore(mode)
                                         }
-                                        coroutineScope.launch { store.save(flight) }
-                                        navController.navigate(Screen.InFlight.createRoute(originIata, fn, di, dm, mode, challengeId)) {
-                                            popUpTo(Screen.CheckIn.route) { inclusive = true }
+                                        // Navigate only once the slot is actually written. This used
+                                        // to launch the save and navigate immediately, which for a
+                                        // CHALLENGE session was a race the save could lose: that
+                                        // store's save() does a suspending Room read first, and the
+                                        // navigation below pops CheckIn inclusively - cancelling the
+                                        // rememberCoroutineScope this runs in. When it lost, no
+                                        // PausedFlight was ever written, and InFlightViewModel's
+                                        // persistElapsed (`get() ?: return`) then silently skipped
+                                        // every elapsed-time write for the whole flight, so
+                                        // backgrounding it lost all progress with no way to resume.
+                                        //
+                                        // Ordering it this way removes the race rather than widening
+                                        // it: nothing pops this screen until the write returns, so
+                                        // the scope cannot be torn down underneath it.
+                                        coroutineScope.launch {
+                                            store.save(flight)
+                                            navController.navigate(Screen.InFlight.createRoute(originIata, fn, di, dm, mode, challengeId)) {
+                                                popUpTo(Screen.CheckIn.route) { inclusive = true }
+                                            }
                                         }
                                     }
                                 )
@@ -540,7 +593,24 @@ class CesiumGameActivity : GameActivity() {
                                         // rather than racing InFlightViewModel's IO-dispatched check - see
                                         // LandingResultChannel's doc for why Pending is never itself acted on.
                                         coroutineScope.launch {
-                                            when (val outcome = landingResultChannel.result.first { it != LandingResult.Pending }) {
+                                            // Bounded wait. `first { it != Pending }` on its own has no
+                                            // fallback: if the landing check never publishes - it threw,
+                                            // or its scope died - this suspends forever and "continue"
+                                            // becomes a button that does nothing, on a screen with no
+                                            // other way out. InFlightViewModel now guarantees a publish on
+                                            // every path, so this is the second lock on the same door
+                                            // rather than the only one; the timeout being reached at all
+                                            // means something upstream is broken, so it is logged.
+                                            val outcome = withTimeoutOrNull(LANDING_RESULT_TIMEOUT_MS) {
+                                                landingResultChannel.result.first { it != LandingResult.Pending }
+                                            } ?: run {
+                                                Log.w(
+                                                    "CesiumGameActivity",
+                                                    "Landing result never resolved within ${LANDING_RESULT_TIMEOUT_MS}ms; continuing to Hub"
+                                                )
+                                                LandingResult.None
+                                            }
+                                            when (outcome) {
                                                 is LandingResult.ChallengesAffected -> {
                                                     // A completed Route challenge is no longer ACTIVE, so it can
                                                     // no longer be focused - clear the pref rather than leave it
@@ -581,7 +651,7 @@ class CesiumGameActivity : GameActivity() {
                             // ── Account / Passport ──
                             composable(Screen.Account.route) {
                                 val viewModel: AccountViewModel = viewModel(
-                                    factory = AccountViewModelFactory(applicationContext, userRepository, flightLogRepository, airportRepository, preferencesRepository, achievementsRepository)
+                                    factory = AccountViewModelFactory(applicationContext, userRepository, flightLogRepository, airportRepository, preferencesRepository, pilotProgressRepository, cacheDir)
                                 )
                                 
                                 com.example.focusflight.ui.screens.account.AccountScreen(
@@ -609,14 +679,4 @@ class CesiumGameActivity : GameActivity() {
         ))
     }
 
-    private fun migrateFlightLogsIfNeeded() {
-        val prefs = getSharedPreferences("focus_flight_prefs", MODE_PRIVATE)
-        val migrator = LegacyFlightLogMigrator(
-            prefs, userRepository, flightLogRepository, airportRepository,
-            fallbackHomeAirportIata = { preferencesRepository.getHomeAirport() }
-        )
-        runBlocking(Dispatchers.IO) {
-            migrator.migrateIfNeeded()
-        }
-    }
 }

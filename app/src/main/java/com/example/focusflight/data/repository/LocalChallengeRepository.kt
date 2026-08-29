@@ -14,6 +14,8 @@ import com.example.focusflight.data.model.CuratedChallengeSets
 import com.example.focusflight.data.model.PausedFlight
 import com.example.focusflight.data.model.SetMemberKind
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
 
 /** Shared cap across all types and both sources (curated+custom) - challenges.md's
  *  "Active-challenge cap". */
@@ -28,11 +30,18 @@ class LocalChallengeRepository(
     override suspend fun listActiveChallenges(): List<Challenge> =
         challengeDao.getByStatus(userProfileDao.requireProfileId(), ChallengeStatus.ACTIVE)
 
-    override fun listActiveChallengesFlow(): Flow<List<Challenge>> {
-        // userId is resolved synchronously, mirroring LocalFlightLogRepository.getFlightHistoryFlow
-        // - a challenges list is only ever read post-onboarding, when a profile is guaranteed.
-        val userId = kotlinx.coroutines.runBlocking { userProfileDao.requireProfileId() }
-        return challengeDao.getByStatusFlow(userId, ChallengeStatus.ACTIVE)
+    /**
+     * The user lookup happens when the flow is *collected*, not when it is constructed.
+     *
+     * It used to be a `runBlocking` in the function body - and `ChallengesViewModel` calls this
+     * from a property initialiser, which runs on the main thread while the screen is being
+     * composed. So opening Challenges blocked the main thread on a Room query every single time.
+     * Deferring it into the flow moves that query onto whatever dispatcher collects, which is
+     * always a background one.
+     */
+    override fun listActiveChallengesFlow(): Flow<List<Challenge>> = flow {
+        val userId = userProfileDao.requireProfileId()
+        emitAll(challengeDao.getByStatusFlow(userId, ChallengeStatus.ACTIVE))
     }
 
     override suspend fun getChallenge(id: Int): Challenge? = challengeDao.getById(id)

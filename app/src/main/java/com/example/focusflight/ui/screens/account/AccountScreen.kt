@@ -24,6 +24,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -47,6 +48,7 @@ import com.example.focusflight.ui.theme.Midnight
 import com.example.focusflight.ui.theme.OffWhite
 import com.example.focusflight.ui.theme.Spacing
 import com.example.focusflight.ui.viewmodel.account.AccountViewModel
+import com.example.focusflight.ui.viewmodel.account.HomeBaseActionResult
 import com.example.focusflight.data.model.FlightSortOrder
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -80,6 +82,10 @@ fun AccountScreen(
     // Box below so they cover the whole screen instead of sitting inside the Scaffold's content
     // area. The two celebrations come last of all, since either can open on top of the picker.
     var showChangeHomeBase by remember { mutableStateOf(false) }
+    // Neither celebration flag is set at its call site any more. Both home-base actions re-check
+    // their cooldown inside the ViewModel and can refuse silently, so tapping "confirm" is not
+    // evidence that anything happened - these are flipped from homeBaseActionResult below, i.e.
+    // only once the write has actually landed.
     var showWelcomeHome by remember { mutableStateOf(false) }
     var homeBaseSetAirport by remember { mutableStateOf<Airport?>(null) }
     var showTravelMapModal by remember { mutableStateOf(false) }
@@ -99,6 +105,34 @@ fun AccountScreen(
     val homeBaseSearchQuery by viewModel.homeBaseSearchQuery.collectAsState()
     val homeBaseSearchResults by viewModel.homeBaseSearchResults.collectAsState()
     val homeBaseSuggestions by viewModel.homeBaseSuggestions.collectAsState()
+    val homeBaseActionResult by viewModel.homeBaseActionResult.collectAsState()
+
+    // The single place either celebration is armed. The work runs in viewModelScope (it must
+    // outlive this composable), so the result arrives here asynchronously some time after the tap
+    // that started it - and it can just as well say the cooldown re-check refused the action, in
+    // which case the correct behaviour is to show nothing at all. There is deliberately no error
+    // dialog or snackbar: this codebase uses neither, and a refusal is a no-op, not a fault the
+    // pilot has to acknowledge. Consumed either way so a result is acted on exactly once and can't
+    // replay on the next recomposition or a config change.
+    LaunchedEffect(homeBaseActionResult) {
+        when (val result = homeBaseActionResult) {
+            null -> Unit
+            is HomeBaseActionResult.ReturnedHome -> {
+                showWelcomeHome = true
+                viewModel.consumeHomeBaseActionResult()
+            }
+            is HomeBaseActionResult.HomeBaseSet -> {
+                // The airport comes from the result, not from uiState: the Room profile flow that
+                // feeds uiState.homeAirportIata may not have re-emitted yet, and this is the value
+                // that was actually written.
+                homeBaseSetAirport = result.airport
+                viewModel.consumeHomeBaseActionResult()
+            }
+            HomeBaseActionResult.Ineligible, HomeBaseActionResult.Failed -> {
+                viewModel.consumeHomeBaseActionResult()
+            }
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
     Scaffold(
@@ -249,12 +283,21 @@ fun AccountScreen(
         )
     }
 
+    // The teleport's outcome is settled the moment this modal appears - it cannot be dismissed and
+    // it ends by attempting the teleport - so the globe the Hub will want is rendered during the
+    // animation instead of after it. Keyed on Unit inside the `if` so it fires once per showing.
     if (showReturningHomeModal) {
+        LaunchedEffect(Unit) { viewModel.prepareReturnHome() }
+    }
+
+    if (showReturningHomeModal) {
+        // The teleport animation finishing only means it's time to *attempt* the teleport; whether
+        // "WELCOME BACK" follows is decided by the result the ViewModel publishes (see the
+        // LaunchedEffect above), not by this callback.
         ReturningHomeModal(
             onComplete = {
                 viewModel.returnHome()
                 showReturningHomeModal = false
-                showWelcomeHome = true
             }
         )
     }
@@ -293,10 +336,11 @@ fun AccountScreen(
             onQueryChange = { viewModel.onHomeBaseSearchQueryChanged(it) },
             results = homeBaseSearchResults,
             suggestions = homeBaseSuggestions,
+            // Close the picker on select, but leave the celebration to the published result -
+            // changeHomeBase re-checks the 30-day cooldown and may write nothing at all.
             onAirportSelect = { airport ->
                 viewModel.changeHomeBase(airport)
                 showChangeHomeBase = false
-                homeBaseSetAirport = airport
             },
             onBackClick = { showChangeHomeBase = false }
         )
@@ -314,6 +358,7 @@ fun AccountScreen(
             locationLine = locationLine(home?.municipality, home?.isoCountry),
             onContinue = {
                 showWelcomeHome = false
+                onNavigateHome()
             },
             inlineHero = { HomeBaseSetHero() }
         )
@@ -327,6 +372,7 @@ fun AccountScreen(
             locationLine = locationLine(airport.municipality, airport.isoCountry),
             onContinue = {
                 homeBaseSetAirport = null
+                onNavigateHome()
             },
             inlineHero = { HomeBaseSetHero() }
         )

@@ -168,7 +168,7 @@ class LocalAchievementsRepositoryTest {
         override fun getFlightHistoryFlow() = throw NotImplementedError()
         override suspend fun getFlightHistory() = throw NotImplementedError()
         override suspend fun getRecentFlights(limit: Int) = throw NotImplementedError()
-        override suspend fun getFlightStats() = throw NotImplementedError()
+        override suspend fun getFlightStats(homeAirportIata: String?) = throw NotImplementedError()
         override fun getFlightsPagingSource(sortOrder: com.example.focusflight.data.model.FlightSortOrder) = throw NotImplementedError()
         override suspend fun getFlightHighlights() = throw NotImplementedError()
     }

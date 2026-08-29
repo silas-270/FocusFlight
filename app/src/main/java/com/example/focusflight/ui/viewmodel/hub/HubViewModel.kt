@@ -15,7 +15,11 @@ import com.example.focusflight.data.model.PausedFlight
 import com.example.focusflight.data.repository.AirportRepository
 import com.example.focusflight.data.repository.ChallengeRepository
 import com.example.focusflight.data.repository.FlightLogRepository
+import com.example.focusflight.data.repository.PilotProgressRepository
 import com.example.focusflight.data.repository.PreferencesRepository
+import com.example.focusflight.data.repository.UserRepository
+import com.example.focusflight.domain.resolveCurrentAirportIata
+import com.example.focusflight.domain.resolveHomeAirportIata
 import com.example.focusflight.engine.headless.CesiumHeadlessMapRenderer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,8 +31,10 @@ import java.io.File
 class HubViewModel(
     private val airportRepository: AirportRepository,
     private val preferencesRepository: PreferencesRepository,
+    private val userRepository: UserRepository,
     private val flightLogRepository: FlightLogRepository,
     private val challengeRepository: ChallengeRepository,
+    private val pilotProgressRepository: PilotProgressRepository,
     private val cacheDir: File
 ) : ViewModel() {
 
@@ -63,6 +69,11 @@ class HubViewModel(
 
     init {
         loadData()
+        viewModelScope.launch {
+            pilotProgressRepository.progress.collect { progress ->
+                _flightStats.value = progress?.stats ?: FlightStats()
+            }
+        }
     }
 
     /** Re-runs [loadData]. `init` only fires once per ViewModel instance, but the Hub's nav
@@ -82,7 +93,8 @@ class HubViewModel(
             // A focused Route challenge takes over the displayed airport (its own position
             // pointer) - the Hub shows "where the challenge is", not the story-mode base - until
             // the player explicitly exits it. See exitFocusedChallenge().
-            val baseIata = focused?.positionIata ?: preferencesRepository.getCurrentAirport()
+            val baseIata = focused?.positionIata
+                ?: resolveCurrentAirportIata(preferencesRepository, userRepository)
             if (baseIata != null) {
                 val airport = airportRepository.getAirportByIata(baseIata)
                 _currentAirport.value = airport
@@ -104,18 +116,14 @@ class HubViewModel(
                 }
             }
 
-            // Load real flight stats from Room
+            // Recent flights stay a Hub-local query - nothing else in the app shows them, so
+            // there is nothing to share. The headline stats no longer come from here at all:
+            // they arrive already computed from PilotProgressRepository (see init), instead of
+            // being recomputed on every ON_START refresh of this screen.
             try {
-                val stats = flightLogRepository.getFlightStats()
-                _flightStats.value = stats
                 _recentFlights.value = flightLogRepository.getRecentFlights()
             } catch (e: Exception) {
-                Log.e("HubViewModel", "Error loading flight stats", e)
-                _flightStats.value = FlightStats(
-                    totalFlights = 0,
-                    totalMinutes = 0,
-                    airportsVisited = if (_currentAirport.value != null) 1 else 0
-                )
+                Log.e("HubViewModel", "Error loading recent flights", e)
             }
         }
     }
@@ -170,14 +178,16 @@ class HubViewModel(
 class HubViewModelFactory(
     private val airportRepository: AirportRepository,
     private val preferencesRepository: PreferencesRepository,
+    private val userRepository: UserRepository,
     private val flightLogRepository: FlightLogRepository,
     private val challengeRepository: ChallengeRepository,
+    private val pilotProgressRepository: PilotProgressRepository,
     private val cacheDir: File
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(HubViewModel::class.java)) {
-            return HubViewModel(airportRepository, preferencesRepository, flightLogRepository, challengeRepository, cacheDir) as T
+            return HubViewModel(airportRepository, preferencesRepository, userRepository, flightLogRepository, challengeRepository, pilotProgressRepository, cacheDir) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }
