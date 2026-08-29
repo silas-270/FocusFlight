@@ -39,6 +39,7 @@ import com.example.focusflight.ui.theme.Border
 import com.example.focusflight.ui.theme.DeepNavy
 import com.example.focusflight.ui.theme.Dim
 import com.example.focusflight.ui.theme.Haze
+import com.example.focusflight.ui.theme.MapOcean
 import com.example.focusflight.ui.theme.OffWhite
 import com.example.focusflight.ui.theme.Slate
 import com.example.focusflight.ui.theme.Spacing
@@ -117,7 +118,7 @@ fun AirportMapConfirmCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(2f)
-                .background(Slate) // Backup color behind the map
+                .background(MapOcean) // Ocean color behind the map
         ) {
             Image(
                 painter = painterResource(R.drawable.ic_world_map),

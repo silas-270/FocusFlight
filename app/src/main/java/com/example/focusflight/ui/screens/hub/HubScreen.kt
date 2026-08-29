@@ -181,7 +181,7 @@ fun HubScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = Spacing.Large)
-                    .padding(bottom = 30.dp)
+                    .padding(bottom = Spacing.Small)
             ) {
                 // Header (Welcome back, Iata Code, Airport Name)
                 Text(

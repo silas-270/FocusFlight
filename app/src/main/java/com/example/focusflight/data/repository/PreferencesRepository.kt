@@ -1,6 +1,7 @@
 package com.example.focusflight.data.repository
 
 import android.content.Context
+import com.example.focusflight.data.model.FlightMode
 import com.example.focusflight.data.model.PausedFlight
 
 class PreferencesRepository(context: Context) {
@@ -11,6 +12,7 @@ class PreferencesRepository(context: Context) {
         private const val KEY_CURRENT_AIRPORT = "current_airport_iata"
         private const val KEY_FOCUSED_ROUTE_CHALLENGE_ID = "focused_route_challenge_id"
         private const val KEY_PAUSED_FLIGHT = "paused_flight"
+        private const val KEY_PAUSED_FREE_FLIGHT = "paused_free_flight"
 
         // docs/design/story-mode.md's two distinct home-base cooldowns (see HomeBaseCooldown) -
         // deliberately two separate keys, not one, since the two actions' cooldowns reset
@@ -68,25 +70,46 @@ class PreferencesRepository(context: Context) {
     }
 
     /**
-     * The Story/Free slot's in-progress (paused) flight - the Hub's "RESUME FLIGHT" button's
-     * data source whenever no challenge is focused (see `HubViewModel`). A Route challenge's own
-     * paused flight is never stored here - see `Challenge.pausedFlight` and
-     * `ChallengeRepository.pausedFlightStore` for that slot's equivalent - so the two can never
-     * clobber each other.
+     * Story Mode's in-progress (paused) flight - the Hub's "RESUME FLIGHT" button's data source
+     * whenever no challenge is focused (see `HubViewModel`). Fully separate from
+     * [pausedFreeFlightStore] (so a paused Story flight and a paused Free flight can coexist) and
+     * from a Route challenge's own paused flight, which is never stored here - see
+     * `Challenge.pausedFlight` and `ChallengeRepository.pausedFlightStore` for that slot's
+     * equivalent. Prefer [pausedFlightStore] (the mode-dispatching function below) over reading
+     * this directly, so a caller can't accidentally read/write the wrong mode's slot.
      */
-    val pausedFlightStore: PausedFlightStore = object : PausedFlightStore {
+    val pausedStoryFlightStore: PausedFlightStore = pausedFlightStoreFor(KEY_PAUSED_FLIGHT)
+
+    /**
+     * Free Mode's in-progress (paused) flight - its own slot, independent of
+     * [pausedStoryFlightStore], so starting a fresh Story flight can never clobber a paused Free
+     * one or vice versa. Surfaced on the Challenges screen's Free Mode row (see
+     * `ChallengesViewModel.pausedFreeFlight`), not the Hub - the Hub only ever shows Story Mode.
+     */
+    val pausedFreeFlightStore: PausedFlightStore = pausedFlightStoreFor(KEY_PAUSED_FREE_FLIGHT)
+
+    private fun pausedFlightStoreFor(key: String): PausedFlightStore = object : PausedFlightStore {
         override suspend fun get(): PausedFlight? {
-            val raw = prefs.getString(KEY_PAUSED_FLIGHT, null) ?: return null
+            val raw = prefs.getString(key, null) ?: return null
             return PausedFlight.parse(raw)
         }
 
         override suspend fun save(flight: PausedFlight) {
-            prefs.edit().putString(KEY_PAUSED_FLIGHT, flight.serialize()).apply()
+            prefs.edit().putString(key, flight.serialize()).apply()
         }
 
         override suspend fun clear() {
-            prefs.edit().remove(KEY_PAUSED_FLIGHT).apply()
+            prefs.edit().remove(key).apply()
         }
+    }
+
+    /** Picks [pausedStoryFlightStore] or [pausedFreeFlightStore] by [mode] - the one slot a
+     *  STORY or FREE `InFlightViewModel`/CheckIn session should ever read or write, so the two
+     *  modes' paused flights can never collide. CHALLENGE sessions don't use this at all - they
+     *  use `ChallengeRepository.pausedFlightStore(challengeId)` instead. */
+    fun pausedFlightStore(mode: FlightMode): PausedFlightStore = when (mode) {
+        FlightMode.FREE -> pausedFreeFlightStore
+        else -> pausedStoryFlightStore
     }
 
     /**

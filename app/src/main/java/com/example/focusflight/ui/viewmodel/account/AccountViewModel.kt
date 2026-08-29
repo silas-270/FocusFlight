@@ -41,6 +41,9 @@ data class AccountUiState(
     val username: String = "",
     val userCode: String = "",
     val homeAirportIata: String = "",
+    // Resolved from [homeAirportIata] so the return-home celebration can name the airport and city
+    // rather than only echoing the code back at the pilot.
+    val homeAirport: Airport? = null,
     val joinDateFormatted: String = "",
     
     // Passport/Stats Data
@@ -218,11 +221,18 @@ class AccountViewModel(
             userRepository.getProfileFlow().collect { profile ->
                 if (profile != null) {
                     val formattedDate = "Joined " + dateFormat.format(Date(profile.createdAt))
+                    // Already on Dispatchers.IO, and getAirportByIata is a synchronous in-memory
+                    // lookup - resolving it here keeps the celebration screens free of any loading
+                    // state of their own.
+                    val homeAirport = profile.homeAirportIata
+                        .takeIf { it.isNotBlank() }
+                        ?.let { airportRepository.getAirportByIata(it) }
                     _uiState.update { state ->
                         state.copy(
                             username = profile.username,
                             userCode = profile.userCode.removePrefix("#").removePrefix("@"),
                             homeAirportIata = profile.homeAirportIata,
+                            homeAirport = homeAirport,
                             joinDateFormatted = formattedDate
                         )
                     }

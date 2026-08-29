@@ -7,6 +7,7 @@ import com.example.focusflight.data.model.AchievementStatus
 import com.example.focusflight.data.model.Airport
 import com.example.focusflight.data.model.Challenge
 import com.example.focusflight.data.model.ChallengeType
+import com.example.focusflight.data.model.PausedFlight
 import com.example.focusflight.data.repository.AchievementsRepository
 import com.example.focusflight.data.repository.AirportRepository
 import com.example.focusflight.data.repository.ChallengeRepository
@@ -54,12 +55,29 @@ class ChallengesViewModel(
     private val _unfinishedAchievements = MutableStateFlow<List<AchievementStatus>>(emptyList())
     val unfinishedAchievements: StateFlow<List<AchievementStatus>> = _unfinishedAchievements.asStateFlow()
 
+    /** Free Mode's own paused-flight slot (fully separate from Story Mode's, see
+     *  PreferencesRepository.pausedFreeFlightStore) - lets the Free Mode row offer "RESUME"
+     *  instead of always dropping into a fresh booking. Loaded once at construction (this VM is
+     *  recreated per screen visit, same as [focusedChallengeId] below).
+     *
+     *  Declared *above* the init block on purpose. Kotlin runs property initialisers and init
+     *  blocks strictly in declaration order, and init's loader below writes this flow from a
+     *  `viewModelScope.launch { }` with no dispatcher - which is `Dispatchers.Main.immediate`, so
+     *  on the main thread the body runs synchronously, inline, before the constructor has moved
+     *  on. With this property declared further down the file it was still null at that point and
+     *  opening the Challenges screen died on a NullPointerException every time. */
+    private val _pausedFreeFlight = MutableStateFlow<PausedFlight?>(null)
+    val pausedFreeFlight: StateFlow<PausedFlight?> = _pausedFreeFlight.asStateFlow()
+
     init {
         viewModelScope.launch(Dispatchers.IO) {
             // Re-read both derived lists whenever the active set changes - covers starting,
             // abandoning, and completing a challenge without a second subscription. On IO because
             // the achievement board's geography derivation reaches the airport SQLite DB.
             activeChallenges.collect { refreshDerivedLists() }
+        }
+        viewModelScope.launch {
+            _pausedFreeFlight.value = preferencesRepository.pausedFreeFlightStore.get()
         }
     }
 

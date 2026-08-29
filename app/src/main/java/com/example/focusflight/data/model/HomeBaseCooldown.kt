@@ -26,8 +26,11 @@ object HomeBaseCooldown {
      * non-null timestamp far enough in the past to already satisfy the same check.
      */
     fun isEligible(now: Long, lastTimestamp: Long?, cooldownDays: Int): Boolean {
-        if (lastTimestamp == null) return true
-        return now - lastTimestamp >= cooldownDays * DAY_MS
+        // DEV OVERRIDE - see DEV_FEATURES_TO_REVERT.md. Both home-base cooldowns are disabled for
+        // testing. Delete this `return true` and uncomment the two lines below to restore it.
+        return true
+        // if (lastTimestamp == null) return true
+        // return now - lastTimestamp >= cooldownDays * DAY_MS
     }
 
     /**

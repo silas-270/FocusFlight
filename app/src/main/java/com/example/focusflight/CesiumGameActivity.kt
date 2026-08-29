@@ -286,6 +286,12 @@ class CesiumGameActivity : GameActivity() {
                                     onFreeModeClick = {
                                         navController.navigate(Screen.FlightSearch.createRoute(FlightMode.FREE))
                                     },
+                                    onResumeFreeFlight = { flight ->
+                                        // The Story/Free slot already has a Free Mode flight paused - resume
+                                        // it directly instead of routing through a fresh booking, same as
+                                        // Hub's onResumeFlightClick and onResumeRouteChallenge below.
+                                        coroutineScope.launch { resumeFlight(navController, pendingFlightLoader, flight) }
+                                    },
                                     onContinueRouteChallenge = { challengeId ->
                                         // Same booking flow Story Mode's "Book a flight" uses, just tagged
                                         // CHALLENGE and scoped to this challenge's own position pointer. See
@@ -439,7 +445,7 @@ class CesiumGameActivity : GameActivity() {
                                         val store = if (mode == FlightMode.CHALLENGE && challengeId != null) {
                                             challengeRepository.pausedFlightStore(challengeId)
                                         } else {
-                                            preferencesRepository.pausedFlightStore
+                                            preferencesRepository.pausedFlightStore(mode)
                                         }
                                         coroutineScope.launch { store.save(flight) }
                                         navController.navigate(Screen.InFlight.createRoute(originIata, fn, di, dm, mode, challengeId)) {
@@ -580,7 +586,15 @@ class CesiumGameActivity : GameActivity() {
                                 
                                 com.example.focusflight.ui.screens.account.AccountScreen(
                                     viewModel = viewModel,
-                                    onBackClick = { navController.popBackStack() }
+                                    onBackClick = { navController.popBackStack() },
+                                    // The home-base celebrations end their flow at the Hub rather
+                                    // than dropping back onto the Passport - same collapse-the-stack
+                                    // pattern every other "done, go home" hand-off uses.
+                                    onNavigateHome = {
+                                        navController.navigate(Screen.Hub.route) {
+                                            popUpTo(Screen.Hub.route) { inclusive = true }
+                                        }
+                                    }
                                 )
                             }
                         }

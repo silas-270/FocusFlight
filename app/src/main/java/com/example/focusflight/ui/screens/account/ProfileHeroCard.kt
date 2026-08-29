@@ -34,7 +34,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -42,7 +41,6 @@ import androidx.compose.ui.unit.dp
 import com.example.focusflight.ui.theme.Amber
 import com.example.focusflight.ui.theme.DeepNavy
 import com.example.focusflight.ui.theme.Haze
-import com.example.focusflight.ui.theme.Midnight
 import com.example.focusflight.ui.theme.OffWhite
 import com.example.focusflight.ui.theme.Slate
 import com.example.focusflight.ui.theme.SoftAmber
@@ -77,11 +75,7 @@ internal fun ProfileHeroCard(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
-            .background(
-                Brush.linearGradient(
-                    colors = listOf(DeepNavy, Slate)
-                )
-            )
+            .background(DeepNavy)
             .clickable(onClick = onToggleExpanded)
             .padding(Spacing.Large)
     ) {
@@ -94,11 +88,7 @@ internal fun ProfileHeroCard(
                 modifier = Modifier
                     .size(64.dp)
                     .clip(CircleShape)
-                    .background(
-                        Brush.radialGradient(
-                            colors = listOf(Amber.copy(alpha = 0.3f), Midnight)
-                        )
-                    ),
+                    .background(Slate),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(

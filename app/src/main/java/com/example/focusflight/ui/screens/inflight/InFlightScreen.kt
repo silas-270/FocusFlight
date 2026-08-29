@@ -1681,7 +1681,7 @@ private fun SpeedInstrument(
             // is on screen. Leaving composition disposes its infinite transition, so a
             // parked aircraft — or a collapsed sheet — costs zero per-frame animation
             // callbacks; this previously ran at full display refresh unconditionally.
-            SpeedMotionLayer(intensity)
+            SpeedMotionLayer(intensity = { intensity })
         } else {
             Icon(
                 imageVector = Icons.Outlined.Flight,

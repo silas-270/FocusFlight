@@ -14,6 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.example.focusflight.ui.theme.DeepNavy
@@ -57,7 +58,11 @@ fun ScrimCardModal(
                 .align(Alignment.Center)
                 .padding(horizontal = Spacing.Large)
                 .fillMaxWidth()
-                .background(DeepNavy, RoundedCornerShape(20.dp))
+                // clip (not just a rounded background) so content that draws or translates past
+                // its own bounds - e.g. ReturningHomeModal's speed-line canvas - is cut off at the
+                // card's rounded corners instead of spilling out over the scrim.
+                .clip(RoundedCornerShape(20.dp))
+                .background(DeepNavy)
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             content = content

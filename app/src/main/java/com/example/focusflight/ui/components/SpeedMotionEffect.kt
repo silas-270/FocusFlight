@@ -1,11 +1,5 @@
 package com.example.focusflight.ui.components
 
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
@@ -14,82 +8,173 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Flight
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.focusflight.ui.theme.Amber
-import com.example.focusflight.ui.theme.OffWhite
-import kotlin.math.roundToInt
+import com.example.focusflight.ui.theme.Border
+import com.example.focusflight.ui.theme.DeepNavy
+import com.example.focusflight.ui.theme.Dim
+import com.example.focusflight.ui.theme.Haze
+import com.example.focusflight.ui.theme.Slate
+import kotlin.random.Random
 
-/** Wind streaks + airframe buffet. Split out so it can be removed from composition
- *  entirely at a standstill, and so every animated value is read in a draw or layer
- *  scope — those invalidate drawing only, never composition or layout. Shared between
- *  the in-flight speed instrument and the Return Home modal, both of which just supply
- *  an [intensity] curve. */
+/** Full-speed streak travel, in screen-widths per second. */
+private const val BaseSpeedWidthsPerSec = 3.5f
+
+private const val IdleShakeIntervalSec = 0.045f
+private const val FullSpeedShakeIntervalSec = 0.010f
+
+private const val ParticleCount = 14
+private const val ShakeAmplitudeDp = 1.6f
+
+private class StreakParticle(
+    val slotIndex: Int,
+    var x: Float,
+    var yFraction: Float,
+    var lengthDp: Float,
+    var strokeWidthDp: Float,
+    var speedMultiplier: Float,
+    var color: Color,
+    var alphaScale: Float
+)
+
+/**
+ * Wind streaks + airframe buffet simulating background motion using muted leather/espresso tones.
+ */
 @Composable
-fun BoxScope.SpeedMotionLayer(intensity: Float) {
-    // Durations are quantised into speed bands. Deriving them straight from `intensity`
-    // rebuilt the animation spec on every telemetry tick, which restarted both
-    // animations 30x/second — the streaks could never actually complete a sweep.
-    val band = (intensity * 8f).roundToInt()
-    val streamDurationMs = (1400 - band * 130).coerceAtLeast(320)
-    // Buffet gets faster as well as stronger with speed, which is what sells it as
-    // airflow rather than a fixed-rate wobble.
-    val buffetDurationMs = (210 - band * 14).coerceAtLeast(95)
+fun BoxScope.SpeedMotionLayer(
+    intensity: () -> Float,
+    iconSize: Dp = 28.dp,
+    iconAlignment: Alignment = BiasAlignment(0f, -0.44f),
+    shakeScale: Float = 1f
+) {
+    val currentIntensity by rememberUpdatedState(intensity)
 
-    val infiniteTransition = rememberInfiniteTransition(label = "speedFx")
-    val streamPhase by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = streamDurationMs, easing = LinearEasing)
-        ),
-        label = "streamPhase"
-    )
-    val buffet by infiniteTransition.animateFloat(
-        initialValue = -1f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = buffetDurationMs, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "buffet"
-    )
-    val laneSeeds = remember { List(5) { kotlin.random.Random(it * 91 + 7).nextFloat() } }
+    val frameTick = remember { mutableIntStateOf(0) }
+    val shakeX = remember { mutableFloatStateOf(0f) }
+    val shakeY = remember { mutableFloatStateOf(0f) }
 
-    // The streak field is drawn once as a horizontally repeating pattern and then simply
-    // translated. Redrawing it at new X positions each frame (as this used to) forced a
-    // display-list re-record of the whole HUD on every single display refresh; moving a
-    // graphics layer is a render-node property update instead, so per-frame cost drops to
-    // effectively nothing and the canvas only re-records when speed actually changes.
-    // Three copies are drawn so that a full tile of travel always has content on both
-    // sides; the instrument face clips the overhang.
+    // Muted background palette to blend naturally into the leather/slate card
+    val palette = remember {
+        listOf(
+            Dim,
+            Slate,
+            Border,
+            Haze.copy(alpha = 0.45f),
+            Dim.copy(alpha = 0.7f)
+        )
+    }
+    val slotHeight = 0.88f / ParticleCount
+
+    // Stratified particle pool: each particle owns a vertical band so lines never stack or clump
+    val particles = remember {
+        val random = Random(42)
+        List(ParticleCount) { index ->
+            val baseY = 0.06f + (index + 0.5f) * slotHeight
+            StreakParticle(
+                slotIndex = index,
+                x = random.nextFloat() * 1.5f - 0.2f,
+                yFraction = baseY + (random.nextFloat() - 0.5f) * slotHeight * 0.6f,
+                lengthDp = 20f + random.nextFloat() * 26f,
+                strokeWidthDp = 1.2f + random.nextFloat() * 1.0f,
+                speedMultiplier = 0.9f + random.nextFloat() * 0.25f,
+                color = palette[random.nextInt(palette.size)],
+                alphaScale = 0.5f + random.nextFloat() * 0.5f
+            )
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        val random = Random(31)
+        var lastFrameNanos = 0L
+        var sinceShake = 0f
+        while (true) {
+            withFrameNanos { now ->
+                val dt = if (lastFrameNanos == 0L) 0f
+                else ((now - lastFrameNanos) / 1_000_000_000.0).toFloat().coerceAtMost(0.05f)
+                lastFrameNanos = now
+                val i = currentIntensity().coerceIn(0f, 1f)
+
+                val speedFactor = 0.15f * i + 0.85f * i * i
+                if (speedFactor > 0f && dt > 0f) {
+                    for (p in particles) {
+                        p.x -= dt * BaseSpeedWidthsPerSec * speedFactor * p.speedMultiplier
+                        if (p.x < -0.4f) {
+                            // Respawn safely outside right edge so it glides in seamlessly
+                            p.x = 1.20f + random.nextFloat() * 0.35f
+                            p.lengthDp = 20f + random.nextFloat() * 26f
+                            p.strokeWidthDp = 1.2f + random.nextFloat() * 1.0f
+                            p.speedMultiplier = 0.9f + random.nextFloat() * 0.25f
+                            p.color = palette[random.nextInt(palette.size)]
+                            p.alphaScale = 0.5f + random.nextFloat() * 0.5f
+                            val baseY = 0.06f + (p.slotIndex + 0.5f) * slotHeight
+                            p.yFraction = baseY + (random.nextFloat() - 0.5f) * slotHeight * 0.6f
+                        }
+                    }
+                    frameTick.intValue++
+                }
+
+                if (i <= 0f) {
+                    shakeX.floatValue = 0f
+                    shakeY.floatValue = 0f
+                    sinceShake = 0f
+                } else {
+                    sinceShake += dt
+                    val interval =
+                        IdleShakeIntervalSec + (FullSpeedShakeIntervalSec - IdleShakeIntervalSec) * i
+                    if (sinceShake >= interval) {
+                        sinceShake = 0f
+                        shakeX.floatValue = random.nextFloat() * 2f - 1f
+                        shakeY.floatValue = random.nextFloat() * 2f - 1f
+                    }
+                }
+            }
+        }
+    }
+
     Canvas(
         modifier = Modifier
             .fillMaxSize()
-            .graphicsLayer { translationX = -streamPhase * size.width }
+            .clipToBounds()
+            .graphicsLayer {
+                val i = currentIntensity().coerceIn(0f, 1f)
+                val amp = i * shakeScale * ShakeAmplitudeDp.dp.toPx() * 0.25f
+                translationX = shakeX.floatValue * amp
+                translationY = shakeY.floatValue * amp
+            }
     ) {
-        val tile = size.width
-        val len = 10.dp.toPx() + 16.dp.toPx() * intensity
-        val alpha = 0.25f + 0.35f * intensity
-        laneSeeds.forEachIndexed { index, seed ->
-            val laneY = size.height * (0.2f + 0.6f * (index / (laneSeeds.size - 1f)))
-            // Seeded offset per lane so the streaks form a scattered field rather than a
-            // rigid comb, and each lane's own length varies a little with its seed.
-            val baseX = tile * seed
-            val laneLen = len * (0.75f + seed * 0.5f)
-            for (copy in 0..2) {
-                val x = baseX + tile * copy
+        val _tick = frameTick.intValue
+        val i = currentIntensity().coerceIn(0f, 1f)
+        val w = size.width
+        val h = size.height
+        val globalAlpha = (0.25f + 0.75f * i).coerceIn(0f, 1f)
+
+        for (p in particles) {
+            val strokeLengthPx = p.lengthDp.dp.toPx()
+            val xPx = p.x * w
+            val yPx = p.yFraction * h
+
+            if (xPx > -strokeLengthPx && xPx < w + strokeLengthPx) {
                 drawLine(
-                    color = Amber.copy(alpha = alpha),
-                    start = Offset(x, laneY),
-                    end = Offset(x - laneLen, laneY),
-                    strokeWidth = 2.dp.toPx(),
+                    color = p.color.copy(alpha = (p.alphaScale * globalAlpha).coerceIn(0f, 1f)),
+                    start = Offset(xPx, yPx),
+                    end = Offset(xPx - strokeLengthPx, yPx),
+                    strokeWidth = p.strokeWidthDp.dp.toPx(),
                     cap = StrokeCap.Round
                 )
             }
@@ -99,17 +184,16 @@ fun BoxScope.SpeedMotionLayer(intensity: Float) {
     Icon(
         imageVector = Icons.Outlined.Flight,
         contentDescription = null,
-        tint = OffWhite,
+        tint = Amber,
         modifier = Modifier
-            .align(BiasAlignment(0f, -0.44f))
-            .size(28.dp)
+            .align(iconAlignment)
+            .size(iconSize)
             .graphicsLayer {
-                // Buffet grows super-linearly with speed so the difference between
-                // cruise and approach is actually visible.
-                val amplitude = intensity * intensity
-                translationX = buffet * 5f * amplitude
-                translationY = buffet * 3f * amplitude
-                rotationZ = 90f + buffet * 1.5f * amplitude
+                val i = currentIntensity().coerceIn(0f, 1f)
+                val amplitude = i * shakeScale * ShakeAmplitudeDp.dp.toPx()
+                translationX = shakeX.floatValue * amplitude
+                translationY = shakeY.floatValue * amplitude
+                rotationZ = 90f
             }
     )
 }
