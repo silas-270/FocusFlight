@@ -21,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.FlightTakeoff
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -41,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.focusflight.data.model.Challenge
 import com.example.focusflight.data.model.ChallengeType
+import com.example.focusflight.data.model.PausedFlight
 import com.example.focusflight.data.repository.MAX_ACTIVE_CHALLENGES
 import com.example.focusflight.data.repository.StartChallengeResult
 import com.example.focusflight.ui.components.AchievementProgressRow
@@ -75,6 +77,7 @@ fun ChallengesScreen(
     viewModel: ChallengesViewModel,
     onBackClick: () -> Unit,
     onFreeModeClick: () -> Unit,
+    onResumeFreeFlight: (flight: PausedFlight) -> Unit,
     onContinueRouteChallenge: (challengeId: Int) -> Unit,
     onResumeRouteChallenge: (challenge: Challenge) -> Unit,
     onCreateCustomClick: () -> Unit,
@@ -85,6 +88,7 @@ fun ChallengesScreen(
     val unfinishedAchievements by viewModel.unfinishedAchievements.collectAsState()
     val startResult by viewModel.startResult.collectAsState()
     val focusedChallengeId by viewModel.focusedChallengeId.collectAsState()
+    val pausedFreeFlight by viewModel.pausedFreeFlight.collectAsState()
 
     var tab by rememberSaveable { mutableStateOf(ChallengesTab.CHALLENGES) }
     var showPicker by remember { mutableStateOf(false) }
@@ -130,7 +134,13 @@ fun ChallengesScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(Spacing.Medium)
             ) {
-                item { FreeModeRow(onClick = { showFreeModeNotice = true }) }
+                item {
+                    FreeModeRow(
+                        pausedFlight = pausedFreeFlight,
+                        onClick = { showFreeModeNotice = true },
+                        onResumeClick = { pausedFreeFlight?.let(onResumeFreeFlight) }
+                    )
+                }
 
                 item {
                     TabSwitcher(
@@ -273,36 +283,86 @@ fun ChallengesScreen(
     }
 }
 
+/**
+ * Free Mode's entry point. When a Free Mode flight is sitting paused in its own slot
+ * ([com.example.focusflight.data.repository.PreferencesRepository.pausedFreeFlightStore] -
+ * separate from Story Mode's, so the two can be paused at the same time), a second row offers to
+ * resume it directly - without this, starting a fresh Free flight would silently overwrite that
+ * slot (same "fresh PausedFlight is the reset" behavior Story Mode's CheckIn already has),
+ * stranding the paused one with no way back to it.
+ */
 @Composable
-private fun FreeModeRow(onClick: () -> Unit) {
-    Row(
+private fun FreeModeRow(pausedFlight: PausedFlight?, onClick: () -> Unit, onResumeClick: () -> Unit) {
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .background(DeepNavy)
-            .clickable(onClick = onClick)
-            .padding(Spacing.Medium),
-        verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(
-            imageVector = Icons.Outlined.FlightTakeoff,
-            contentDescription = null,
-            tint = Amber,
-            modifier = Modifier.size(20.dp)
-        )
-        Spacer(modifier = Modifier.width(Spacing.Small))
-        Text(
-            text = "Free Mode",
-            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
-            color = OffWhite,
-            modifier = Modifier.weight(1f)
-        )
-        Icon(
-            imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
-            contentDescription = null,
-            tint = Amber,
-            modifier = Modifier.size(22.dp)
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .padding(Spacing.Medium),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.FlightTakeoff,
+                contentDescription = null,
+                tint = Amber,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(modifier = Modifier.width(Spacing.Small))
+            Text(
+                text = "Free Mode",
+                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+                color = OffWhite,
+                modifier = Modifier.weight(1f)
+            )
+            Icon(
+                imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                contentDescription = null,
+                tint = Amber,
+                modifier = Modifier.size(22.dp)
+            )
+        }
+
+        if (pausedFlight != null) {
+            HorizontalDivider(color = Border, thickness = 0.5.dp)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onResumeClick)
+                    .padding(Spacing.Medium),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.FlightTakeoff,
+                    contentDescription = null,
+                    tint = Amber,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(Spacing.Small))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Resume Free Flight",
+                        style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+                        color = OffWhite
+                    )
+                    Text(
+                        text = "${pausedFlight.originIata} → ${pausedFlight.destIata}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Haze
+                    )
+                }
+                Icon(
+                    imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = Amber,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+        }
     }
 }
 

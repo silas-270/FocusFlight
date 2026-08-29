@@ -9,6 +9,7 @@ import com.example.focusflight.data.model.Challenge
 import com.example.focusflight.data.model.ChallengeStatus
 import com.example.focusflight.data.model.ChallengeType
 import com.example.focusflight.data.model.FlightLog
+import com.example.focusflight.data.model.FlightMode
 import com.example.focusflight.data.model.FlightStats
 import com.example.focusflight.data.model.PausedFlight
 import com.example.focusflight.data.repository.AirportRepository
@@ -86,14 +87,16 @@ class HubViewModel(
                 val airport = airportRepository.getAirportByIata(baseIata)
                 _currentAirport.value = airport
 
-                // A focused challenge's paused flight (its own row, not the global STORY/FREE
-                // slot below) drives Resume/Book here - so switching focus never shows a Resume
-                // button for a flight that belongs to a different mode/challenge. See
-                // Challenge.pausedFlight's doc.
+                // A focused challenge's paused flight (its own row, not the Story slot below)
+                // drives Resume/Book here - so switching focus never shows a Resume button for a
+                // flight that belongs to a different mode/challenge. See Challenge.pausedFlight's
+                // doc. The Hub only ever shows Story Mode's own slot - Free Mode's paused flight
+                // (a fully separate slot, see PreferencesRepository.pausedFreeFlightStore) has
+                // its own Resume row on the Challenges screen instead.
                 _pausedFlight.value = if (focused != null) {
                     focused.pausedFlight
                 } else {
-                    preferencesRepository.pausedFlightStore.get()
+                    preferencesRepository.pausedFlightStore(FlightMode.STORY).get()
                 }
 
                 if (airport != null) {

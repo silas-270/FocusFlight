@@ -71,7 +71,7 @@ internal fun SortOrderButton(
 
 /**
  * Sort-order picker as a [ScrimCardModal] instead of an anchored `DropdownMenu` — this app's
- * one modal convention, matching `ReturnHomeConfirmModal`/`ChangeHomeBaseModal` in
+ * one modal convention, matching `ReturnHomeConfirmModal`/`WelcomeHomeModal` in
  * HomeBaseSection.kt rather than reintroducing Material3's DropdownMenu.
  */
 @Composable

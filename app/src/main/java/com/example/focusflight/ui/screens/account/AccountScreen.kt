@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.sp
 import androidx.paging.LoadState
 import androidx.paging.compose.collectAsLazyPagingItems
 import com.example.focusflight.data.model.AchievementStatus
+import com.example.focusflight.data.model.Airport
 import com.example.focusflight.data.model.FlightLog
 import com.example.focusflight.ui.components.BackTopAppBar
 import com.example.focusflight.ui.theme.Amber
@@ -55,7 +56,8 @@ import java.util.Locale
 @Composable
 fun AccountScreen(
     viewModel: AccountViewModel,
-    onBackClick: () -> Unit
+    onBackClick: () -> Unit,
+    onNavigateHome: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val lazyPagingItems = viewModel.pagedFlights.collectAsLazyPagingItems()
@@ -73,7 +75,13 @@ fun AccountScreen(
     // screen, same reasoning as every other ScrimCardModal use in this codebase.
     var showReturnHomeModal by remember { mutableStateOf(false) }
     var showReturningHomeModal by remember { mutableStateOf(false) }
-    var showChangeHomeBaseModal by remember { mutableStateOf(false) }
+    // Full screen rather than a ScrimCardModal overlay (see ChangeHomeBaseScreen's and
+    // HomeBaseCelebrationScreen's doc comments) - all three are drawn as the last siblings of the
+    // Box below so they cover the whole screen instead of sitting inside the Scaffold's content
+    // area. The two celebrations come last of all, since either can open on top of the picker.
+    var showChangeHomeBase by remember { mutableStateOf(false) }
+    var showWelcomeHome by remember { mutableStateOf(false) }
+    var homeBaseSetAirport by remember { mutableStateOf<Airport?>(null) }
     var showTravelMapModal by remember { mutableStateOf(false) }
     // Same ScrimCardModal convention for the sort-order picker, replacing the old inline
     // DropdownMenu — this app never uses DropdownMenu/AlertDialog/Dialog elsewhere.
@@ -131,7 +139,7 @@ fun AccountScreen(
                         expanded = heroExpanded,
                         onToggleExpanded = { heroExpanded = !heroExpanded },
                         onReturnHomeClick = { showReturnHomeModal = true },
-                        onChangeHomeBaseClick = { showChangeHomeBaseModal = true }
+                        onChangeHomeBaseClick = { showChangeHomeBase = true }
                     )
                 }
 
@@ -246,6 +254,7 @@ fun AccountScreen(
             onComplete = {
                 viewModel.returnHome()
                 showReturningHomeModal = false
+                showWelcomeHome = true
             }
         )
     }
@@ -265,20 +274,6 @@ fun AccountScreen(
         )
     }
 
-    if (showChangeHomeBaseModal) {
-        ChangeHomeBaseModal(
-            query = homeBaseSearchQuery,
-            onQueryChange = { viewModel.onHomeBaseSearchQueryChanged(it) },
-            results = homeBaseSearchResults,
-            suggestions = homeBaseSuggestions,
-            onAirportSelect = {
-                viewModel.changeHomeBase(it)
-                showChangeHomeBaseModal = false
-            },
-            onDismiss = { showChangeHomeBaseModal = false }
-        )
-    }
-
     if (showTravelMapModal) {
         val totalCountries = remember(uiState.mapPaths, uiState.countryToContinent) {
             val fromPaths = uiState.mapPaths.map { it.countryCode }.filter { it.isNotBlank() }.distinct().size
@@ -290,7 +285,65 @@ fun AccountScreen(
             onDismiss = { showTravelMapModal = false }
         )
     }
+
+    // Drawn last so it's the topmost sibling, fully covering everything above it.
+    if (showChangeHomeBase) {
+        ChangeHomeBaseScreen(
+            query = homeBaseSearchQuery,
+            onQueryChange = { viewModel.onHomeBaseSearchQueryChanged(it) },
+            results = homeBaseSearchResults,
+            suggestions = homeBaseSuggestions,
+            onAirportSelect = { airport ->
+                viewModel.changeHomeBase(airport)
+                showChangeHomeBase = false
+                homeBaseSetAirport = airport
+            },
+            onBackClick = { showChangeHomeBase = false }
+        )
     }
+
+    // ── Celebrations ─────────────────────────────────────────────────
+    // Topmost of all: either can open over the picker above, and both end the flow by handing the
+    // pilot back to the Hub rather than returning them here.
+    if (showWelcomeHome) {
+        val home = uiState.homeAirport
+        HomeBaseCelebrationScreen(
+            eyebrow = "WELCOME BACK",
+            iata = uiState.homeAirportIata,
+            airportName = home?.name.orEmpty(),
+            locationLine = locationLine(home?.municipality, home?.isoCountry),
+            onContinue = {
+                showWelcomeHome = false
+            },
+            inlineHero = { HomeBaseSetHero() }
+        )
+    }
+
+    homeBaseSetAirport?.let { airport ->
+        HomeBaseCelebrationScreen(
+            eyebrow = "HOME BASE SET",
+            iata = airport.iataCode,
+            airportName = airport.name,
+            locationLine = locationLine(airport.municipality, airport.isoCountry),
+            onContinue = {
+                homeBaseSetAirport = null
+            },
+            inlineHero = { HomeBaseSetHero() }
+        )
+    }
+    }
+}
+
+/** "MUNICH · GERMANY". [isoCountry] is a 2-letter code, and the app has no code-to-name table -
+ *  `Locale` already ships one, and falls back to blank for anything it doesn't recognise. */
+private fun locationLine(city: String?, isoCountry: String?): String {
+    val country = isoCountry
+        ?.takeIf { it.isNotBlank() }
+        ?.let { Locale("", it).getDisplayCountry(Locale.US) }
+        ?.takeIf { it.isNotBlank() }
+    return listOfNotNull(city?.takeIf { it.isNotBlank() }, country)
+        .joinToString(" · ")
+        .uppercase(Locale.US)
 }
 
 @Composable

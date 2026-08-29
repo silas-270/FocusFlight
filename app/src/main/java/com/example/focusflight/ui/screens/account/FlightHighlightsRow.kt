@@ -1,7 +1,6 @@
 package com.example.focusflight.ui.screens.account
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,9 +9,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.FlightTakeoff
 import androidx.compose.material3.Icon
@@ -25,10 +22,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontFamily
@@ -37,16 +32,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.focusflight.data.model.FlightHighlights
 import com.example.focusflight.data.model.FlightLog
+import com.example.focusflight.ui.components.WidgetCard
 import com.example.focusflight.ui.theme.Amber
-import com.example.focusflight.ui.theme.DeepNavy
-import com.example.focusflight.ui.theme.Green
+import com.example.focusflight.ui.theme.Bronze
 import com.example.focusflight.ui.theme.Haze
 import com.example.focusflight.ui.theme.OffWhite
 import com.example.focusflight.ui.theme.Slate
 import java.util.Locale
 import kotlin.math.floor
 
-private val equatorLapColors = listOf(Amber, Green)
+// Amber/Bronze instead of the old Amber/Green pairing - both warm gold-and-copper tones that sit
+// naturally in the leather-and-champagne palette, where Green read as a cool, out-of-place accent.
+private val equatorLapColors = listOf(Amber, Bronze)
 
 @Composable
 internal fun FlightHighlightsRow(highlights: FlightHighlights) {
@@ -73,14 +70,7 @@ internal fun FlightHighlightsRow(highlights: FlightHighlights) {
 
 @Composable
 private fun LongestFlightCard(flight: FlightLog?, modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(20.dp))
-            .background(
-                Brush.linearGradient(colors = listOf(Slate, DeepNavy))
-            )
-            .padding(16.dp)
-    ) {
+    WidgetCard(modifier = modifier) {
         Text(
             text = "LONGEST FLIGHT",
             style = MaterialTheme.typography.labelSmall.copy(
@@ -174,13 +164,7 @@ private fun AutoResizingMilesText(
 
 @Composable
 private fun EquatorProgressCard(ratio: Double, modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(20.dp))
-            .background(DeepNavy)
-            .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
+    WidgetCard(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
             text = "EQUATOR PROGRESS",
             style = MaterialTheme.typography.labelSmall.copy(

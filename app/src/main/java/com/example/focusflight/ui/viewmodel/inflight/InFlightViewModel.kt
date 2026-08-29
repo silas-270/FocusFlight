@@ -95,7 +95,7 @@ class InFlightViewModel(
         if (mode == FlightMode.CHALLENGE && challengeId != null) {
             challengeRepository.pausedFlightStore(challengeId)
         } else {
-            preferencesRepository.pausedFlightStore
+            preferencesRepository.pausedFlightStore(mode)
         }
 
     init {
