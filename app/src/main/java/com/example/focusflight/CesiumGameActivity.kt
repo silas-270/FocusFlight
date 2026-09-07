@@ -10,6 +10,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.ExperimentalComposeUiApi
 import com.example.focusflight.engine.live.CesiumEngineManager
 import androidx.compose.ui.Modifier
@@ -182,7 +183,7 @@ class CesiumGameActivity : GameActivity() {
         // Theme.FocusFlight.Starting (the branded splash) over to Theme.CesiumTheme (postSplashScreenTheme)
         // once the window is ready. GameActivity extends AppCompatActivity, so this ComponentActivity
         // extension applies the same as any other activity.
-        installSplashScreen()
+        val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
 
         // Keep screen on during flight
@@ -244,16 +245,27 @@ class CesiumGameActivity : GameActivity() {
             com.example.focusflight.ui.map.WorldMapParser.warm(applicationContext)
         }
 
-        val hasProfile = kotlinx.coroutines.runBlocking { userRepository.getProfile() != null }
-        if (!hasProfile && preferencesRepository.isOnboardingCompleted()) {
-            preferencesRepository.setOnboardingCompleted(false)
-        }
-
         val composeView = ComposeView(this).apply {
             setContent {
                 FocusFlightTheme {
+                    // Resolve the profile-exists check off the main thread instead of blocking
+                    // onCreate with runBlocking - the splash screen stays up (via
+                    // setKeepOnScreenCondition) until this resolves, so there's no flash of the
+                    // wrong start destination.
+                    val hasProfile by androidx.compose.runtime.produceState<Boolean?>(initialValue = null) {
+                        val profileExists = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            userRepository.getProfile() != null
+                        }
+                        if (!profileExists && preferencesRepository.isOnboardingCompleted()) {
+                            preferencesRepository.setOnboardingCompleted(false)
+                        }
+                        value = profileExists
+                    }
+                    splashScreen.setKeepOnScreenCondition { hasProfile == null }
+                    if (hasProfile == null) return@FocusFlightTheme
+
                     val navController = rememberNavController()
-                    val startDestination = if (preferencesRepository.isOnboardingCompleted() && hasProfile) {
+                    val startDestination = if (preferencesRepository.isOnboardingCompleted() && hasProfile == true) {
                         Screen.Hub.route
                     } else {
                         Screen.Onboarding.route
