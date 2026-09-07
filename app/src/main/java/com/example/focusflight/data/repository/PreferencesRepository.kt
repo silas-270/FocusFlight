@@ -22,7 +22,7 @@ class PreferencesRepository(private val prefs: SharedPreferences) {
         private const val KEY_PAUSED_FLIGHT = "paused_flight"
         private const val KEY_PAUSED_FREE_FLIGHT = "paused_free_flight"
 
-        // docs/design/story-mode.md's two distinct home-base cooldowns (see HomeBaseCooldown) -
+        // docs/modes.md's two distinct home-base cooldowns (see HomeBaseCooldown) -
         // deliberately two separate keys, not one, since the two actions' cooldowns reset
         // independently of each other.
         private const val KEY_LAST_RETURN_HOME_AT = "last_return_home_at"

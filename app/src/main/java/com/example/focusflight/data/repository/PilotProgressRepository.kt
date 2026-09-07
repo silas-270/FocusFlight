@@ -6,7 +6,10 @@ import com.example.focusflight.data.model.AchievementBoard
 import com.example.focusflight.data.model.FlightHighlights
 import com.example.focusflight.data.model.FlightLog
 import com.example.focusflight.data.model.FlightStats
+import com.example.focusflight.data.model.Tour
+import com.example.focusflight.data.model.TourSegmentation
 import com.example.focusflight.data.model.VisitedGeography
+import java.time.ZoneId
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -28,7 +31,10 @@ data class PilotProgress(
     val geography: VisitedGeography,
     val achievements: AchievementBoard,
     val stats: FlightStats,
-    val highlights: FlightHighlights
+    val highlights: FlightHighlights,
+    /** Newest tour first. Whether the first one is still running is a question for
+     *  [com.example.focusflight.data.model.isOpenAt], not a field here - see its doc. */
+    val tours: List<Tour>
 )
 
 /**
@@ -48,7 +54,7 @@ data class PilotProgress(
  * it cannot go stale unless Room itself is wrong, and there is no second writer that could
  * disagree with it. Discarding this object at any moment and rebuilding it would produce exactly
  * the same values, which is the test for whether something is a cache at all (see
- * STATE_OWNERSHIP.md).
+ * docs/state.md).
  *
  * Deliberately *not* keyed on the whole profile row: a username edit changes the profile but
  * cannot change any number derived here, so the key is narrowed to "does a profile exist, and what
@@ -63,7 +69,11 @@ class PilotProgressRepository(
     private val flightLogRepository: FlightLogRepository,
     private val airportRepository: AirportRepository,
     private val achievementsRepository: AchievementsRepository,
-    scope: CoroutineScope
+    scope: CoroutineScope,
+    /** The pilot's own calendar, for tour day boundaries. A parameter so tests can fix it - and
+     *  deliberately the *device* zone, not an airport's: `util/FlightClock.kt`'s per-airport
+     *  approximation answers "what time is it where I landed", which is a different question. */
+    private val zone: ZoneId = ZoneId.systemDefault()
 ) {
     /** The only inputs that can change a derived value. See the class doc. */
     private data class ProfileKey(val exists: Boolean, val homeIata: String?)
@@ -93,7 +103,7 @@ class PilotProgressRepository(
         return flightLogRepository.getFlightHistoryFlow().mapNotNull { history ->
             try {
                 compute(key.homeIata, history)
-            } catch (e: AirportDataException) {
+            } catch (e: Exception) {
                 Log.e(TAG, "Progress derivation failed; keeping previous snapshot", e)
                 null
             }
@@ -112,7 +122,9 @@ class PilotProgressRepository(
             geography = geography,
             achievements = achievements,
             stats = flightLogRepository.getFlightStats(homeIata),
-            highlights = flightLogRepository.getFlightHighlights()
+            highlights = flightLogRepository.getFlightHighlights(),
+            // A fold over `history`, which is already in hand - no query, and nothing persisted.
+            tours = TourSegmentation.segment(history, zone)
         )
     }
 

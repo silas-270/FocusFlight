@@ -25,7 +25,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 /**
- * Backs the Challenges screen (docs/design/challenges.md#entry--management-surface): the three
+ * Backs the Challenges screen (docs/challenges.md#entry--management-surface): the three
  * active-challenge slots, the completed-challenges log beneath them, the Achievements tab's
  * still-unearned list, and the start/abandon/custom-create flows. One instance is created per
  * composition of that screen - cheap, since it holds no flight/engine state.
@@ -178,6 +178,13 @@ class ChallengesViewModel(
         val name = "Custom Distance - ${formatKm(targetKm)}"
         viewModelScope.launch {
             _startResult.value = challengeRepository.startCustomDistanceChallenge(targetKm, name)
+        }
+    }
+
+    fun startCustomStreak(targetDays: Int) {
+        val name = "$targetDays-Day Streak"
+        viewModelScope.launch {
+            _startResult.value = challengeRepository.startCustomStreakChallenge(targetDays, name)
         }
     }
 

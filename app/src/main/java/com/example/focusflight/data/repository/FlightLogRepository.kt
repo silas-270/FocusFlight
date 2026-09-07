@@ -1,6 +1,5 @@
 package com.example.focusflight.data.repository
 
-import androidx.paging.PagingSource
 import com.example.focusflight.data.model.FlightLog
 import com.example.focusflight.data.model.FlightHighlights
 import com.example.focusflight.data.model.FlightMode
@@ -29,6 +28,5 @@ interface FlightLogRepository {
      * reading a profile field directly - null means "no home base yet", not "unknown".
      */
     suspend fun getFlightStats(homeAirportIata: String?): FlightStats
-    fun getFlightsPagingSource(sortOrder: FlightSortOrder): PagingSource<Int, FlightLog>
     suspend fun getFlightHighlights(): FlightHighlights
 }

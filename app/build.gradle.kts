@@ -1,9 +1,19 @@
 import java.io.File
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
+}
+
+// Untracked, gitignored dev-machine config (SDK paths etc.) - also where the Pexels API key for
+// the arrival-screen destination photo feature lives, so it never ends up in the repo.
+val localProperties = Properties().apply {
+    val localPropertiesFile = rootProject.file("local.properties")
+    if (localPropertiesFile.exists()) {
+        localPropertiesFile.inputStream().use { load(it) }
+    }
 }
 
 android {
@@ -18,6 +28,12 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        buildConfigField(
+            "String",
+            "PEXELS_API_KEY",
+            "\"${localProperties.getProperty("PEXELS_API_KEY", "")}\""
+        )
     }
 
     buildTypes {
@@ -36,6 +52,7 @@ android {
     buildFeatures {
         compose = true
         prefab = true
+        buildConfig = true
     }
     packaging {
         jniLibs {
@@ -48,6 +65,15 @@ android {
     testOptions {
         unitTests {
             isReturnDefaultValues = true
+        }
+    }
+    sourceSets {
+        // Ships the exported Room schemas (see the `ksp` block below) inside the androidTest APK.
+        // `MigrationTestHelper` loads the *old* version's JSON from assets at runtime, so without
+        // this every test in MigrationTest fails with "Cannot find the schema file in the assets
+        // folder" - which is to say the migrations look verified and are not.
+        getByName("androidTest") {
+            assets.srcDirs(files("$projectDir/schemas"))
         }
     }
 }
@@ -142,6 +168,13 @@ tasks.named("preBuild") {
     dependsOn("cargoNdkBuild")
 }
 
+// Room writes one JSON schema per version here, and MigrationTest validates migrations against
+// them. These files are committed: a migration can only be tested against the schema it migrates
+// *from*, so deleting an old version's JSON makes that migration permanently unverifiable.
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 dependencies {
     implementation("net.java.dev.jna:jna:5.14.0@aar")
     implementation("androidx.games:games-activity:3.0.4")
@@ -164,6 +197,7 @@ dependencies {
     implementation("io.coil-kt.coil3:coil-svg:3.0.4")
     implementation("androidx.webkit:webkit:1.11.0")
     implementation(libs.gson)
+    implementation(libs.okhttp)
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
     implementation(libs.room.paging)
@@ -172,6 +206,7 @@ dependencies {
     implementation(libs.paging.compose)
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+    androidTestImplementation(libs.room.testing)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.espresso.core)

@@ -1,6 +1,5 @@
 package com.example.focusflight.data.local
 
-import androidx.paging.PagingSource
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.Query
@@ -34,7 +33,7 @@ interface FlightLogDao {
      * ever appears as a destination here.
      *
      * The mode filter is the whole point: the visited-set is STORY-only (the isolation matrix in
-     * docs/design/mechanics.md), and the Passport's visited-country map and Geographic
+     * docs/modes.md), and the Passport's visited-country map and Geographic
      * achievements both come from `AirportRepository.getVisitedGeography`, which filters the same
      * way. A mode-blind count let a Free Mode or Challenge flight raise the "places visited"
      * number sitting right next to a map that had not changed at all.
@@ -51,23 +50,6 @@ interface FlightLogDao {
           AND (:homeIata IS NULL OR dest_iata <> :homeIata)
     """)
     suspend fun getDistinctDestinationsInMode(userId: Int, mode: FlightMode, homeIata: String?): Int
-
-    // ── Paged queries (one per sort order — Room requires static SQL) ──────
-
-    @Query("SELECT * FROM flight_log WHERE user_id = :userId ORDER BY completed_at DESC")
-    fun getFlightsPagedDateDesc(userId: Int): PagingSource<Int, FlightLog>
-
-    @Query("SELECT * FROM flight_log WHERE user_id = :userId ORDER BY completed_at ASC")
-    fun getFlightsPagedDateAsc(userId: Int): PagingSource<Int, FlightLog>
-
-    @Query("SELECT * FROM flight_log WHERE user_id = :userId ORDER BY distance_km DESC")
-    fun getFlightsPagedDistanceDesc(userId: Int): PagingSource<Int, FlightLog>
-
-    @Query("SELECT * FROM flight_log WHERE user_id = :userId ORDER BY distance_km ASC")
-    fun getFlightsPagedDistanceAsc(userId: Int): PagingSource<Int, FlightLog>
-
-    @Query("SELECT * FROM flight_log WHERE user_id = :userId ORDER BY duration_min DESC")
-    fun getFlightsPagedDurationDesc(userId: Int): PagingSource<Int, FlightLog>
 
     // ── Highlight aggregate queries ────────────────────────────────────────
 

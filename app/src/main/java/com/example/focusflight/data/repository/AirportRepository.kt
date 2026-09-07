@@ -28,7 +28,7 @@ interface AirportRepository {
      * each re-deriving it from [getCountriesForAirports]/[getContinentCountryMap] independently.
      *
      * Only STORY-tagged flights count toward the visited-set (see the isolation matrix in
-     * docs/design/mechanics.md) - filtered here, once, so both callers stay correct without
+     * docs/modes.md) - filtered here, once, so both callers stay correct without
      * needing their own STORY-only filtering as FREE/CHALLENGE flights start getting logged.
      */
     fun getVisitedGeography(flightHistory: List<FlightLog>, homeAirportIata: String?): VisitedGeography {

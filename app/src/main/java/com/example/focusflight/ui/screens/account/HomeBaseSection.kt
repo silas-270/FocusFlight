@@ -39,7 +39,7 @@ import com.example.focusflight.ui.theme.Spacing
 import com.example.focusflight.ui.viewmodel.account.AccountUiState
 
 /**
- * Story Mode's home-base actions (docs/design/story-mode.md) - return home, and change where home
+ * Story Mode's home-base actions (docs/modes.md) - return home, and change where home
  * is. They live on the Passport rather than the Challenges screen because neither is a *session*:
  * return-home is an instant teleport, and changing home base is an identity edit.
  *

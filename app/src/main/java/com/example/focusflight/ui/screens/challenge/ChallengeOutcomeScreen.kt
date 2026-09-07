@@ -49,7 +49,7 @@ import androidx.compose.ui.unit.sp
 import com.example.focusflight.data.repository.ChallengeOutcome
 import com.example.focusflight.ui.components.CaptionLabel
 import com.example.focusflight.ui.components.ChallengeProgressBar
-import com.example.focusflight.ui.components.challengeTypeIcon
+import com.example.focusflight.ui.components.challengeIcon
 import com.example.focusflight.ui.components.challengeTypeLabel
 import com.example.focusflight.ui.theme.Amber
 import com.example.focusflight.ui.theme.Border
@@ -69,7 +69,7 @@ private const val CompleteDurationMs = 1200
 private const val StartBeatMs = 250
 
 /**
- * The post-landing challenge beat (docs/design/challenges.md's "Per-leg progress feedback" and
+ * The post-landing challenge beat (docs/challenges.md's "Per-leg progress feedback" and
  * "Completion celebration") - shown after the existing rank-stamp `ArrivalCelebrationScreen`,
  * never instead of it, whenever this landing changed one or more active challenges. Replaces what
  * used to be two separate screens (a single-bar tick-up screen and a single-bar completion
@@ -188,7 +188,7 @@ private fun ChallengeOutcomeRow(outcome: ChallengeOutcome, animateIn: Boolean) {
     Column {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(
-                imageVector = challengeTypeIcon(outcome.type),
+                imageVector = challengeIcon(outcome.type, outcome.iconName),
                 contentDescription = null,
                 tint = barColor,
                 modifier = Modifier.size(20.dp)

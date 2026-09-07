@@ -5,6 +5,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.focusflight.data.model.Challenge
 import com.example.focusflight.data.model.ChallengeType
+import com.example.focusflight.data.model.predefinedRoute
 import com.example.focusflight.data.model.progressFraction
 import com.example.focusflight.ui.components.ModalButtonRow
 import com.example.focusflight.ui.components.ModalTitle
@@ -26,18 +27,32 @@ import androidx.compose.foundation.layout.Spacer
  * challenges can share them too.
  */
 
-/** "STR → PEK · 47%" / "3/7 visited · 43%" / "4,200 km / 10,000 km", by type. */
+/** "STR → PEK" / "3/7 visited" / "4,200 km / 10,000 km" / "2 of 4 days", by type. */
 internal fun challengeSubtitle(challenge: Challenge): String {
-    val pct = (challenge.progressFraction() * 100).toInt()
     return when (challenge.type) {
-        ChallengeType.ROUTE -> "${challenge.positionIata ?: "?"} → ${challenge.destIata ?: "?"} · $pct%"
-        ChallengeType.SET_COMPLETION -> "${challenge.visitedSetMembers.size}/${challenge.setTotalMembers} visited · $pct%"
+        // A predefined itinerary names the leg as well as its endpoints: on a circuit the endpoint
+        // pair alone can read as "LHR → LHR", which says nothing about how far along you are.
+        ChallengeType.ROUTE -> {
+            val hop = "${challenge.positionIata ?: "?"} → ${nextStop(challenge) ?: "?"}"
+            challenge.predefinedRoute()
+                ?.let { "$hop · leg ${challenge.legIndex + 1}/${it.legCount}" }
+                ?: hop
+        }
+        ChallengeType.SET_COMPLETION -> "${challenge.visitedSetMembers.size}/${challenge.setTotalMembers} visited"
         ChallengeType.DISTANCE -> {
             val target = challenge.targetDistanceKm ?: 0.0
             "${formatKm(challenge.cumulativeDistanceKm)} / ${formatKm(target)}"
         }
+        // Days rather than a percentage: with a target of 3-5, "2 of 4 days" is both shorter and
+        // more actionable than "50%", and the streak reads as a count everywhere else too.
+        ChallengeType.STREAK -> "${challenge.streakDays} of ${challenge.targetDays ?: 0} days"
     }
 }
+
+/** Where the challenge's next flight is headed - the itinerary's next waypoint for a predefined
+ *  route, the final destination for a free-form one (which is free to get there any way it likes). */
+private fun nextStop(challenge: Challenge): String? =
+    challenge.predefinedRoute()?.destOf(challenge.legIndex) ?: challenge.destIata
 
 /**
  * Shown before a Free Mode flight, since the flight looks exactly like a Story Mode one from the
@@ -84,7 +99,8 @@ internal fun AbandonConfirmModal(challenge: Challenge, onConfirm: () -> Unit, on
             dismissText = "KEEP IT",
             confirmText = "ABANDON",
             onDismiss = onDismiss,
-            onConfirm = onConfirm
+            onConfirm = onConfirm,
+            isDestructive = true
         )
     }
 }

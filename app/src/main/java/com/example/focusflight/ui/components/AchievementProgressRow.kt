@@ -23,6 +23,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.focusflight.data.model.AchievementCategory
 import com.example.focusflight.data.model.AchievementStatus
 import com.example.focusflight.ui.theme.Amber
 import com.example.focusflight.ui.theme.Green
@@ -108,6 +109,19 @@ fun AchievementProgressRow(
 
         ChallengeProgressBar(progress = animatedProgress, fillColor = barColor)
     }
+}
+
+/**
+ * The display name for an achievement's strict category, used both as a section header on the
+ * Challenges screen's Achievements tab and as the title of a Passport ladder stack.
+ *
+ * Shared here rather than duplicated on each surface so the two can never disagree about what a
+ * category is called.
+ */
+fun achievementCategoryLabel(category: AchievementCategory): String = when (category) {
+    AchievementCategory.GEOGRAPHIC -> "GEOGRAPHIC"
+    AchievementCategory.DISTANCE -> "DISTANCE MILESTONES"
+    AchievementCategory.BEHAVIORAL -> "BEHAVIORAL"
 }
 
 /**

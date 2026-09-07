@@ -10,6 +10,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.Color
 import com.example.focusflight.ui.theme.Slate
 
 /**
@@ -27,18 +28,23 @@ import com.example.focusflight.ui.theme.Slate
  * card's own fill, so it has to contrast with Slate as well as with the page behind it, and `Border`
  * is darker than Slate (about 1.09:1 against it - effectively invisible). Translucent Amber reads
  * against both, and matches the accent-hairline treatment `ArrivalCelebrationScreen` already uses.
+ *
+ * [containerColor] defaults to Slate, which is what a card inside a `ScrimCardModal` needs to stay
+ * visible against that modal's DeepNavy surface. A card sitting directly on the Passport page can
+ * pass DeepNavy instead, to match the hero card at the top of that screen.
  */
 @Composable
 fun WidgetCard(
     modifier: Modifier = Modifier,
     horizontalAlignment: Alignment.Horizontal = Alignment.Start,
+    containerColor: Color = Slate,
     content: @Composable ColumnScope.() -> Unit
 ) {
     val shape = RoundedCornerShape(20.dp)
     Column(
         modifier = modifier
             .clip(shape)
-            .background(Slate)
+            .background(containerColor)
             .padding(16.dp),
         horizontalAlignment = horizontalAlignment,
         content = content

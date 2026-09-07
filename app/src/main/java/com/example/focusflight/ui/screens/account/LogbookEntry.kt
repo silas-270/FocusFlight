@@ -106,7 +106,7 @@ internal val LogbookMarginRed = com.example.focusflight.ui.theme.LogbookMarginRe
  * The logbook's paper-card chrome — parchment texture, ruled lines, red margin line, and the
  * numbered margin stamp — factored out of what was originally [LogbookEntry]'s entire body so a
  * second log (the Achievements screen's "Challenges completed" log, modeled on this one per
- * docs/design/achievements.md) can render as the same physical logbook instead of re-implementing
+ * docs/achievements.md) can render as the same physical logbook instead of re-implementing
  * this Canvas work or inventing a second visual language. [content] fills the row to the right of
  * the margin stamp, e.g. [LogbookEntry]'s three data rows or `ChallengeCompletionEntry`'s own.
  */

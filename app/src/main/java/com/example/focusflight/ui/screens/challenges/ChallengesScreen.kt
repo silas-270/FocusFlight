@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -45,9 +46,14 @@ import com.example.focusflight.data.model.ChallengeType
 import com.example.focusflight.data.model.PausedFlight
 import com.example.focusflight.data.repository.MAX_ACTIVE_CHALLENGES
 import com.example.focusflight.data.repository.StartChallengeResult
+import com.example.focusflight.data.model.AchievementCategory
+import com.example.focusflight.data.model.AchievementStatus
+import com.example.focusflight.ui.components.AchievementDetailModal
 import com.example.focusflight.ui.components.AchievementProgressRow
+import com.example.focusflight.ui.components.achievementCategoryLabel
 import com.example.focusflight.ui.components.BackTopAppBar
 import com.example.focusflight.ui.components.CaptionLabel
+import com.example.focusflight.ui.components.DiscardFlightConfirmModal
 import com.example.focusflight.ui.screens.account.ChallengeCompletionEntry
 import com.example.focusflight.ui.theme.Amber
 import com.example.focusflight.ui.theme.Border
@@ -80,7 +86,6 @@ fun ChallengesScreen(
     onResumeFreeFlight: (flight: PausedFlight) -> Unit,
     onContinueRouteChallenge: (challengeId: Int) -> Unit,
     onResumeRouteChallenge: (challenge: Challenge) -> Unit,
-    onCreateCustomClick: () -> Unit,
     onChallengeStarted: () -> Unit
 ) {
     val activeChallenges by viewModel.activeChallenges.collectAsState()
@@ -95,6 +100,10 @@ fun ChallengesScreen(
     var infoChallenge by remember { mutableStateOf<Challenge?>(null) }
     var pendingAbandon by remember { mutableStateOf<Challenge?>(null) }
     var showFreeModeNotice by remember { mutableStateOf(false) }
+    var discardFreeFlightTarget by remember { mutableStateOf<PausedFlight?>(null) }
+    // Hoisted here, not inside the tab's item block: a ScrimCardModal opened from inside a
+    // LazyColumn item is clipped to that item, so it has to be a sibling of the Scaffold.
+    var detailAchievement by remember { mutableStateOf<AchievementStatus?>(null) }
 
     // A successful start just fills a slot - close the picker and let the slot row update. A
     // Route challenge additionally takes over the Hub's focus (already set by the ViewModel), so
@@ -137,7 +146,13 @@ fun ChallengesScreen(
                 item {
                     FreeModeRow(
                         pausedFlight = pausedFreeFlight,
-                        onClick = { showFreeModeNotice = true },
+                        onClick = {
+                            if (pausedFreeFlight != null) {
+                                discardFreeFlightTarget = pausedFreeFlight
+                            } else {
+                                showFreeModeNotice = true
+                            }
+                        },
                         onResumeClick = { pausedFreeFlight?.let(onResumeFreeFlight) }
                     )
                 }
@@ -180,23 +195,37 @@ fun ChallengesScreen(
                         if (unfinishedAchievements.isEmpty()) {
                             item { EmptyLine("Every achievement earned. Check your Passport.") }
                         } else {
-                            itemsIndexed(
-                                items = unfinishedAchievements,
-                                key = { _, achievement -> achievement.id }
-                            ) { _, achievement ->
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(16.dp))
-                                        .background(DeepNavy)
-                                        .padding(Spacing.Medium)
-                                ) {
-                                    // Everything on this tab is unearned by construction, so the
-                                    // "DONE" pill and locked/unlocked dot would be dead pixels.
-                                    AchievementProgressRow(
-                                        achievement = achievement,
-                                        showUnlockedCues = false
-                                    )
+                            // Grouped by strict category, iterating the enum rather than the data
+                            // so the section order is fixed and a category can't reorder itself
+                            // out from under the pilot as its contents change. Within a section the
+                            // ViewModel's closest-to-done ordering is preserved untouched.
+                            AchievementCategory.entries.forEach { category ->
+                                val inCategory = unfinishedAchievements.filter { it.category == category }
+                                if (inCategory.isEmpty()) return@forEach
+
+                                item(key = "header_${category.name}") {
+                                    CaptionLabel(text = achievementCategoryLabel(category))
+                                }
+                                items(
+                                    items = inCategory,
+                                    key = { achievement -> achievement.id }
+                                ) { achievement ->
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(16.dp))
+                                            .background(DeepNavy)
+                                            .clickable { detailAchievement = achievement }
+                                            .padding(Spacing.Medium)
+                                    ) {
+                                        // Everything on this tab is unearned by construction, so
+                                        // the "DONE" pill and locked/unlocked dot would be dead
+                                        // pixels.
+                                        AchievementProgressRow(
+                                            achievement = achievement,
+                                            showUnlockedCues = false
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -217,12 +246,15 @@ fun ChallengesScreen(
 
         if (showPicker) {
             ChallengePickerModal(
-                onStartCurated = viewModel::startCurated,
-                onCreateCustomClick = {
-                    showPicker = false
-                    onCreateCustomClick()
-                },
+                viewModel = viewModel,
                 onDismiss = { showPicker = false }
+            )
+        }
+
+        detailAchievement?.let { achievement ->
+            AchievementDetailModal(
+                achievement = achievement,
+                onDismiss = { detailAchievement = null }
             )
         }
 
@@ -232,9 +264,6 @@ fun ChallengesScreen(
                 isFocused = challenge.id == focusedChallengeId,
                 onContinue = {
                     infoChallenge = null
-                    // Focuses the Hub on this challenge, then jumps straight into either the
-                    // flight this challenge already has paused (never strand it behind a fresh
-                    // search) or a new scoped flight-search session - no confirm step either way.
                     viewModel.focusRouteChallenge(challenge.id)
                     if (challenge.pausedFlight != null) {
                         onResumeRouteChallenge(challenge)
@@ -251,6 +280,17 @@ fun ChallengesScreen(
                     pendingAbandon = challenge
                 },
                 onDismiss = { infoChallenge = null }
+            )
+        }
+
+        discardFreeFlightTarget?.let { flight ->
+            DiscardFlightConfirmModal(
+                flight = flight,
+                onConfirm = {
+                    discardFreeFlightTarget = null
+                    showFreeModeNotice = true
+                },
+                onDismiss = { discardFreeFlightTarget = null }
             )
         }
 

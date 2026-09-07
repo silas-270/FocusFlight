@@ -23,10 +23,10 @@ import com.example.focusflight.data.model.AchievementStatus
  * of a crash or a blank square.
  */
 internal fun achievementIcon(id: String, category: AchievementCategory): ImageVector = when (id) {
-    AchievementProgress.FIRST_FLIGHT_ID -> Icons.Outlined.FlightTakeoff
     AchievementProgress.RED_EYE_ID -> Icons.Outlined.DarkMode
     AchievementProgress.MARATHON_ID -> Icons.Outlined.Schedule
-    AchievementProgress.GRAND_VOYAGE_ID -> Icons.Outlined.Public
+    AchievementProgress.HIGH_ALTITUDE_ID -> Icons.Outlined.FlightTakeoff
+    AchievementProgress.EQUATOR_CROSSING_ID -> Icons.Outlined.Public
     else -> when {
         id.startsWith("geo_") && id.contains("countries") -> Icons.Outlined.Flag
         id.startsWith("geo_") && id.contains("continents") -> Icons.Outlined.Public

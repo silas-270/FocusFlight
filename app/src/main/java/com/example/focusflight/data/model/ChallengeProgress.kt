@@ -1,12 +1,13 @@
 package com.example.focusflight.data.model
 
+import java.time.LocalDate
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
- * Pure progress math for docs/design/challenges.md's three types - no Room/AirportRepository/JNI
+ * Pure progress math for docs/challenges.md's three types - no Room/AirportRepository/JNI
  * dependency, so it's directly unit-testable (see ChallengeProgressTest) independent of the
  * repository layer that calls into it.
  */
@@ -26,7 +27,7 @@ object ChallengeProgress {
     }
 
     /**
-     * docs/design/challenges.md's Route progress formula:
+     * docs/challenges.md's Route progress formula:
      *
      * ```
      * progress = 1 - ( straight_line(current, destination) / straight_line(origin, destination) )
@@ -57,11 +58,78 @@ object ChallengeProgress {
  * entity field-scanning never mistakes it for a column.
  */
 fun Challenge.progressFraction(): Float = when (type) {
-    ChallengeType.ROUTE -> routeProgressFraction
+    // A predefined route is scored by kilometres flown along its itinerary, not by the
+    // straight-line proxy - that is the whole point of the submode (see PredefinedRoute.progressAt).
+    // Derived here rather than trusted from the cached column so a catalog edit that changes an
+    // itinerary can never leave a live challenge reporting against legs or distances that no longer
+    // exist.
+    ChallengeType.ROUTE -> predefinedRoute()
+        ?.takeIf { it.legCount > 0 }
+        ?.progressAt(legIndex)
+        ?: routeProgressFraction
     ChallengeType.SET_COMPLETION ->
         if (setTotalMembers > 0) (visitedSetMembers.size.toFloat() / setTotalMembers).coerceIn(0f, 1f) else 0f
     ChallengeType.DISTANCE ->
         targetDistanceKm?.takeIf { it > 0 }
             ?.let { (cumulativeDistanceKm / it).toFloat().coerceIn(0f, 1f) }
             ?: 0f
+    ChallengeType.STREAK ->
+        targetDays?.takeIf { it > 0 }
+            ?.let { (streakDays.toFloat() / it).coerceIn(0f, 1f) }
+            ?: 0f
+}
+
+/**
+ * The streak as of [today], which is not always what [Challenge.streakDays] says.
+ *
+ * The row records the past: the last day a flight was credited, and how long the run was as of
+ * that day. Whether the run is still alive is a question about *today*, and nothing runs at
+ * midnight to answer it - so a pilot who flew Monday and Tuesday and then skipped Wednesday still
+ * has `streakDays = 2` sitting in the database on Thursday. This is where that gets resolved: a
+ * run is alive only if its last day was today (already flown) or yesterday (still time to keep
+ * it), and is otherwise dead at zero.
+ *
+ * Callers should not need to reach for this directly - `LocalChallengeRepository` applies it on
+ * the way out of the database so everything downstream sees an already-correct row.
+ */
+fun Challenge.currentStreak(today: LocalDate): Int =
+    lastFlownDay
+        ?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+        // `>=` rather than "is today or yesterday": a last-flown day *ahead* of today is not
+        // stale, whatever else it is. That happens on a device clock moved backwards or a
+        // timezone shift westward, and zeroing a live streak over it would destroy real progress
+        // to punish a condition the pilot did not cause.
+        ?.takeIf { !it.isBefore(today.minusDays(1)) }
+        ?.let { streakDays }
+        ?: 0
+
+/**
+ * This row with its streak resolved against [today]. A no-op for every other type.
+ *
+ * The returned [Challenge] deliberately differs from what is stored - it is the same facts read
+ * through the clock. The stored row catches up on the next credited flight.
+ *
+ * Completed challenges are left alone: a finished streak's [Challenge.streakDays] is the final
+ * score, not a live count, and decaying it afterwards would rewrite history in the completed log.
+ */
+fun Challenge.withStreakEvaluatedAt(today: LocalDate): Challenge =
+    if (type != ChallengeType.STREAK || status != ChallengeStatus.ACTIVE) this
+    else currentStreak(today).let { if (it == streakDays) this else copy(streakDays = it) }
+
+/**
+ * Resolves the member checklist for a Set Completion challenge.
+ * Returns null if the challenge is not a Set Completion challenge or its set definition is unknown.
+ */
+fun Challenge.resolveSetMemberProgress(): List<SetMemberProgress>? {
+    if (type != ChallengeType.SET_COMPLETION) return null
+    val definition = setCatalogId?.let { CuratedChallengeSets.find(it) } ?: return null
+    return definition.memberItems
+        .map { member ->
+            SetMemberProgress(
+                id = member.id,
+                displayName = member.displayName,
+                isVisited = visitedSetMembers.contains(member.id)
+            )
+        }
+        .visitedFirst()
 }

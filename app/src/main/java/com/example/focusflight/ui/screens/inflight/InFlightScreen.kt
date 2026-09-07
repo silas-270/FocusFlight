@@ -544,8 +544,8 @@ fun InFlightScreen(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Debug: jump straight to landing. Still scaffolding - see TODO.md's
-                    // "Debug/scaffolding to remove". Restored because the challenge
+                    // Debug: jump straight to landing. Still scaffolding - see
+                    // DEV_FEATURES_TO_REVERT.md. Restored because the challenge
                     // advance/completion beats are otherwise only reachable by sitting
                     // through a real 30-minute-plus session.
                     SkipFlightDebugButton(viewModel)
@@ -1518,7 +1518,7 @@ private fun Modifier.glassSurface(shape: Shape): Modifier = this
 
 // Debug affordance, wired into the HUD top bar. Jumps straight to the landing pipeline so the
 // post-flight beats (rank stamp, challenge tick-up, challenge completion) can be exercised
-// without sitting through a real session. Must go before shipping - see TODO.md.
+// without sitting through a real session. Must go before shipping - see DEV_FEATURES_TO_REVERT.md.
 @Composable
 private fun SkipFlightDebugButton(viewModel: InFlightViewModel) {
     Box(

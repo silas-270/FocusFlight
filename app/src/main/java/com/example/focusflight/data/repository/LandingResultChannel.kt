@@ -9,7 +9,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * What docs/design/mechanics.md's post-landing pipeline step 4 found for the just-landed flight,
+ * What docs/core-loop.md's post-landing pipeline step 4 found for the just-landed flight,
  * as far as challenges are concerned - the second beat of step 5's "always sequenced, never
  * replaced" landing sequence (the existing rank-stamp `ArrivalCelebrationScreen` always shows
  * first, unchanged; this is what decides whether anything follows it).
@@ -51,20 +51,23 @@ sealed interface ChallengeOutcome {
     val challengeId: Int
     val name: String
     val type: ChallengeType
+    val iconName: String?
 
     data class Advanced(
         override val challengeId: Int,
         override val name: String,
         override val type: ChallengeType,
         val oldProgress: Float,
-        val newProgress: Float
+        val newProgress: Float,
+        override val iconName: String? = null
     ) : ChallengeOutcome
 
     data class Completed(
         override val challengeId: Int,
         override val name: String,
         override val type: ChallengeType,
-        val oldProgress: Float
+        val oldProgress: Float,
+        override val iconName: String? = null
     ) : ChallengeOutcome
 }
 
@@ -95,13 +98,13 @@ fun resolveLandingOutcome(before: List<Challenge>, after: List<Challenge>): Land
         val oldProgress = old.progressFraction()
 
         if (old.status == ChallengeStatus.ACTIVE && new.status == ChallengeStatus.COMPLETED) {
-            outcomes += ChallengeOutcome.Completed(new.id, new.name, new.type, oldProgress)
+            outcomes += ChallengeOutcome.Completed(new.id, new.name, new.type, oldProgress, new.iconName)
             continue
         }
 
         val newProgress = new.progressFraction()
         if (newProgress != oldProgress) {
-            outcomes += ChallengeOutcome.Advanced(new.id, new.name, new.type, oldProgress, newProgress)
+            outcomes += ChallengeOutcome.Advanced(new.id, new.name, new.type, oldProgress, newProgress, new.iconName)
         }
     }
 

@@ -42,9 +42,12 @@ import com.example.focusflight.data.repository.AchievementsRepository
 import com.example.focusflight.data.repository.AirportRepository
 import com.example.focusflight.data.repository.ChallengeOutcome
 import com.example.focusflight.data.repository.ChallengeRepository
+import com.example.focusflight.data.repository.DestinationPhotoChannel
+import com.example.focusflight.data.repository.DestinationPhotoRepository
 import com.example.focusflight.data.repository.LocalAchievementsRepository
 import com.example.focusflight.data.repository.LandingResult
 import com.example.focusflight.data.repository.LandingResultChannel
+import com.example.focusflight.data.repository.PexelsDestinationPhotoRepository
 import com.example.focusflight.data.repository.LocalAirportRepository
 import com.example.focusflight.data.repository.LocalChallengeRepository
 import com.example.focusflight.data.repository.FlightLogRepository
@@ -53,6 +56,8 @@ import com.example.focusflight.data.repository.LocalUserRepository
 import com.example.focusflight.data.repository.PilotProgressRepository
 import com.example.focusflight.data.repository.PreferencesRepository
 import com.example.focusflight.data.repository.UserRepository
+import com.example.focusflight.domain.flightNumberFor
+import com.example.focusflight.domain.resolveNextLeg
 import com.example.focusflight.engine.live.CesiumLiveJniBridge
 import com.example.focusflight.engine.live.PendingFlightLoader
 import com.example.focusflight.ui.Screen
@@ -105,6 +110,40 @@ private suspend fun resumeFlight(
 }
 
 /**
+ * Sends the pilot into the next flight of Route challenge [challengeId].
+ *
+ * Two different journeys behind one button. A free-form Route challenge has a real decision left -
+ * which onward flight gets it closer - so it goes to Flight Search scoped to that challenge, as it
+ * always has. A predefined-itinerary challenge does not: its next hop is authored, so
+ * [resolveNextLeg] books it directly and this drops straight onto the boarding card, skipping a
+ * destination picker that would have exactly one correct answer.
+ *
+ * The null return from [resolveNextLeg] is what distinguishes the two - the free-form path is
+ * reached by falling through, not by re-deriving which kind of challenge this is.
+ */
+private suspend fun continueRouteChallenge(
+    navController: NavHostController,
+    pendingFlightLoader: PendingFlightLoader,
+    challengeRepository: ChallengeRepository,
+    airportRepository: AirportRepository,
+    challengeId: Int
+) {
+    val leg = withContext(Dispatchers.IO) {
+        resolveNextLeg(challengeRepository, airportRepository, challengeId)
+    }
+    if (leg == null) {
+        navController.navigate(Screen.FlightSearch.createRoute(FlightMode.CHALLENGE, challengeId))
+        return
+    }
+    withContext(Dispatchers.IO) {
+        pendingFlightLoader.loadPendingFlight(leg.originIata, leg.destIata, leg.durationMin)
+    }
+    navController.navigate(
+        Screen.CheckIn.createRoute(leg.originIata, leg.flightNumber, leg.destIata, leg.durationMin, FlightMode.CHALLENGE, challengeId)
+    )
+}
+
+/**
  * How long the arrival screen will wait for the post-landing challenge check before giving up and
  * sending the pilot to the Hub anyway. Generous on purpose - it exists to bound a pathological
  * case, not to race a healthy check, which resolves in well under this on any device.
@@ -131,6 +170,12 @@ class CesiumGameActivity : GameActivity() {
     // no Activity/context dependency, so - unlike the repositories above - it's constructed
     // directly here rather than in onCreate.
     private val landingResultChannel = LandingResultChannel()
+
+    // Bridges the arrival screen's prefetched destination photo across the same navigation hop,
+    // for the same reason (see DestinationPhotoChannel's doc) - also needs no Activity/context
+    // dependency to construct, unlike the repositories above.
+    private val destinationPhotoChannel = DestinationPhotoChannel()
+    private val destinationPhotoRepository: DestinationPhotoRepository = PexelsDestinationPhotoRepository()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // Must run before super.onCreate() - it's what swaps the manifest's
@@ -199,11 +244,16 @@ class CesiumGameActivity : GameActivity() {
             com.example.focusflight.ui.map.WorldMapParser.warm(applicationContext)
         }
 
+        val hasProfile = kotlinx.coroutines.runBlocking { userRepository.getProfile() != null }
+        if (!hasProfile && preferencesRepository.isOnboardingCompleted()) {
+            preferencesRepository.setOnboardingCompleted(false)
+        }
+
         val composeView = ComposeView(this).apply {
             setContent {
                 FocusFlightTheme {
                     val navController = rememberNavController()
-                    val startDestination = if (preferencesRepository.isOnboardingCompleted()) {
+                    val startDestination = if (preferencesRepository.isOnboardingCompleted() && hasProfile) {
                         Screen.Hub.route
                     } else {
                         Screen.Onboarding.route
@@ -306,7 +356,9 @@ class CesiumGameActivity : GameActivity() {
                                         navController.navigate(Screen.Account.route)
                                     },
                                     onContinueChallengeClick = { challengeId ->
-                                        navController.navigate(Screen.FlightSearch.createRoute(FlightMode.CHALLENGE, challengeId))
+                                        coroutineScope.launch {
+                                            continueRouteChallenge(navController, pendingFlightLoader, challengeRepository, airportRepository, challengeId)
+                                        }
                                     }
                                 )
                             }
@@ -330,10 +382,13 @@ class CesiumGameActivity : GameActivity() {
                                         coroutineScope.launch { resumeFlight(navController, pendingFlightLoader, flight) }
                                     },
                                     onContinueRouteChallenge = { challengeId ->
-                                        // Same booking flow Story Mode's "Book a flight" uses, just tagged
-                                        // CHALLENGE and scoped to this challenge's own position pointer. See
-                                        // docs/design/challenges.md#persistence--route-scoping.
-                                        navController.navigate(Screen.FlightSearch.createRoute(FlightMode.CHALLENGE, challengeId))
+                                        // Free-form: the same booking flow Story Mode's "Book a flight" uses,
+                                        // just tagged CHALLENGE and scoped to this challenge's own position
+                                        // pointer. Predefined itinerary: straight to the boarding card with
+                                        // the authored next leg already filled in. See continueRouteChallenge.
+                                        coroutineScope.launch {
+                                            continueRouteChallenge(navController, pendingFlightLoader, challengeRepository, airportRepository, challengeId)
+                                        }
                                     },
                                     onResumeRouteChallenge = { challenge ->
                                         // This challenge already has its own paused flight (see
@@ -345,38 +400,11 @@ class CesiumGameActivity : GameActivity() {
                                             coroutineScope.launch { resumeFlight(navController, pendingFlightLoader, flight) }
                                         }
                                     },
-                                    onCreateCustomClick = {
-                                        navController.navigate(Screen.CreateChallenge.route)
-                                    },
                                     onChallengeStarted = {
                                         // A Route challenge just took over Hub focus - drop straight back
                                         // there instead of lingering on the Challenges screen.
                                         navController.navigate(Screen.Hub.route) {
                                             popUpTo(Screen.Hub.route) { inclusive = true }
-                                        }
-                                    }
-                                )
-                            }
-
-                            // ── Custom challenge creation ──
-                            composable(Screen.CreateChallenge.route) {
-                                val challengesViewModel: ChallengesViewModel = viewModel(
-                                    factory = ChallengesViewModelFactory(challengeRepository, airportRepository, pilotProgressRepository, preferencesRepository)
-                                )
-                                com.example.focusflight.ui.screens.challenges.CreateChallengeScreen(
-                                    viewModel = challengesViewModel,
-                                    onBackClick = { navController.popBackStack() },
-                                    // A Route creation takes over Hub focus and jumps straight there
-                                    // (see ChallengesViewModel.focusIfRoute); other types just pop back to
-                                    // the Challenges screen where the new slot is already filled -
-                                    // activeChallenges is a Flow off the same table the insert wrote to.
-                                    onCreated = { isRoute ->
-                                        if (isRoute) {
-                                            navController.navigate(Screen.Hub.route) {
-                                                popUpTo(Screen.Hub.route) { inclusive = true }
-                                            }
-                                        } else {
-                                            navController.popBackStack()
                                         }
                                     }
                                 )
@@ -423,7 +451,7 @@ class CesiumGameActivity : GameActivity() {
                                             // and a Route challenge's origin actually reach booking instead of
                                             // being silently overridden.
                                             val originIata = route.originIata
-                                            val flightNo = "FF-${kotlin.math.abs(route.destIata.hashCode()) % 1000 + 100}"
+                                            val flightNo = flightNumberFor(route.destIata)
                                             val durationMin = route.durationMin
                                             withContext(Dispatchers.IO) {
                                                 pendingFlightLoader.loadPendingFlight(originIata, route.destIata, durationMin)
@@ -531,12 +559,12 @@ class CesiumGameActivity : GameActivity() {
                                     ?.let { runCatching { FlightMode.valueOf(it) }.getOrDefault(FlightMode.STORY) }
                                     ?: FlightMode.STORY
                                 // Consumed by InFlightViewModel.checkAchievementsAndChallenges() on landing - see
-                                // docs/design/challenges.md#persistence--route-scoping.
+                                // docs/challenges.md#persistence--route-scoping.
                                 val challengeId = backStackEntry.arguments?.getInt("challengeId")
                                     ?.takeIf { it >= 0 }
 
                                 val viewModel: InFlightViewModel = viewModel(
-                                    factory = InFlightViewModelFactory(airportRepository, preferencesRepository, flightLogRepository, challengeRepository, landingResultChannel, cacheDir, flightNo, originIata, destIata, durationMin, mode, challengeId)
+                                    factory = InFlightViewModelFactory(airportRepository, preferencesRepository, flightLogRepository, challengeRepository, landingResultChannel, destinationPhotoChannel, destinationPhotoRepository, cacheDir, flightNo, originIata, destIata, durationMin, mode, challengeId)
                                 )
 
                                 InFlightScreen(
@@ -579,12 +607,17 @@ class CesiumGameActivity : GameActivity() {
                                     ?.let { runCatching { FlightMode.valueOf(it) }.getOrDefault(FlightMode.STORY) }
                                     ?: FlightMode.STORY
                                 val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
+                                // Snapshot only - already resolved (or not) by InFlightViewModel's
+                                // prefetch well before this screen is reached, same as how
+                                // landingResultChannel.result.value is read below at line ~639.
+                                val destPhotoUrl = destinationPhotoChannel.url.value
 
                                 ArrivalCelebrationScreen(
                                     flightNo = flightNo,
                                     destIata = destIata,
                                     durationMin = durationMin,
                                     rank = rank,
+                                    destPhotoUrl = destPhotoUrl,
                                     onContinue = {
                                         // mechanics.md's post-landing pipeline step 5: the rank stamp above
                                         // always shows first, unchanged - this is the "always sequenced,

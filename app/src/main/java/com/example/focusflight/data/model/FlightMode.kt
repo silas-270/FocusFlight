@@ -2,7 +2,7 @@ package com.example.focusflight.data.model
 
 /**
  * Tags every flight/logbook session with exactly one mode, per
- * docs/design/mechanics.md ("Mode tags"). Stored directly on [FlightLog] so the
+ * docs/modes.md ("Mode tags"). Stored directly on [FlightLog] so the
  * post-landing pipeline (see `InFlightViewModel.completeFlight()`) can branch on
  * it instead of computing it after the fact. Write-once at session start —
  * nothing in the design implies reclassifying a flight later.

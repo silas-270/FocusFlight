@@ -63,9 +63,9 @@ class FlightSearchViewModel(
     val airportSearchResults: StateFlow<List<FlightRoute>> = _airportSearchResults.asStateFlow()
 
     // ── Free Mode origin picker ──────────────────────────────────────────────────────────
-    // Story Mode's origin is always `currentAirport` (origin-locked, per docs/design/story-mode.md)
+    // Story Mode's origin is always `currentAirport` (origin-locked, per docs/modes.md)
     // - loadOrigin() below still sources it exactly as before Phase 2, unchanged. Free Mode has
-    // no origin lock (docs/design/free-mode.md), so this is the "smallest addition" the design
+    // no origin lock (docs/modes.md), so this is the "smallest addition" the design
     // doc asks for: a second airport search, structurally identical to the existing destination
     // search (onAirportSearchQueryChanged/airportSearchResults above), just over
     // `airportRepository.searchAirports()` (any airport) instead of `getOutboundRoutes()` (routes
@@ -114,7 +114,7 @@ class FlightSearchViewModel(
         // FREE: origin starts unset - the screen shows the origin picker until selectOrigin()
         // is called, instead of ever reading currentAirport.
         // CHALLENGE: origin is read-only context from that Route challenge's own stored position
-        // pointer (docs/design/challenges.md#persistence--route-scoping) - mirrors Story Mode's
+        // pointer (docs/challenges.md#persistence--route-scoping) - mirrors Story Mode's
         // origin-lock, just pointed at a different value, so FlightSearchScreen's existing
         // `mode == FlightMode.FREE && originAirport == null` picker-gate is never true here.
         when (mode) {
@@ -282,7 +282,7 @@ class FlightSearchViewModel(
             // routes is a Story Mode convenience (their origin is a fixed value they didn't pick
             // this session, so a total dead-end needs a way out). It writes `currentAirport` as
             // a side effect, which must never happen for a FREE-tagged session (see the
-            // isolation matrix in docs/design/mechanics.md) - a Free Mode player who deliberately
+            // isolation matrix in docs/modes.md) - a Free Mode player who deliberately
             // picked a routeless origin just sees the existing "No flights available" empty
             // state instead, same as picking a duration with no matching routes today.
             if (fetched.isEmpty() && mode == FlightMode.STORY) {

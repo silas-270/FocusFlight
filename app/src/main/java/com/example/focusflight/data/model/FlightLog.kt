@@ -29,7 +29,7 @@ data class FlightLog(
     @ColumnInfo(name = "completed_at") val completedAt: Long,
     @ColumnInfo(name = "created_at") val createdAt: Long = System.currentTimeMillis(),
     /** Which mode this session was flown under - see [FlightMode] and
-     *  docs/design/mechanics.md. Defaults to STORY so every pre-existing
+     *  docs/modes.md. Defaults to STORY so every pre-existing
      *  in-memory construction (tests, the legacy migrator) keeps behaving
      *  exactly as it did before this column existed. */
     @ColumnInfo(name = "mode", defaultValue = "STORY") val mode: FlightMode = FlightMode.STORY

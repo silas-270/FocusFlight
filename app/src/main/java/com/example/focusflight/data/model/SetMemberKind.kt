@@ -3,7 +3,7 @@ package com.example.focusflight.data.model
 /**
  * How a Set-completion challenge tests whether a landed destination touches a new set member -
  * reuses whatever geography data [Airport]/`AirportRepository` already expose (per
- * docs/design/challenges.md, curated Set-completion definitions are the authoring seam, not a
+ * docs/challenges.md, curated Set-completion definitions are the authoring seam, not a
  * new data source).
  */
 enum class SetMemberKind {

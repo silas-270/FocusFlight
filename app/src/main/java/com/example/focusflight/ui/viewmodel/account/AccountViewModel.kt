@@ -3,16 +3,12 @@ package com.example.focusflight.ui.viewmodel.account
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import androidx.paging.Pager
-import androidx.paging.PagingConfig
-import androidx.paging.PagingData
-import androidx.paging.cachedIn
-import com.example.focusflight.data.model.AchievementStatus
 import com.example.focusflight.data.model.Airport
 import com.example.focusflight.data.model.FlightHighlights
 import com.example.focusflight.data.model.FlightLog
 import com.example.focusflight.data.model.FlightSortOrder
 import com.example.focusflight.data.model.FlightStats
+import com.example.focusflight.data.model.Tour
 import com.example.focusflight.data.model.HomeBaseCooldown
 import com.example.focusflight.data.repository.PilotProgressRepository
 import com.example.focusflight.data.repository.AirportRepository
@@ -21,15 +17,14 @@ import com.example.focusflight.data.repository.PreferencesRepository
 import com.example.focusflight.data.repository.UserRepository
 import com.example.focusflight.domain.AirportSearchController
 import com.example.focusflight.ui.components.airportpicker.resolveSuggestedAirports
-import com.example.focusflight.ui.screens.account.AchievementTier
-import com.example.focusflight.ui.screens.account.achievementTier
+import com.example.focusflight.ui.screens.account.AchievementStack
+import com.example.focusflight.ui.screens.account.buildAchievementStacks
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -49,8 +44,11 @@ data class AccountUiState(
     // Passport/Stats Data
     val stats: FlightStats = FlightStats(),
 
-    // Flight History (used for map paths/stats)
+    // Flight History (used for map paths/stats, and rendered directly by the logbook)
     val flightHistory: List<FlightLog> = emptyList(),
+
+    /** Newest first. Groups [flightHistory] in the logbook, and drives the tour-days stat. */
+    val tours: List<Tour> = emptyList(),
     
     // Map Data
     val allVisitedCountries: Set<String> = emptySet(),
@@ -62,12 +60,16 @@ data class AccountUiState(
     val highlights: FlightHighlights = FlightHighlights(),
     val sortOrder: FlightSortOrder = FlightSortOrder.DATE_DESC,
 
-    // Earned achievements only, newest-first - the Passport is a trophy case. Everything still
-    // unearned lives on the Challenges screen instead, so this list only ever grows. Not split by
-    // category any more: the badge grid is one flat wrap, with no group headers to feed.
-    val unlockedAchievements: List<AchievementStatus> = emptyList(),
+    // Earned achievements only - the Passport is a trophy case. Everything still unearned lives on
+    // the Challenges screen instead. Not split by category: the badge row is one flat scroll, with
+    // no group headers to feed.
+    //
+    // Grouped into stacks rather than a flat list, so a ladder family (the cumulative-distance
+    // milestones) shows as one tile instead of four near-identical plaques. A non-ladder
+    // achievement is simply a stack of one. See buildAchievementStacks.
+    val achievementStacks: List<AchievementStack> = emptyList(),
 
-    // Home base + return (docs/design/story-mode.md) - the two cooldown-gated actions, both
+    // Home base + return (docs/modes.md) - the two cooldown-gated actions, both
     // computed once per loadData()/action call rather than ticking live every second; see
     // AccountViewModel's doc comment on refreshHomeBaseCooldowns() for why that's an acceptable
     // simplification here.
@@ -173,7 +175,7 @@ class AccountViewModel(
         _homeBaseActionResult.value = null
     }
 
-    // ── Change-home-base airport picker (docs/design/story-mode.md) ─────────────────────
+    // ── Change-home-base airport picker (docs/modes.md) ─────────────────────
     // Shares AirportSearchController with OnboardingViewModel's home-airport search and
     // FlightSearchViewModel's Free Mode origin picker - all three search any airport by free
     // text, reusing the shared ui/components/airportpicker two-step "search -> confirm on map"
@@ -201,17 +203,11 @@ class AccountViewModel(
     private val _sortOrder = MutableStateFlow(FlightSortOrder.DATE_DESC)
     val sortOrder: StateFlow<FlightSortOrder> = _sortOrder.asStateFlow()
 
-    // Expose Paged Data Flow to UI
-    val pagedFlights: Flow<PagingData<FlightLog>> = _sortOrder.flatMapLatest { sort ->
-        Pager(
-            config = PagingConfig(
-                pageSize = 20,
-                enablePlaceholders = false
-            ),
-            pagingSourceFactory = { flightLogRepository.getFlightsPagingSource(sort) }
-        ).flow
-    }.cachedIn(viewModelScope)
-
+    // The logbook used to render from a Pager here while its headers were computed from
+    // uiState.flightHistory, with nothing keeping the two indexes aligned. The whole history is
+    // already loaded eagerly for the map, stats, highlights and achievements, so the Pager was a
+    // second query plus a cachedIn copy of data the app was holding anyway - the screen now sorts
+    // that one list and lets LazyColumn compose only what is on screen.
     init {
         loadData()
         refreshHomeBaseCooldowns()
@@ -229,7 +225,7 @@ class AccountViewModel(
      * Recomputes both home-base cooldowns' eligibility/remaining-time against "now". Called once
      * at load and again right after [returnHome]/[changeHomeBase] so the UI reflects the new
      * cooldown immediately post-action. Deliberately *not* re-evaluated on a live ticking timer -
-     * nothing in docs/design/story-mode.md calls for a second-by-second countdown, and the Account
+     * nothing in docs/modes.md calls for a second-by-second countdown, and the Account
      * screen is realistically reopened (recreating this ViewModel) long before a multi-day
      * cooldown display would visibly go stale.
      */
@@ -259,7 +255,7 @@ class AccountViewModel(
     }
 
     /**
-     * Return-home teleport (docs/design/story-mode.md) - a direct state mutation, deliberately
+     * Return-home teleport (docs/modes.md) - a direct state mutation, deliberately
      * NOT routed through Screen.FlightSearch/CheckIn/InFlight: no booking flow, no timer/session,
      * no FlightLog row, no FlightMode tag. Just an instant cut of `currentAirport` to the home
      * base, gated by the 7-day cooldown checked again here (not just at the UI-disabled-state
@@ -293,7 +289,7 @@ class AccountViewModel(
     }
 
     /**
-     * Change-home-base (docs/design/story-mode.md), gated by its own separate 30-day cooldown -
+     * Change-home-base (docs/modes.md), gated by its own separate 30-day cooldown -
      * never the same clock as [returnHome]'s 7-day one. Writes the home airport to exactly one
      * store - the Room `UserProfile` row - which every reader now resolves through
      * [com.example.focusflight.domain.resolveHomeAirportIata]. It used to write
@@ -382,34 +378,28 @@ class AccountViewModel(
             val mapPaths = com.example.focusflight.ui.map.WorldMapParser.parseWorldMap(context)
 
             pilotProgressRepository.progress.collect { progress ->
-                if (progress == null) return@collect
+                if (progress == null) {
+                    _uiState.update { it.copy(isLoading = false) }
+                    return@collect
+                }
 
-                // Only the earned ones reach the Passport, sorted by difficulty (gold first,
-                // then silver, then bronze), and newest-first within each tier.
-                val board = progress.achievements
-                val unlockedAchievements =
-                    (board.geographic + board.distance + board.behavioral)
-                        .filter { it.isUnlocked }
-                        .sortedWith(
-                            compareBy<AchievementStatus> {
-                                when (achievementTier(it)) {
-                                    AchievementTier.GOLD -> 0
-                                    AchievementTier.SILVER -> 1
-                                    AchievementTier.BRONZE -> 2
-                                }
-                            }.thenByDescending { it.unlockedAt ?: Long.MIN_VALUE }
-                        )
+                // Only the earned ones reach the Passport, collapsed into ladder stacks and sorted
+                // by difficulty (gold first, then silver, then bronze), newest-first within each
+                // tier. The whole board goes in - the fold needs the unearned entries to work out
+                // each family's next tier - and it drops anything with nothing earned.
+                val achievementStacks = buildAchievementStacks(progress.achievements)
 
                 _uiState.update { state ->
                     state.copy(
                         stats = progress.stats,
                         flightHistory = progress.history,
+                        tours = progress.tours,
                         allVisitedCountries = progress.geography.visitedCountries,
                         completedContinents = progress.geography.completedContinents,
                         countryToContinent = progress.geography.countryToContinent,
                         mapPaths = mapPaths,
                         highlights = progress.highlights,
-                        unlockedAchievements = unlockedAchievements,
+                        achievementStacks = achievementStacks,
                         isLoading = false
                     )
                 }

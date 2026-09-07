@@ -114,7 +114,7 @@ class OnboardingViewModel(
 
         preferencesRepository.setCurrentAirport(airport.iataCode)
 
-        // docs/design/story-mode.md: seed "last home base changed" to 31 days in the past so the
+        // docs/modes.md: seed "last home base changed" to 31 days in the past so the
         // very first change-home-base call is immediately eligible through the same 30-day
         // cooldown check every later change uses - no separate "grace change" code path. See
         // com.example.focusflight.data.model.HomeBaseCooldown.seedChangeHomeBaseTimestamp.

@@ -14,120 +14,502 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.FlightTakeoff
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.focusflight.data.model.Challenge
 import com.example.focusflight.data.model.ChallengeType
+import com.example.focusflight.data.model.PausedFlight
+import com.example.focusflight.data.model.PredefinedRoute
+import com.example.focusflight.data.model.predefinedRoute
+import com.example.focusflight.data.model.resolveSetMemberProgress
 import com.example.focusflight.data.model.CuratedChallengeCatalog
 import com.example.focusflight.data.model.progressFraction
 import com.example.focusflight.ui.components.ChallengeProgressBar
 import com.example.focusflight.ui.components.DestructiveActionButton
 import com.example.focusflight.ui.components.ModalTitle
 import com.example.focusflight.ui.components.PrimaryActionButton
+import com.example.focusflight.ui.components.SecondaryActionButton
 import com.example.focusflight.ui.components.ScrimCardModal
+import com.example.focusflight.ui.components.SetMemberChecklist
+import com.example.focusflight.ui.components.challengeTypeDescription
 import com.example.focusflight.ui.components.challengeTypeIcon
 import com.example.focusflight.ui.components.challengeTypeLabel
+import com.example.focusflight.ui.components.icon
 import com.example.focusflight.ui.theme.Amber
 import com.example.focusflight.ui.theme.Border
+import com.example.focusflight.ui.theme.DeepNavy
 import com.example.focusflight.ui.theme.Haze
 import com.example.focusflight.ui.theme.OffWhite
 import com.example.focusflight.ui.theme.Slate
 import com.example.focusflight.ui.theme.Spacing
 
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.text.input.KeyboardType
+import com.example.focusflight.data.model.Airport
+import com.example.focusflight.ui.screens.flightsearch.OriginSearchPanel
+import com.example.focusflight.ui.viewmodel.challenges.ChallengesViewModel
+import com.example.focusflight.ui.viewmodel.challenges.formatKm
+
+private sealed interface PickerStep {
+    object TypeGrid : PickerStep
+    data class CuratedList(val type: ChallengeType) : PickerStep
+    data class CreateCustom(val type: ChallengeType) : PickerStep
+}
+
 /**
- * Opened by tapping an empty slot: pick one of the curated challenges, or head off to build a
- * custom one. Custom creation is a full screen rather than another modal step, since picking two
- * airports needs far more room than a card affords.
+ * Opened by tapping an empty slot:
+ * 1. Shows a 2x2 grid of challenge types.
+ * 2. Selecting a type lists the curated challenges for that type, with a "Create your own" button
+ *    at the bottom (for Route, Distance, and Streak).
+ * 3. Tapping "Create your own" transitions directly within the modal to that type's dedicated
+ *    custom creation form.
  */
 @Composable
 internal fun ChallengePickerModal(
-    onStartCurated: (catalogId: String) -> Unit,
-    onCreateCustomClick: () -> Unit,
+    viewModel: ChallengesViewModel,
     onDismiss: () -> Unit
 ) {
-    ScrimCardModal(onScrimTap = onDismiss) {
-        ModalTitle("START A CHALLENGE")
-        Spacer(modifier = Modifier.height(Spacing.Medium))
+    var step by remember { mutableStateOf<PickerStep>(PickerStep.TypeGrid) }
 
-        Column(
-            modifier = Modifier
-                // Six curated entries plus the custom row overflow a short screen; cap the list
-                // and let it scroll rather than pushing the custom row off the bottom.
-                .heightIn(max = 380.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            CuratedChallengeCatalog.ALL.forEach { template ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(Slate.copy(alpha = 0.4f))
-                        .clickable { onStartCurated(template.catalogId) }
-                        .padding(Spacing.Medium),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = challengeTypeIcon(template.type),
-                        contentDescription = null,
-                        tint = Amber,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(Spacing.Small))
-                    Column {
-                        Text(
-                            text = template.name,
-                            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
-                            color = OffWhite
+    ScrimCardModal(onScrimTap = {
+        viewModel.clearRouteSearch()
+        onDismiss()
+    }) {
+        when (val current = step) {
+            PickerStep.TypeGrid -> {
+                ModalTitle("START A CHALLENGE")
+                Spacer(modifier = Modifier.height(Spacing.Small))
+                Text(
+                    text = "Select a challenge type to explore:",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Haze
+                )
+                Spacer(modifier = Modifier.height(Spacing.Medium))
+
+                // 2x2 Grid of Challenge Types
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        ChallengeTypeCard(
+                            type = ChallengeType.ROUTE,
+                            modifier = Modifier.weight(1f),
+                            onClick = { step = PickerStep.CuratedList(ChallengeType.ROUTE) }
                         )
-                        Text(
-                            text = template.description,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Haze
+                        ChallengeTypeCard(
+                            type = ChallengeType.SET_COMPLETION,
+                            modifier = Modifier.weight(1f),
+                            onClick = { step = PickerStep.CuratedList(ChallengeType.SET_COMPLETION) }
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        ChallengeTypeCard(
+                            type = ChallengeType.DISTANCE,
+                            modifier = Modifier.weight(1f),
+                            onClick = { step = PickerStep.CuratedList(ChallengeType.DISTANCE) }
+                        )
+                        ChallengeTypeCard(
+                            type = ChallengeType.STREAK,
+                            modifier = Modifier.weight(1f),
+                            onClick = { step = PickerStep.CuratedList(ChallengeType.STREAK) }
                         )
                     }
                 }
             }
+
+            is PickerStep.CuratedList -> {
+                val currentType = current.type
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { step = PickerStep.TypeGrid },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
+                            contentDescription = "Back to types",
+                            tint = Amber,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(Spacing.Small))
+                    ModalTitle(challengeTypeLabel(currentType))
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = challengeTypeDescription(currentType),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Haze
+                )
+                Spacer(modifier = Modifier.height(Spacing.Medium))
+
+                // Curated challenges for this type
+                val templates = CuratedChallengeCatalog.ALL.filter { it.type == currentType }
+                Column(
+                    modifier = Modifier
+                        .heightIn(max = 280.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (templates.isEmpty()) {
+                        Text(
+                            text = "No curated challenges available for this type.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Haze,
+                            modifier = Modifier.padding(vertical = Spacing.Medium)
+                        )
+                    } else {
+                        templates.forEach { template ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(Slate.copy(alpha = 0.4f))
+                                    .clickable { viewModel.startCurated(template.catalogId) }
+                                    .padding(Spacing.Medium),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text(
+                                        text = template.name,
+                                        style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+                                        color = OffWhite
+                                    )
+                                    Text(
+                                        text = template.description,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Haze
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Create your own button (only for non-set-completion challenges)
+                if (currentType != ChallengeType.SET_COMPLETION) {
+                    Spacer(modifier = Modifier.height(Spacing.Medium))
+                    HorizontalDivider(color = Border.copy(alpha = 0.4f))
+                    Spacer(modifier = Modifier.height(Spacing.Small))
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .clickable { step = PickerStep.CreateCustom(currentType) }
+                            .padding(vertical = Spacing.Small, horizontal = Spacing.Small),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Add,
+                            contentDescription = null,
+                            tint = Amber,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(Spacing.Small))
+                        Text(
+                            text = "Create your own…",
+                            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+                            color = Amber
+                        )
+                    }
+                }
+            }
+
+            is PickerStep.CreateCustom -> {
+                val currentType = current.type
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable {
+                                viewModel.clearRouteSearch()
+                                step = PickerStep.CuratedList(currentType)
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
+                            contentDescription = "Back to list",
+                            tint = Amber,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(Spacing.Small))
+                    ModalTitle("CUSTOM ${challengeTypeLabel(currentType)}")
+                }
+                Spacer(modifier = Modifier.height(Spacing.Medium))
+
+                when (currentType) {
+                    ChallengeType.ROUTE -> CustomRouteModalForm(
+                        viewModel = viewModel,
+                        onCreate = viewModel::startCustomRoute
+                    )
+                    ChallengeType.DISTANCE -> CustomDistanceModalForm(
+                        onCreate = viewModel::startCustomDistance
+                    )
+                    ChallengeType.STREAK -> CustomStreakModalForm(
+                        onCreate = viewModel::startCustomStreak
+                    )
+                    ChallengeType.SET_COMPLETION -> Unit
+                }
+            }
         }
+    }
+}
 
-        Spacer(modifier = Modifier.height(Spacing.Medium))
-        HorizontalDivider(color = Border.copy(alpha = 0.4f))
-        Spacer(modifier = Modifier.height(Spacing.Medium))
+@Composable
+private fun ChallengeTypeCard(
+    type: ChallengeType,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(Slate.copy(alpha = 0.45f))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 14.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            text = challengeTypeLabel(type),
+            style = MaterialTheme.typography.labelMedium.copy(
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp
+            ),
+            color = Amber,
+            textAlign = TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(10.dp))
+        Icon(
+            imageVector = challengeTypeIcon(type),
+            contentDescription = null,
+            tint = Amber,
+            modifier = Modifier.size(36.dp)
+        )
+        Spacer(modifier = Modifier.height(10.dp))
+        Text(
+            text = challengeTypeDescription(type),
+            style = MaterialTheme.typography.bodySmall.copy(
+                fontSize = 11.sp,
+                lineHeight = 14.sp
+            ),
+            color = Haze,
+            textAlign = TextAlign.Center,
+            minLines = 3
+        )
+    }
+}
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
-                .clickable(onClick = onCreateCustomClick)
-                .padding(vertical = Spacing.Small),
-            verticalAlignment = Alignment.CenterVertically
+@Composable
+private fun CustomRouteModalForm(
+    viewModel: ChallengesViewModel,
+    onCreate: (Airport, Airport) -> Unit
+) {
+    val originQuery by viewModel.originQuery.collectAsState()
+    val originResults by viewModel.originResults.collectAsState()
+    val destQuery by viewModel.destQuery.collectAsState()
+    val destResults by viewModel.destResults.collectAsState()
+
+    var pickedOrigin by remember { mutableStateOf<Airport?>(null) }
+    var pickedDest by remember { mutableStateOf<Airport?>(null) }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        when {
+            pickedOrigin == null -> {
+                Text(
+                    text = "Pick a departure airport.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Haze
+                )
+                Spacer(modifier = Modifier.height(Spacing.Small))
+                Box(modifier = Modifier.height(280.dp)) {
+                    OriginSearchPanel(
+                        query = originQuery,
+                        onQueryChange = viewModel::onOriginQueryChanged,
+                        results = originResults,
+                        onAirportSelect = { pickedOrigin = it },
+                        caption = "DEPARTURE AIRPORT",
+                        placeholder = "Search origin airport…"
+                    )
+                }
+            }
+
+            pickedDest == null -> {
+                Text(
+                    text = "Departing ${pickedOrigin!!.iataCode} (${pickedOrigin!!.municipality}) - now pick a destination.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Haze
+                )
+                Spacer(modifier = Modifier.height(Spacing.Small))
+                Box(modifier = Modifier.height(280.dp)) {
+                    OriginSearchPanel(
+                        query = destQuery,
+                        onQueryChange = viewModel::onDestQueryChanged,
+                        results = destResults,
+                        onAirportSelect = { pickedDest = it },
+                        caption = "DESTINATION AIRPORT",
+                        placeholder = "Search destination airport…"
+                    )
+                }
+            }
+
+            pickedOrigin!!.iataCode == pickedDest!!.iataCode -> {
+                Text(
+                    text = "Origin and destination can't be the same airport.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Haze
+                )
+                Spacer(modifier = Modifier.height(Spacing.Medium))
+                PrimaryActionButton(text = "PICK A DIFFERENT DESTINATION") { pickedDest = null }
+            }
+
+            else -> {
+                val origin = pickedOrigin!!
+                val dest = pickedDest!!
+                Text(
+                    text = "${origin.municipality} → ${dest.municipality}",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = OffWhite
+                )
+                Text(
+                    text = "${origin.iataCode} → ${dest.iataCode}",
+                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                    color = Haze
+                )
+                Spacer(modifier = Modifier.height(Spacing.Medium))
+                PrimaryActionButton(text = "START CHALLENGE") { onCreate(origin, dest) }
+                Spacer(modifier = Modifier.height(Spacing.Small))
+                Text(
+                    text = "Change destination",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Haze,
+                    modifier = Modifier.clickable { pickedDest = null }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CustomDistanceModalForm(onCreate: (Double) -> Unit) {
+    var customText by remember { mutableStateOf("") }
+    val target = customText.toDoubleOrNull() ?: 0.0
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = "Enter a custom target distance to fly in kilometers.",
+            style = MaterialTheme.typography.bodySmall,
+            color = Haze
+        )
+        Spacer(modifier = Modifier.height(Spacing.Medium))
+        OutlinedTextField(
+            value = customText,
+            onValueChange = { customText = it.filter(Char::isDigit) },
+            label = { Text("Target distance (km)") },
+            placeholder = { Text("e.g. 15000", color = Haze.copy(alpha = 0.5f)) },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            modifier = Modifier.fillMaxWidth(),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedContainerColor = Slate,
+                unfocusedContainerColor = DeepNavy,
+                cursorColor = Amber,
+                focusedBorderColor = Amber,
+                unfocusedBorderColor = Border.copy(alpha = 0.3f),
+                focusedTextColor = OffWhite,
+                unfocusedTextColor = OffWhite
+            )
+        )
+        Spacer(modifier = Modifier.height(Spacing.Large))
+        PrimaryActionButton(
+            text = if (target > 0) "START CHALLENGE (${formatKm(target)})" else "START CHALLENGE",
+            enabled = target > 0
         ) {
-            Icon(
-                imageVector = Icons.Outlined.Add,
-                contentDescription = null,
-                tint = Amber,
-                modifier = Modifier.size(20.dp)
+            onCreate(target)
+        }
+    }
+}
+
+@Composable
+private fun CustomStreakModalForm(onCreate: (Int) -> Unit) {
+    var customText by remember { mutableStateOf("") }
+    val target = customText.toIntOrNull() ?: 0
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = "Enter the number of consecutive days you want to fly. Miss a day and the streak resets.",
+            style = MaterialTheme.typography.bodySmall,
+            color = Haze
+        )
+        Spacer(modifier = Modifier.height(Spacing.Medium))
+        OutlinedTextField(
+            value = customText,
+            onValueChange = { customText = it.filter(Char::isDigit) },
+            label = { Text("Target days") },
+            placeholder = { Text("e.g. 7", color = Haze.copy(alpha = 0.5f)) },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            modifier = Modifier.fillMaxWidth(),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedContainerColor = Slate,
+                unfocusedContainerColor = DeepNavy,
+                cursorColor = Amber,
+                focusedBorderColor = Amber,
+                unfocusedBorderColor = Border.copy(alpha = 0.3f),
+                focusedTextColor = OffWhite,
+                unfocusedTextColor = OffWhite
             )
-            Spacer(modifier = Modifier.width(Spacing.Small))
-            Text(
-                text = "Create custom…",
-                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
-                color = Amber
-            )
+        )
+        Spacer(modifier = Modifier.height(Spacing.Large))
+        PrimaryActionButton(
+            text = if (target > 0) "START CHALLENGE ($target DAYS)" else "START CHALLENGE",
+            enabled = target > 0
+        ) {
+            onCreate(target)
         }
     }
 }
@@ -147,25 +529,6 @@ internal fun ChallengeInfoModal(
     onDismiss: () -> Unit
 ) {
     ScrimCardModal(onScrimTap = onDismiss) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                imageVector = challengeTypeIcon(challenge.type),
-                contentDescription = null,
-                tint = Amber,
-                modifier = Modifier.size(18.dp)
-            )
-            Spacer(modifier = Modifier.width(Spacing.Small))
-            Text(
-                text = challengeTypeLabel(challenge.type),
-                style = MaterialTheme.typography.labelSmall.copy(
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp
-                ),
-                color = Haze
-            )
-        }
-        Spacer(modifier = Modifier.height(Spacing.Small))
-
         Text(
             text = challenge.name,
             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
@@ -189,6 +552,27 @@ internal fun ChallengeInfoModal(
             color = Haze
         )
 
+        val setMembers = challenge.resolveSetMemberProgress()
+        if (!setMembers.isNullOrEmpty()) {
+            Spacer(modifier = Modifier.height(Spacing.Medium))
+            SetMemberChecklist(members = setMembers)
+        }
+
+        challenge.predefinedRoute()?.let { route ->
+            if (route.hasDistances) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    // The number the percentage above is actually made of - progress on these is
+                    // kilometres flown along the itinerary, not legs ticked off.
+                    text = "${formatKm(route.distanceFlownKm(challenge.legIndex))} of ${formatKm(route.totalDistanceKm)} flown",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Haze
+                )
+            }
+            Spacer(modifier = Modifier.height(Spacing.Medium))
+            RouteLegList(route = route, legIndex = challenge.legIndex)
+        }
+
         Spacer(modifier = Modifier.height(Spacing.Large))
         if (challenge.type == ChallengeType.ROUTE) {
             if (isFocused) {
@@ -197,7 +581,122 @@ internal fun ChallengeInfoModal(
                 PrimaryActionButton(text = "CONTINUE CHALLENGE", onClick = onContinue)
             }
             Spacer(modifier = Modifier.height(Spacing.Small))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                DestructiveActionButton(
+                    text = "ABANDON",
+                    modifier = Modifier.weight(1f),
+                    onClick = onAbandon
+                )
+                SecondaryActionButton(
+                    text = "CLOSE",
+                    modifier = Modifier.weight(1f),
+                    onClick = onDismiss
+                )
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                DestructiveActionButton(
+                    text = "ABANDON",
+                    modifier = Modifier.weight(1f),
+                    onClick = onAbandon
+                )
+                PrimaryActionButton(
+                    text = "CLOSE",
+                    modifier = Modifier.weight(1f),
+                    onClick = onDismiss
+                )
+            }
         }
-        DestructiveActionButton(text = "ABANDON CHALLENGE", onClick = onAbandon)
+    }
+}
+
+/**
+ * A predefined itinerary's legs in flying order - flown ones checked off, the next one lit, the
+ * rest waiting.
+ *
+ * Deliberately *not* [SetMemberChecklist], even though both are "a list with some items done". A
+ * set has no order and no repeats, so that component is free to reorder visited-first and filter to
+ * MISSING. An itinerary is nothing but its order, and a circuit visits the same airport twice - so
+ * reordering it would destroy the only thing it says, and "which are missing" is never the question
+ * (they all are, in a fixed sequence, and only one of them is next).
+ */
+@Composable
+private fun RouteLegList(route: PredefinedRoute, legIndex: Int) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(max = 200.dp)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        for (leg in 0 until route.legCount) {
+            val flown = leg < legIndex
+            val isNext = leg == legIndex
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(if (isNext) Slate.copy(alpha = 0.55f) else Color.Transparent)
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(modifier = Modifier.size(18.dp), contentAlignment = Alignment.Center) {
+                    if (flown) {
+                        Icon(
+                            imageVector = Icons.Outlined.Check,
+                            contentDescription = null,
+                            tint = Amber,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    } else if (isNext) {
+                        Icon(
+                            imageVector = Icons.Outlined.FlightTakeoff,
+                            contentDescription = null,
+                            tint = Amber,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    } else {
+                        Text(
+                            text = "${leg + 1}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Haze
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    text = "${route.originOf(leg)} → ${route.destOf(leg)}",
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = if (isNext) FontWeight.Bold else FontWeight.Normal
+                    ),
+                    color = if (flown || isNext) OffWhite else Haze
+                )
+                if (isNext) {
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = "NEXT",
+                        style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.sp),
+                        color = Amber
+                    )
+                }
+                // Right-aligned so the distances form a column - this is what says which legs are
+                // the expensive ones before you commit to the challenge.
+                route.legDistancesKm.getOrNull(leg)?.let { km ->
+                    Spacer(modifier = Modifier.weight(1f))
+                    Text(
+                        text = formatKm(km),
+                        style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
+                        color = if (flown || isNext) Haze else Haze.copy(alpha = 0.6f)
+                    )
+                }
+            }
+        }
     }
 }
