@@ -2,21 +2,31 @@ package com.example.focusflight.ui.screens.account
 
 import androidx.compose.ui.graphics.Color
 import com.example.focusflight.data.model.AchievementCategory
-import com.example.focusflight.data.model.AchievementProgress
 import com.example.focusflight.data.model.AchievementStatus
 import com.example.focusflight.data.model.GeographicAchievementGoal
 import com.example.focusflight.ui.theme.Bronze
 import com.example.focusflight.ui.theme.BronzeDeep
 import com.example.focusflight.ui.theme.BronzeIcon
 import com.example.focusflight.ui.theme.Gold
+import com.example.focusflight.ui.theme.Ruby
+import com.example.focusflight.ui.theme.RubyDeep
+import com.example.focusflight.ui.theme.RubyIcon
 import com.example.focusflight.ui.theme.GoldDeep
 import com.example.focusflight.ui.theme.GoldIcon
 import com.example.focusflight.ui.theme.Silver
 import com.example.focusflight.ui.theme.SilverDeep
 import com.example.focusflight.ui.theme.SilverIcon
 
-/** How hard an achievement is to earn, in three bands - the badge's whole visual identity. */
-internal enum class AchievementTier { BRONZE, SILVER, GOLD }
+/**
+ * How hard an achievement is to earn - the badge's whole visual identity.
+ *
+ * [BRONZE]/[SILVER]/[GOLD] are a ladder: each is strictly harder than the last, and the metal is
+ * how that reads from across the grid. [RUBY] is deliberately *not* on that ladder - it marks an
+ * achievement that has no difficulty rank at all, so a ruby badge answers "what kind of thing is
+ * this" rather than "how hard was it". Colouring a rank-less achievement bronze implied it was the
+ * easy end of a scale it was never on.
+ */
+internal enum class AchievementTier { BRONZE, SILVER, GOLD, DIAMOND, RUBY }
 
 /** The metal the badge is cast from - the plaque's own background. */
 internal val AchievementTier.base: Color
@@ -24,6 +34,8 @@ internal val AchievementTier.base: Color
         AchievementTier.BRONZE -> BronzeDeep
         AchievementTier.SILVER -> SilverDeep
         AchievementTier.GOLD -> GoldDeep
+        AchievementTier.DIAMOND -> Color(0xFF00363A)
+        AchievementTier.RUBY -> RubyDeep
     }
 
 /** The metallic accent for stripes and subtle highlights. */
@@ -32,6 +44,8 @@ internal val AchievementTier.shine: Color
         AchievementTier.BRONZE -> Bronze
         AchievementTier.SILVER -> Silver
         AchievementTier.GOLD -> Gold
+        AchievementTier.DIAMOND -> Color(0xFF80DEEA)
+        AchievementTier.RUBY -> Ruby
     }
 
 /** The radiant, high-contrast icon tint that pops sharply against the striped background. */
@@ -40,6 +54,19 @@ internal val AchievementTier.iconTint: Color
         AchievementTier.BRONZE -> BronzeIcon
         AchievementTier.SILVER -> SilverIcon
         AchievementTier.GOLD -> GoldIcon
+        AchievementTier.DIAMOND -> Color(0xFFE0F7FA)
+        AchievementTier.RUBY -> RubyIcon
+    }
+
+/** Display order on the Passport: the ranked metals hardest-first, then the unranked band. Ruby
+ *  sorts last because it is not a rank - interleaving it with the metals would imply one. */
+internal val AchievementTier.sortOrder: Int
+    get() = when (this) {
+        AchievementTier.DIAMOND -> 0
+        AchievementTier.GOLD -> 1
+        AchievementTier.SILVER -> 2
+        AchievementTier.BRONZE -> 3
+        AchievementTier.RUBY -> 4
     }
 
 /**
@@ -51,19 +78,26 @@ internal val AchievementTier.iconTint: Color
  *
  * Distance milestones are banded off [AchievementStatus.target] rather than off their ids, so a
  * new entry in [com.example.focusflight.data.model.DistanceAchievementCatalog] lands in the right
- * band on day one. Geographic and behavioral goals have no comparable scalar - "every country in
- * Africa" and "land between midnight and 5am" aren't on one axis - so those are named explicitly,
- * with a per-category fallback so an unrecognised id renders as bronze instead of crashing.
+ * band on day one. Geographic goals have no comparable scalar - "every country in Africa" and
+ * "visit every continent" aren't on one axis - so those are named explicitly, with a fallback so an
+ * unrecognised id renders as silver instead of crashing.
+ *
+ * Behavioral achievements are all [AchievementTier.RUBY], with no per-id banding at all. That is
+ * the category's defining property rather than a shortcut: "land between midnight and 5am" and
+ * "fly 10,000 km in one go" are not harder or easier versions of one another, they are simply
+ * different things you can have done. Ranking them against each other - or against a distance
+ * ladder - would be inventing an axis that does not exist.
  */
 internal fun achievementTier(achievement: AchievementStatus): AchievementTier =
     when (achievement.category) {
         AchievementCategory.DISTANCE -> distanceTier(achievement.target)
         AchievementCategory.GEOGRAPHIC -> geographicTier(achievement.id)
-        AchievementCategory.BEHAVIORAL -> behavioralTier(achievement.id)
+        AchievementCategory.BEHAVIORAL -> AchievementTier.RUBY
     }
 
 /** Cumulative km. The catalog's own ladder - 5k / 40k / 384k / 1M - straddles these two cuts. */
 private fun distanceTier(targetKm: Double): AchievementTier = when {
+    targetKm >= 10_000_000.0 -> AchievementTier.DIAMOND
     targetKm >= 100_000.0 -> AchievementTier.GOLD
     targetKm >= 20_000.0 -> AchievementTier.SILVER
     else -> AchievementTier.BRONZE
@@ -72,16 +106,13 @@ private fun distanceTier(targetKm: Double): AchievementTier = when {
 private fun geographicTier(id: String): AchievementTier = when {
     // Every country on Earth, and full coverage of one continent (40-odd countries each): the two
     // longest grinds in the app.
-    id == GeographicAchievementGoal.AllCountries.id -> AchievementTier.GOLD
+    id == GeographicAchievementGoal.AllCountries.id -> AchievementTier.DIAMOND
     id.startsWith("geo_entire_") -> AchievementTier.GOLD
+    id == "geo_100_world_citizen" -> AchievementTier.GOLD
+    id == "geo_50_diplomat" -> AchievementTier.SILVER
+    id == "geo_10_border_crosser" -> AchievementTier.BRONZE
     // "Touched every continent" - long, but one airport per continent clears it.
     id == GeographicAchievementGoal.AllContinents.id -> AchievementTier.SILVER
     else -> AchievementTier.SILVER
 }
 
-private fun behavioralTier(id: String): AchievementTier = when (id) {
-    // Both are single-flight extremes you have to deliberately set up.
-    AchievementProgress.MARATHON_ID, AchievementProgress.GRAND_VOYAGE_ID -> AchievementTier.SILVER
-    // First flight is automatic; the red-eye needs nothing but the right hour.
-    else -> AchievementTier.BRONZE
-}

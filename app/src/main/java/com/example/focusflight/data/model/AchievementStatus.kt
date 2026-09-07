@@ -1,7 +1,7 @@
 package com.example.focusflight.data.model
 
 /**
- * Which of docs/design/achievements.md's four v1 category types this achievement belongs to.
+ * Which of docs/achievements.md's four v1 category types this achievement belongs to.
  * "Challenges completed" isn't a member of this enum - it's a flat log
  * (see `ChallengeRepository.listCompletedChallenges`), not a progress-bar category, so it has no
  * [AchievementStatus] representation at all.
@@ -23,6 +23,11 @@ enum class AchievementCategory { GEOGRAPHIC, DISTANCE, BEHAVIORAL }
  * and always leaves it null, and `AchievementsRepository` fills it in afterwards from the
  * `achievement_unlocks` table. Treat a null here as "unlock time unknown", never as "locked" -
  * [isUnlocked] is the only authority on that.
+ *
+ * [members], [familyId] and [familyRank] are the structural payload, carried as nullable fields on
+ * this one shape rather than split into per-shape subclasses - the same call the [Challenge] entity
+ * makes for its four types, and for the same reason: every consumer wants one list to sort, filter
+ * and render.
  */
 data class AchievementStatus(
     val id: String,
@@ -33,7 +38,20 @@ data class AchievementStatus(
     val target: Double,
     val unitLabel: String,
     val isUnlocked: Boolean,
-    val unlockedAt: Long? = null
+    val unlockedAt: Long? = null,
+    /** Non-null exactly for set-shaped achievements (today: every [GeographicAchievementGoal]).
+     *  Derived on every read from [VisitedGeography] and never persisted - see
+     *  [GeographicAchievementGoal.memberProgress]. Null means "this goal is a scalar, not a set",
+     *  which is what a UI should branch on before offering a checklist. */
+    val members: List<SetMemberProgress>? = null,
+    /** Ladder identity. Non-null only where the entries genuinely supersede one another, so the
+     *  Passport can collapse them into a single stacked tile instead of showing near-identical
+     *  plaques side by side. Parallel siblings ("Master of Europe" / "Master of Africa") share no
+     *  family: neither one is a better version of the other. */
+    val familyId: String? = null,
+    /** Position within [familyId]'s ladder; higher is further along. Meaningless, and always 0,
+     *  when [familyId] is null. */
+    val familyRank: Int = 0
 ) {
     val progress: Float
         get() = if (target > 0.0) (current / target).toFloat().coerceIn(0f, 1f) else if (isUnlocked) 1f else 0f
@@ -55,7 +73,10 @@ fun AchievementCatalogEntry.toStatus(
     current: Double,
     target: Double,
     unitLabel: String,
-    isUnlocked: Boolean
+    isUnlocked: Boolean,
+    members: List<SetMemberProgress>? = null,
+    familyId: String? = null,
+    familyRank: Int = 0
 ): AchievementStatus = AchievementStatus(
     id = id,
     category = category,
@@ -64,5 +85,8 @@ fun AchievementCatalogEntry.toStatus(
     current = current,
     target = target,
     unitLabel = unitLabel,
-    isUnlocked = isUnlocked
+    isUnlocked = isUnlocked,
+    members = members,
+    familyId = familyId,
+    familyRank = familyRank
 )

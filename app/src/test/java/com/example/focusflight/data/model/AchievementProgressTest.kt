@@ -1,5 +1,7 @@
 package com.example.focusflight.data.model
 
+import com.example.focusflight.ui.screens.account.achievementTier
+import com.example.focusflight.ui.screens.account.sortOrder
 import java.util.Calendar
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -8,7 +10,7 @@ import org.junit.Test
 
 /**
  * Pure-function coverage for [AchievementProgress] - no Room/AirportRepository/JNI involved, per
- * docs/design/achievements.md's three progress-bar-shaped categories (Geographic, Distance,
+ * docs/achievements.md's three progress-bar-shaped categories (Geographic, Distance,
  * Behavioral). Mirrors [ChallengeProgressTest]'s pattern.
  *
  * The isolation tests below (Free Mode / Challenge-mode flights must never count) are the ones
@@ -160,13 +162,13 @@ class AchievementProgressTest {
     @Test
     fun `distance milestones sum STORY-mode distance only`() {
         val history = listOf(
-            flight(distanceKm = 3000.0, mode = FlightMode.STORY),
-            flight(distanceKm = 2500.0, mode = FlightMode.STORY)
+            flight(distanceKm = 5000.0, mode = FlightMode.STORY),
+            flight(distanceKm = 4000.0, mode = FlightMode.STORY)
         )
 
         val longHaul = AchievementProgress.evaluateDistance(history)
             .single { it.id == "dist_5000_long_haul" }
-        assertEquals(5500.0, longHaul.current, 0.001)
+        assertEquals(9000.0, longHaul.current, 0.001)
         assertTrue(longHaul.isUnlocked)
     }
 
@@ -180,7 +182,7 @@ class AchievementProgressTest {
 
         val results = AchievementProgress.evaluateDistance(history)
         val longHaul = results.single { it.id == "dist_5000_long_haul" }
-        val roundTheWorld = results.single { it.id == "dist_40075_round_the_world" }
+        val roundTheWorld = results.single { it.id == "dist_24901_around_the_earth" }
 
         // Only the STORY flight's 3,000 km counts - not the 100,000 km of FREE/CHALLENGE flying.
         assertEquals(3000.0, longHaul.current, 0.001)
@@ -192,30 +194,12 @@ class AchievementProgressTest {
     fun `distance milestone unlocks exactly at its target`() {
         val history = listOf(flight(distanceKm = 40_075.0, mode = FlightMode.STORY))
         val roundTheWorld = AchievementProgress.evaluateDistance(history)
-            .single { it.id == "dist_40075_round_the_world" }
+            .single { it.id == "dist_24901_around_the_earth" }
         assertTrue(roundTheWorld.isUnlocked)
         assertEquals(1f, roundTheWorld.progress, 0.001f)
     }
 
     // ── evaluateBehavioral ───────────────────────────────────────────────────────────────
-
-    @Test
-    fun `first-flight achievement is locked with no Story Mode flights and unlocked with one`() {
-        assertFalse(AchievementProgress.evaluateBehavioral(emptyList()).single { it.id == AchievementProgress.FIRST_FLIGHT_ID }.isUnlocked)
-
-        val history = listOf(flight(distanceKm = 100.0, mode = FlightMode.STORY))
-        assertTrue(AchievementProgress.evaluateBehavioral(history).single { it.id == AchievementProgress.FIRST_FLIGHT_ID }.isUnlocked)
-    }
-
-    @Test
-    fun `first-flight achievement stays locked when only FREE or CHALLENGE flights exist`() {
-        val history = listOf(
-            flight(distanceKm = 100.0, mode = FlightMode.FREE),
-            flight(distanceKm = 200.0, mode = FlightMode.CHALLENGE)
-        )
-        val firstFlight = AchievementProgress.evaluateBehavioral(history).single { it.id == AchievementProgress.FIRST_FLIGHT_ID }
-        assertFalse(firstFlight.isUnlocked)
-    }
 
     @Test
     fun `marathon-flight achievement uses the longest STORY-mode duration only`() {
@@ -226,18 +210,6 @@ class AchievementProgressTest {
         val marathon = AchievementProgress.evaluateBehavioral(history).single { it.id == AchievementProgress.MARATHON_ID }
         assertEquals(500.0, marathon.current, 0.001)
         assertTrue(marathon.isUnlocked) // 500 >= MARATHON_TARGET_MIN (480)
-    }
-
-    @Test
-    fun `grand-voyage achievement uses the longest single STORY-mode flight distance, not cumulative`() {
-        val history = listOf(
-            flight(distanceKm = 6000.0, mode = FlightMode.STORY),
-            flight(distanceKm = 6000.0, mode = FlightMode.STORY)
-        )
-        // Cumulative (12,000 km) would clear the 10,000 km bar, but the achievement is per-flight.
-        val grandVoyage = AchievementProgress.evaluateBehavioral(history).single { it.id == AchievementProgress.GRAND_VOYAGE_ID }
-        assertEquals(6000.0, grandVoyage.current, 0.001)
-        assertFalse(grandVoyage.isUnlocked)
     }
 
     @Test
@@ -253,6 +225,15 @@ class AchievementProgressTest {
     fun `red-eye-pilot achievement ignores a FREE-mode flight landing at 2am`() {
         val history = listOf(flight(distanceKm = 100.0, mode = FlightMode.FREE, completedAt = epochAtHour(2)))
         assertFalse(AchievementProgress.evaluateBehavioral(history).single { it.id == AchievementProgress.RED_EYE_ID }.isUnlocked)
+    }
+
+    @Test
+    fun `high-altitude achievement unlocks when landing at a high elevation airport`() {
+        val normalFlight = listOf(flight(distanceKm = 100.0, mode = FlightMode.STORY).copy(originIata = "LHR", destIata = "CDG"))
+        assertFalse(AchievementProgress.evaluateBehavioral(normalFlight).single { it.id == AchievementProgress.HIGH_ALTITUDE_ID }.isUnlocked)
+
+        val highFlight = listOf(flight(distanceKm = 100.0, mode = FlightMode.STORY).copy(originIata = "DEL", destIata = "IXL"))
+        assertTrue(AchievementProgress.evaluateBehavioral(highFlight).single { it.id == AchievementProgress.HIGH_ALTITUDE_ID }.isUnlocked)
     }
 
     // ── evaluateAll ──────────────────────────────────────────────────────────────────────
@@ -274,10 +255,10 @@ class AchievementProgressTest {
     // ── Achievement Tier Sorting ─────────────────────────────────────────────────────────
 
     @Test
-    fun `achievement tier sorting correctly orders gold then silver then bronze`() {
-        val goldItem = AchievementStatus(
+    fun `achievement tier sorting orders diamond then gold then silver then ruby`() {
+        val diamondItem = AchievementStatus(
             id = "geo_all_countries",
-            displayName = "Globetrotter",
+            displayName = "World Traveler",
             description = "Every country",
             category = AchievementCategory.GEOGRAPHIC,
             current = 1.0,
@@ -286,10 +267,21 @@ class AchievementProgressTest {
             isUnlocked = true,
             unlockedAt = 1000L
         )
+        val goldItem = AchievementStatus(
+            id = "geo_entire_EU",
+            displayName = "Master of Europe",
+            description = "Every European country",
+            category = AchievementCategory.GEOGRAPHIC,
+            current = 1.0,
+            target = 1.0,
+            unitLabel = "countries",
+            isUnlocked = true,
+            unlockedAt = 1500L
+        )
         val silverItem = AchievementStatus(
-            id = "dist_40075_round_the_world",
-            displayName = "Circumnavigator",
-            description = "Fly 40,075 km",
+            id = "dist_24901_around_the_earth",
+            displayName = "Around the Earth",
+            description = "Fly 24,901 mi",
             category = AchievementCategory.DISTANCE,
             current = 40075.0,
             target = 40075.0,
@@ -297,10 +289,10 @@ class AchievementProgressTest {
             isUnlocked = true,
             unlockedAt = 2000L
         )
-        val bronzeItem = AchievementStatus(
-            id = AchievementProgress.FIRST_FLIGHT_ID,
-            displayName = "First Flight",
-            description = "Complete first flight",
+        val rubyItem = AchievementStatus(
+            id = AchievementProgress.RED_EYE_ID,
+            displayName = "Red-Eye Pilot",
+            description = "Land at night",
             category = AchievementCategory.BEHAVIORAL,
             current = 1.0,
             target = 1.0,
@@ -309,17 +301,104 @@ class AchievementProgressTest {
             unlockedAt = 3000L
         )
 
-        val list = listOf(bronzeItem, goldItem, silverItem)
+        val list = listOf(rubyItem, goldItem, diamondItem, silverItem)
         val sorted = list.sortedWith(
             compareBy<AchievementStatus> {
-                when (com.example.focusflight.ui.screens.account.achievementTier(it)) {
-                    com.example.focusflight.ui.screens.account.AchievementTier.GOLD -> 0
-                    com.example.focusflight.ui.screens.account.AchievementTier.SILVER -> 1
-                    com.example.focusflight.ui.screens.account.AchievementTier.BRONZE -> 2
-                }
+                achievementTier(it).sortOrder
             }.thenByDescending { it.unlockedAt ?: Long.MIN_VALUE }
         )
 
-        assertEquals(listOf(goldItem, silverItem, bronzeItem), sorted)
+        assertEquals(listOf(diamondItem, goldItem, silverItem, rubyItem), sorted)
+    }
+
+    // ── Set membership (GeographicAchievementGoal.memberProgress) ────────────────────────
+
+    /** A geography where Africa has 3 of 4 countries visited. `continentStats` derives
+     *  `missingCountries` as "AF1".."AF4" minus what's visited, so the missing one is "AF4". */
+    private fun africaGeo() = VisitedGeography(
+        visitedCountries = setOf("AF1", "AF2", "AF3"),
+        countryToContinent = mapOf(
+            "AF1" to "AF", "AF2" to "AF", "AF3" to "AF", "AF4" to "AF"
+        ),
+        continentStats = listOf(continentStats("AF", 4, setOf("AF1", "AF2", "AF3"))),
+        completedContinents = emptySet()
+    )
+
+    @Test
+    fun `entire-continent members split visited from missing`() {
+        val members = GeographicAchievementGoal.EntireContinent("AF", "Africa")
+            .memberProgress(africaGeo())
+
+        assertEquals(4, members.size)
+        assertEquals(setOf("AF1", "AF2", "AF3"), members.filter { it.isVisited }.map { it.id }.toSet())
+        assertEquals(setOf("AF4"), members.filterNot { it.isVisited }.map { it.id }.toSet())
+    }
+
+    @Test
+    fun `entire-continent members are ordered visited-first`() {
+        val members = GeographicAchievementGoal.EntireContinent("AF", "Africa")
+            .memberProgress(africaGeo())
+
+        // Every visited member precedes every unvisited one, so a long checklist opens on what has
+        // been earned rather than on a wall of blanks.
+        assertEquals(
+            members.sortedByDescending { it.isVisited }.map { it.id },
+            members.map { it.id }
+        )
+    }
+
+    @Test
+    fun `entire-continent members are empty for a continent the geography knows nothing about`() {
+        // Mirrors evaluateGeographic's existing 0/0 posture: an unknown code is not a crash.
+        val members = GeographicAchievementGoal.EntireContinent("ZZ", "Nowhere")
+            .memberProgress(africaGeo())
+
+        assertTrue(members.isEmpty())
+    }
+
+    @Test
+    fun `evaluateGeographic attaches a member checklist to every geographic achievement`() {
+        // The whole point of making memberProgress abstract: a geographic goal can never ship as a
+        // bare progress fraction with no way to see which members are missing.
+        val statuses = AchievementProgress.evaluateGeographic(africaGeo())
+
+        assertTrue(statuses.isNotEmpty())
+        assertTrue(statuses.all { it.members != null })
+    }
+
+    @Test
+    fun `all-continents members cover the seven standard continent codes`() {
+        val members = GeographicAchievementGoal.AllContinents.memberProgress(africaGeo())
+
+        assertEquals(
+            CuratedChallengeSets.ALL_CONTINENTS.members,
+            members.map { it.id }.toSet()
+        )
+        // Africa has visits; nothing else in this geography does.
+        assertEquals(listOf("AF"), members.filter { it.isVisited }.map { it.id })
+    }
+
+    // ── Distance ladder ─────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `distance milestones share one family id and rank ascending by target`() {
+        val statuses = AchievementProgress.evaluateDistance(listOf(flight(distanceKm = 1.0)))
+
+        assertTrue(statuses.all { it.familyId == DistanceAchievementCatalog.FAMILY_ID })
+        assertEquals(statuses.indices.toList(), statuses.map { it.familyRank })
+        // Rank has to track difficulty, or the Passport's stack would show the wrong card on top.
+        assertEquals(
+            statuses.sortedBy { it.target }.map { it.id },
+            statuses.sortedBy { it.familyRank }.map { it.id }
+        )
+    }
+
+    @Test
+    fun `standalone non-distance achievements belong to no ladder`() {
+        val standaloneGeographic = AchievementProgress.evaluateGeographic(africaGeo())
+            .filter { it.familyId == null }
+        val behavioral = AchievementProgress.evaluateBehavioral(listOf(flight(distanceKm = 1.0)))
+
+        assertTrue((standaloneGeographic + behavioral).all { it.familyId == null })
     }
 }

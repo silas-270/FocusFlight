@@ -12,7 +12,7 @@ import org.junit.Test
 /**
  * Covers [processLandingForChallenges] - the exact call sequence
  * `InFlightViewModel.completeFlight()`'s `checkAchievementsAndChallenges()` delegates to on every
- * landed flight (docs/design/mechanics.md's post-landing pipeline step 4, challenge half).
+ * landed flight (docs/core-loop.md's post-landing pipeline step 4, challenge half).
  *
  * This is the closest thing to an end-to-end test of that path achievable in this project's
  * plain-JVM unit test setup: `InFlightViewModel` itself can't be instantiated here at all, since
@@ -24,9 +24,14 @@ import org.junit.Test
  */
 class ChallengeLandingTest {
 
+    private companion object {
+        /** Any fixed instant - these tests only care that it is threaded through unchanged. */
+        const val LANDED_AT = 1_700_000_000_000L
+    }
+
     private class FakeChallengeRepository : ChallengeRepository {
         val advancedRouteCalls = mutableListOf<Pair<Int, String>>()
-        val creditedFlights = mutableListOf<Pair<String, Double>>()
+        val creditedFlights = mutableListOf<Triple<String, Double, Long>>()
 
         override suspend fun listActiveChallenges(): List<Challenge> = emptyList()
         override fun listActiveChallengesFlow(): Flow<List<Challenge>> = MutableStateFlow(emptyList())
@@ -38,6 +43,8 @@ class ChallengeLandingTest {
             throw NotImplementedError("unused in this test")
         override suspend fun startCustomDistanceChallenge(targetDistanceKm: Double, name: String): StartChallengeResult =
             throw NotImplementedError("unused in this test")
+        override suspend fun startCustomStreakChallenge(targetDays: Int, name: String): StartChallengeResult =
+            throw NotImplementedError("unused in this test")
         override suspend fun abandonChallenge(id: Int) = Unit
 
         override fun pausedFlightStore(challengeId: Int): PausedFlightStore =
@@ -48,8 +55,8 @@ class ChallengeLandingTest {
             return null
         }
 
-        override suspend fun creditEligibleFlight(destIata: String, distanceKm: Double) {
-            creditedFlights.add(destIata to distanceKm)
+        override suspend fun creditEligibleFlight(destIata: String, distanceKm: Double, completedAt: Long) {
+            creditedFlights.add(Triple(destIata, distanceKm, completedAt))
         }
     }
 
@@ -57,34 +64,34 @@ class ChallengeLandingTest {
     fun `a FREE flight never touches the challenge repository at all`() = runTest {
         val repo = FakeChallengeRepository()
 
-        processLandingForChallenges(repo, FlightMode.FREE, challengeId = 42, destIata = "JFK", distanceKm = 5000.0)
+        processLandingForChallenges(repo, FlightMode.FREE, challengeId = 42, destIata = "JFK", distanceKm = 5000.0, completedAt = LANDED_AT)
 
         assertEquals(emptyList<Pair<Int, String>>(), repo.advancedRouteCalls)
-        assertEquals(emptyList<Pair<String, Double>>(), repo.creditedFlights)
+        assertEquals(emptyList<Triple<String, Double, Long>>(), repo.creditedFlights)
     }
 
     @Test
     fun `a STORY flight credits Distance and Set-completion challenges but advances no route`() = runTest {
         val repo = FakeChallengeRepository()
 
-        processLandingForChallenges(repo, FlightMode.STORY, challengeId = null, destIata = "JFK", distanceKm = 5000.0)
+        processLandingForChallenges(repo, FlightMode.STORY, challengeId = null, destIata = "JFK", distanceKm = 5000.0, completedAt = LANDED_AT)
 
         assertEquals(emptyList<Pair<Int, String>>(), repo.advancedRouteCalls)
-        assertEquals(listOf("JFK" to 5000.0), repo.creditedFlights)
+        assertEquals(listOf(Triple("JFK", 5000.0, LANDED_AT)), repo.creditedFlights)
     }
 
     @Test
     fun `a CHALLENGE flight both advances its own scoped route and credits other active challenges`() = runTest {
         val repo = FakeChallengeRepository()
 
-        processLandingForChallenges(repo, FlightMode.CHALLENGE, challengeId = 7, destIata = "SYD", distanceKm = 3000.0)
+        processLandingForChallenges(repo, FlightMode.CHALLENGE, challengeId = 7, destIata = "SYD", distanceKm = 3000.0, completedAt = LANDED_AT)
 
         // Advances the scoped Route challenge...
         assertEquals(listOf(7 to "SYD"), repo.advancedRouteCalls)
         // ...and still credits every other active Distance/Set-completion challenge, per
-        // docs/design/challenges.md's "which flights count" (they have no position pointer, so
+        // docs/challenges.md's "which flights count" (they have no position pointer, so
         // they passively credit any eligible flight regardless of its own Route scoping).
-        assertEquals(listOf("SYD" to 3000.0), repo.creditedFlights)
+        assertEquals(listOf(Triple("SYD", 3000.0, LANDED_AT)), repo.creditedFlights)
     }
 
     @Test
@@ -93,17 +100,17 @@ class ChallengeLandingTest {
 
         // Defensive case - shouldn't happen in practice (CHALLENGE mode is only ever produced
         // with a challengeId), but the function must not silently drop the passive crediting.
-        processLandingForChallenges(repo, FlightMode.CHALLENGE, challengeId = null, destIata = "SYD", distanceKm = 3000.0)
+        processLandingForChallenges(repo, FlightMode.CHALLENGE, challengeId = null, destIata = "SYD", distanceKm = 3000.0, completedAt = LANDED_AT)
 
         assertEquals(emptyList<Pair<Int, String>>(), repo.advancedRouteCalls)
-        assertEquals(listOf("SYD" to 3000.0), repo.creditedFlights)
+        assertEquals(listOf(Triple("SYD", 3000.0, LANDED_AT)), repo.creditedFlights)
     }
 
     @Test
     fun `challengeId is ignored (no crash) for a STORY flight even if one is somehow present`() = runTest {
         val repo = FakeChallengeRepository()
 
-        processLandingForChallenges(repo, FlightMode.STORY, challengeId = 99, destIata = "JFK", distanceKm = 100.0)
+        processLandingForChallenges(repo, FlightMode.STORY, challengeId = 99, destIata = "JFK", distanceKm = 100.0, completedAt = LANDED_AT)
 
         assertEquals(emptyList<Pair<Int, String>>(), repo.advancedRouteCalls)
         assertNull(repo.advancedRouteCalls.firstOrNull())

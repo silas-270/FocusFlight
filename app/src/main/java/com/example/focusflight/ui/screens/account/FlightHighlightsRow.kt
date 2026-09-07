@@ -35,6 +35,7 @@ import com.example.focusflight.data.model.FlightLog
 import com.example.focusflight.ui.components.WidgetCard
 import com.example.focusflight.ui.theme.Amber
 import com.example.focusflight.ui.theme.Bronze
+import com.example.focusflight.ui.theme.DeepNavy
 import com.example.focusflight.ui.theme.Haze
 import com.example.focusflight.ui.theme.OffWhite
 import com.example.focusflight.ui.theme.Slate
@@ -70,7 +71,7 @@ internal fun FlightHighlightsRow(highlights: FlightHighlights) {
 
 @Composable
 private fun LongestFlightCard(flight: FlightLog?, modifier: Modifier = Modifier) {
-    WidgetCard(modifier = modifier) {
+    WidgetCard(modifier = modifier, containerColor = DeepNavy) {
         Text(
             text = "LONGEST FLIGHT",
             style = MaterialTheme.typography.labelSmall.copy(
@@ -164,7 +165,7 @@ private fun AutoResizingMilesText(
 
 @Composable
 private fun EquatorProgressCard(ratio: Double, modifier: Modifier = Modifier) {
-    WidgetCard(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+    WidgetCard(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally, containerColor = DeepNavy) {
         Text(
             text = "EQUATOR PROGRESS",
             style = MaterialTheme.typography.labelSmall.copy(

@@ -11,7 +11,7 @@ sealed class Screen(val route: String) {
     // navigating with neither specified, same as before Phase 2/3. `challengeId` (Phase 3) is the
     // same nav-arg-threading mechanism Phase 2 used for `originIata`, extended to carry which
     // Route challenge instance a CHALLENGE-tagged session is scoped to - see
-    // docs/design/challenges.md#persistence--route-scoping. Encoded as an Int with a -1 sentinel
+    // docs/challenges.md#persistence--route-scoping. Encoded as an Int with a -1 sentinel
     // for "no challenge" since NavType.IntType has no nullable variant; createRoute()'s null
     // default maps to -1, and every reader treats <0 as null.
     object FlightSearch : Screen("flight_search?mode={mode}&challengeId={challengeId}") {
@@ -38,7 +38,7 @@ sealed class Screen(val route: String) {
             "arrival_celebration/$flightNo/$destIata/$durationMin/$rank/${mode.name}"
     }
 
-    // The second beat of docs/design/mechanics.md's post-landing pipeline step 5 - reached from
+    // The second beat of docs/core-loop.md's post-landing pipeline step 5 - reached from
     // ArrivalCelebration's "continue" only when `LandingResultChannel` resolved to a
     // ChallengesAffected outcome for this landing (never on Story/Free Mode landings with no
     // active challenge progress, which go straight to Hub as before). Argument-less: the screen
@@ -55,8 +55,4 @@ sealed class Screen(val route: String) {
     // sheet this used to be - that sheet needed its own inner scroll and swapped five view states
     // inside a card. Argument-less; everything it shows comes from ChallengesViewModel.
     object Challenges : Screen("challenges")
-
-    // Custom Route/Distance creation, split out of the slot picker because choosing two airports
-    // needs two full search panels - more room than a modal card can give.
-    object CreateChallenge : Screen("create_challenge")
 }

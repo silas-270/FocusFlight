@@ -1,6 +1,7 @@
 package com.example.focusflight.ui.screens.hub
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,6 +20,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Explore
@@ -51,6 +53,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
@@ -60,9 +63,10 @@ import com.example.focusflight.data.model.Challenge
 import com.example.focusflight.data.model.PausedFlight
 import com.example.focusflight.data.model.progressFraction
 import com.example.focusflight.ui.components.ChallengeProgressBar
+import com.example.focusflight.ui.components.DiscardFlightConfirmModal
 import com.example.focusflight.ui.components.PrimaryActionButton
-import com.example.focusflight.ui.components.challengeTypeIcon
 import com.example.focusflight.ui.components.challengeTypeLabel
+import com.example.focusflight.ui.components.icon
 import com.example.focusflight.ui.screens.challenges.challengeSubtitle
 import com.example.focusflight.ui.theme.Amber
 import com.example.focusflight.ui.theme.Border
@@ -114,6 +118,7 @@ fun HubScreen(
     val isExpanded = scaffoldState.bottomSheetState.currentValue == SheetValue.Expanded
 
     val pausedFlight by viewModel.pausedFlight.collectAsState()
+    var showDiscardFlightConfirm by remember { mutableStateOf(false) }
 
     androidx.compose.material3.Scaffold(
         bottomBar = {
@@ -136,7 +141,7 @@ fun HubScreen(
                     FocusedChallengeCard(
                         challenge = challenge,
                         onExit = { viewModel.exitFocusedChallenge() },
-                        modifier = Modifier.padding(bottom = Spacing.Small)
+                        modifier = Modifier.padding(bottom = Spacing.Large)
                     )
                 }
                 if (pausedFlight != null) {
@@ -183,7 +188,6 @@ fun HubScreen(
                     .padding(horizontal = Spacing.Large)
                     .padding(bottom = Spacing.Small)
             ) {
-                // Header (Welcome back, Iata Code, Airport Name)
                 Text(
                     text = "Welcome back, Captain",
                     style = MaterialTheme.typography.titleMedium,
@@ -206,12 +210,10 @@ fun HubScreen(
                     color = Haze
                 )
 
-                // Stats and Divider (below the fold when collapsed)
                 Spacer(modifier = Modifier.height(30.dp))
                 HorizontalDivider(color = Border, thickness = 1.dp)
                 Spacer(modifier = Modifier.height(30.dp))
 
-                // Stats
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
@@ -223,13 +225,19 @@ fun HubScreen(
                     StatItem(value = stats.airportsVisited.toString(), label = "AIRPORTS")
                 }
 
-                // Secondary Button (only if an active flight exists, and never while focused on a
-                // challenge - a Story Mode booking shortcut would be a confusing detour while the
-                // Hub is showing a challenge's card).
-                if (pausedFlight != null && focusedChallenge == null) {
+                // Secondary Button (when any active flight exists, in story mode or route challenge)
+                if (pausedFlight != null) {
                     Spacer(modifier = Modifier.height(30.dp))
                     Button(
-                        onClick = onBookFlightClick,
+                        onClick = {
+                            if (pausedFlight != null) {
+                                showDiscardFlightConfirm = true
+                            } else if (focusedChallenge != null) {
+                                onContinueChallengeClick(focusedChallenge!!.id)
+                            } else {
+                                onBookFlightClick()
+                            }
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(56.dp),
@@ -365,6 +373,18 @@ fun HubScreen(
     }
     }
 
+    if (showDiscardFlightConfirm && pausedFlight != null) {
+        val flight = pausedFlight!!
+        val focused = focusedChallenge
+        DiscardFlightConfirmModal(
+            flight = flight,
+            onConfirm = {
+                showDiscardFlightConfirm = false
+                if (focused != null) onContinueChallengeClick(focused.id) else onBookFlightClick()
+            },
+            onDismiss = { showDiscardFlightConfirm = false }
+        )
+    }
 }
 
 /**
@@ -381,43 +401,39 @@ private fun FocusedChallengeCard(challenge: Challenge, onExit: () -> Unit, modif
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .background(Slate)
-            .padding(Spacing.Medium)
+            .border(1.dp, Border.copy(alpha = 0.6f), RoundedCornerShape(16.dp))
+            .padding(horizontal = Spacing.Medium, vertical = 12.dp)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                imageVector = challengeTypeIcon(challenge.type),
-                contentDescription = null,
-                tint = Amber,
-                modifier = Modifier.size(16.dp)
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                text = challengeTypeLabel(challenge.type),
-                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
-                color = Haze
-            )
-            Spacer(modifier = Modifier.weight(1f))
-            Text(
-                text = challenge.name,
-                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                color = OffWhite
-            )
-        }
-        Spacer(modifier = Modifier.height(10.dp))
         Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(Spacing.Small)
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            ChallengeProgressBar(
-                progress = challenge.progressFraction(),
-                modifier = Modifier.weight(1f),
-                height = 10.dp
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(
+                    imageVector = challenge.icon(),
+                    contentDescription = null,
+                    tint = Amber,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = challenge.name,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                    color = OffWhite,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Spacer(modifier = Modifier.width(Spacing.Small))
             Box(
                 modifier = Modifier
-                    .size(28.dp)
-                    .clip(RoundedCornerShape(9.dp))
-                    .background(DeepNavy)
+                    .size(24.dp)
+                    .clip(CircleShape)
+                    .background(DeepNavy.copy(alpha = 0.7f))
                     .clickable(onClick = onExit),
                 contentAlignment = Alignment.Center
             ) {
@@ -425,16 +441,43 @@ private fun FocusedChallengeCard(challenge: Challenge, onExit: () -> Unit, modif
                     imageVector = Icons.Outlined.Close,
                     contentDescription = "Exit challenge",
                     tint = Haze,
-                    modifier = Modifier.size(16.dp)
+                    modifier = Modifier.size(13.dp)
                 )
             }
         }
-        Spacer(modifier = Modifier.height(6.dp))
-        Text(
-            text = challengeSubtitle(challenge),
-            style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
-            color = Haze.copy(alpha = 0.75f)
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        ChallengeProgressBar(
+            progress = challenge.progressFraction(),
+            trackColor = DeepNavy,
+            fillColor = Amber,
+            modifier = Modifier.fillMaxWidth(),
+            height = 6.dp
         )
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = challengeSubtitle(challenge),
+                style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
+                color = Haze
+            )
+            val pct = (challenge.progressFraction() * 100).toInt()
+            Text(
+                text = "$pct%",
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold
+                ),
+                color = if (pct > 0) Amber else Haze.copy(alpha = 0.6f)
+            )
+        }
     }
 }
 

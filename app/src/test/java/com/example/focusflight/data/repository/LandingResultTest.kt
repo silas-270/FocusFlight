@@ -56,6 +56,19 @@ class LandingResultTest {
         completedAt = if (status == ChallengeStatus.COMPLETED) 1L else null
     )
 
+    private fun streakChallenge(id: Int, streakDays: Int, targetDays: Int = 4, status: ChallengeStatus = ChallengeStatus.ACTIVE) = Challenge(
+        id = id,
+        userId = 1,
+        type = ChallengeType.STREAK,
+        source = ChallengeSource.CUSTOM,
+        status = status,
+        name = "4-Day Streak",
+        targetDays = targetDays,
+        streakDays = streakDays,
+        lastFlownDay = "2026-03-10",
+        completedAt = if (status == ChallengeStatus.COMPLETED) 1L else null
+    )
+
     @Test
     fun `no changes resolves to None`() {
         val before = listOf(routeChallenge(1, 0.2f), distanceChallenge(2, 1000.0))
@@ -152,6 +165,35 @@ class LandingResultTest {
         assertTrue(outcomes[0] is ChallengeOutcome.Advanced)
         assertTrue(outcomes[1] is ChallengeOutcome.Completed)
         assertTrue(outcomes[2] is ChallengeOutcome.Completed)
+    }
+
+    /**
+     * `resolveLandingOutcome` is type-blind - it diffs `status` and `progressFraction()` and never
+     * switches on [ChallengeType] - so a new type should need no change here at all. These two pin
+     * that, since "it works by accident" and "it works by design" look identical until someone
+     * adds a type-specific branch.
+     */
+    @Test
+    fun `a streak that gained a day resolves to an Advanced outcome like any other type`() {
+        val before = listOf(streakChallenge(1, streakDays = 1))
+        val after = listOf(streakChallenge(1, streakDays = 2))
+
+        val result = resolveLandingOutcome(before, after)
+        val outcome = (result as LandingResult.ChallengesAffected).outcomes.single() as ChallengeOutcome.Advanced
+        assertEquals(ChallengeType.STREAK, outcome.type)
+        assertEquals(0.25f, outcome.oldProgress)
+        assertEquals(0.5f, outcome.newProgress)
+    }
+
+    @Test
+    fun `a streak reaching its target resolves to a Completed outcome`() {
+        val before = listOf(streakChallenge(1, streakDays = 3))
+        val after = listOf(streakChallenge(1, streakDays = 4, status = ChallengeStatus.COMPLETED))
+
+        val result = resolveLandingOutcome(before, after)
+        val outcome = (result as LandingResult.ChallengesAffected).outcomes.single()
+        assertTrue(outcome is ChallengeOutcome.Completed)
+        assertEquals(ChallengeType.STREAK, outcome.type)
     }
 
     @Test

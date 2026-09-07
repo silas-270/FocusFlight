@@ -27,7 +27,7 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * One row in the Achievements screen's "Challenges completed" log (docs/design/achievements.md -
+ * One row in the Achievements screen's "Challenges completed" log (docs/achievements.md -
  * a flat log of every completed challenge, curated or custom, duplicates included for repeat
  * completions - modeled on the flight logbook, not an "x/N" tally, since custom challenges and
  * repeats mean there's no fixed denominator). Reuses [LogPaperCard] - the same paper-card chrome

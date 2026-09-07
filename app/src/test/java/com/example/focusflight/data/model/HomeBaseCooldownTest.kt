@@ -7,7 +7,7 @@ import org.junit.Test
 
 /**
  * Pure-function coverage for [HomeBaseCooldown] - no Room/SharedPreferences involved, per
- * docs/design/story-mode.md's two cooldowns (7-day return-home, 30-day change-home-base) and the
+ * docs/modes.md's two cooldowns (7-day return-home, 30-day change-home-base) and the
  * 31-day-in-the-past onboarding seed that makes the very first change-home-base immediately
  * eligible through the ordinary check.
  */

@@ -98,29 +98,29 @@ class LocalAchievementsRepositoryTest {
     @Test
     fun `first evaluation stamps newly unlocked achievements`() = runTest {
         val board = repositoryAt(1_000L)
-            .evaluateBoard(emptyGeography, listOf(storyFlight()))
+            .evaluateBoard(emptyGeography, listOf(storyFlight(distanceKm = 10_000.0)))
 
-        val firstFlight = board.byId(AchievementProgress.FIRST_FLIGHT_ID)
-        assertEquals(true, firstFlight.isUnlocked)
-        assertEquals(1_000L, firstFlight.unlockedAt)
+        val longHaul = board.byId("dist_5000_long_haul")
+        assertEquals(true, longHaul.isUnlocked)
+        assertEquals(1_000L, longHaul.unlockedAt)
     }
 
     @Test
     fun `re-evaluation does not overwrite an existing unlock timestamp`() = runTest {
-        val history = listOf(storyFlight())
+        val history = listOf(storyFlight(distanceKm = 10_000.0))
         repositoryAt(1_000L).evaluateBoard(emptyGeography, history)
 
         // Same achievement, later clock - the original stamp must survive.
         val second = repositoryAt(9_999L).evaluateBoard(emptyGeography, history)
 
-        assertEquals(1_000L, second.byId(AchievementProgress.FIRST_FLIGHT_ID).unlockedAt)
+        assertEquals(1_000L, second.byId("dist_5000_long_haul").unlockedAt)
         assertEquals(1, dao.rows.size)
     }
 
     @Test
     fun `locked achievements are never stamped`() = runTest {
         val board = repositoryAt(1_000L)
-            .evaluateBoard(emptyGeography, listOf(storyFlight()))
+            .evaluateBoard(emptyGeography, listOf(storyFlight(distanceKm = 100.0)))
 
         // A midday, short, close flight leaves Red-Eye locked.
         val redEye = board.byId(AchievementProgress.RED_EYE_ID)
@@ -131,17 +131,17 @@ class LocalAchievementsRepositoryTest {
 
     @Test
     fun `an achievement unlocked later gets its own later timestamp`() = runTest {
-        repositoryAt(1_000L).evaluateBoard(emptyGeography, listOf(storyFlight()))
+        repositoryAt(1_000L).evaluateBoard(emptyGeography, listOf(storyFlight(distanceKm = 100.0, durationMin = 500)))
 
-        // A 10,000km flight additionally unlocks Grand Voyage, at the later clock.
+        // A 500-min flight unlocks Marathon Flight, then adding 10,000km flight unlocks Long-Haul later.
         val board = repositoryAt(5_000L)
-            .evaluateBoard(emptyGeography, listOf(storyFlight(), storyFlight(distanceKm = 12_000.0)))
+            .evaluateBoard(emptyGeography, listOf(storyFlight(distanceKm = 100.0, durationMin = 500), storyFlight(distanceKm = 10_000.0)))
 
-        assertEquals(1_000L, board.byId(AchievementProgress.FIRST_FLIGHT_ID).unlockedAt)
-        val grandVoyage = board.byId(AchievementProgress.GRAND_VOYAGE_ID)
-        assertEquals(true, grandVoyage.isUnlocked)
-        assertNotNull(grandVoyage.unlockedAt)
-        assertEquals(5_000L, grandVoyage.unlockedAt)
+        assertEquals(1_000L, board.byId(AchievementProgress.MARATHON_ID).unlockedAt)
+        val longHaul = board.byId("dist_5000_long_haul")
+        assertEquals(true, longHaul.isUnlocked)
+        assertNotNull(longHaul.unlockedAt)
+        assertEquals(5_000L, longHaul.unlockedAt)
     }
 
     // evaluateBoard() never touches these two - only loadBoard() does, and it isn't under test
@@ -169,7 +169,6 @@ class LocalAchievementsRepositoryTest {
         override suspend fun getFlightHistory() = throw NotImplementedError()
         override suspend fun getRecentFlights(limit: Int) = throw NotImplementedError()
         override suspend fun getFlightStats(homeAirportIata: String?) = throw NotImplementedError()
-        override fun getFlightsPagingSource(sortOrder: com.example.focusflight.data.model.FlightSortOrder) = throw NotImplementedError()
         override suspend fun getFlightHighlights() = throw NotImplementedError()
     }
 }

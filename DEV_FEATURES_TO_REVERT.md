@@ -19,6 +19,5 @@ Checklist, not history — check items off as they're reverted.
       the tests are correct, the override is what's temporary.
 - [ ] **Skip-flight button in the in-flight UI** — the `>>` debug button in
       `InFlightScreen.kt`'s HUD top bar (`SkipFlightDebugButton`, wired to
-      `InFlightViewModel.skipFlight()`). Already tracked in `TODO.md`'s
-      "Debug/scaffolding to remove" section — remove the button and the
+      `InFlightViewModel.skipFlight()`). Remove the button and the
       `skipFlight()` shortcut together.

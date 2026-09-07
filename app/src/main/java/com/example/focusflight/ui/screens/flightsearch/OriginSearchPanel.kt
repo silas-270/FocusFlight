@@ -49,15 +49,17 @@ fun OriginSearchPanel(
     onQueryChange: (String) -> Unit,
     results: List<Airport>,
     onAirportSelect: (Airport) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    caption: String = "FLY FROM ANYWHERE",
+    placeholder: String = "Search origin airport…"
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
-        CaptionLabel(text = "FLY FROM ANYWHERE")
+        CaptionLabel(text = caption)
         Spacer(modifier = Modifier.height(Spacing.Small))
         SearchTextField(
             value = query,
             onValueChange = onQueryChange,
-            placeholder = "Search origin airport…",
+            placeholder = placeholder,
             unfocusedBorderColor = Border.copy(alpha = 0.3f)
         )
 

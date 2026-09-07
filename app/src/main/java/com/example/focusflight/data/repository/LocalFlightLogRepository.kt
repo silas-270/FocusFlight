@@ -1,6 +1,5 @@
 package com.example.focusflight.data.repository
 
-import androidx.paging.PagingSource
 import com.example.focusflight.data.local.FlightLogDao
 import com.example.focusflight.data.local.UserProfileDao
 import com.example.focusflight.data.local.requireProfileId
@@ -73,7 +72,7 @@ class LocalFlightLogRepository(
      *
      * It used to be `COUNT(DISTINCT dest_iata) over every mode, + 1 for home`, which was wrong
      * twice over. The missing mode filter meant a Free Mode or Challenge flight raised "places
-     * visited" while the visited-country map (STORY-only, per docs/design/mechanics.md's
+     * visited" while the visited-country map (STORY-only, per docs/modes.md's
      * isolation matrix) stayed exactly as it was. And the unconditional `+ 1` double-counted home
      * for any pilot who had ever flown *to* their own home base in Story Mode, since home was
      * already in the distinct count. The DAO now excludes home from the STORY count and we add it
@@ -94,17 +93,6 @@ class LocalFlightLogRepository(
             totalMinutes = totalMinutes,
             airportsVisited = distinctStoryDest + if (homeIata != null) 1 else 0
         )
-    }
-
-    override fun getFlightsPagingSource(sortOrder: FlightSortOrder): PagingSource<Int, FlightLog> {
-        val userId = kotlinx.coroutines.runBlocking { userProfileDao.requireProfileId() }
-        return when (sortOrder) {
-            FlightSortOrder.DATE_DESC -> flightLogDao.getFlightsPagedDateDesc(userId)
-            FlightSortOrder.DATE_ASC -> flightLogDao.getFlightsPagedDateAsc(userId)
-            FlightSortOrder.DISTANCE_DESC -> flightLogDao.getFlightsPagedDistanceDesc(userId)
-            FlightSortOrder.DISTANCE_ASC -> flightLogDao.getFlightsPagedDistanceAsc(userId)
-            FlightSortOrder.DURATION_DESC -> flightLogDao.getFlightsPagedDurationDesc(userId)
-        }
     }
 
     override suspend fun getFlightHighlights(): FlightHighlights {

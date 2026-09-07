@@ -64,8 +64,6 @@ class PilotProgressRepositoryTest {
         override suspend fun getRecentFlights(limit: Int): List<FlightLog> = histories.value
         override suspend fun getFlightStats(homeAirportIata: String?) =
             FlightStats(totalFlights = histories.value.size, totalMinutes = 0, airportsVisited = 1)
-        override fun getFlightsPagingSource(sortOrder: FlightSortOrder): PagingSource<Int, FlightLog> =
-            throw UnsupportedOperationException()
         override suspend fun getFlightHighlights() = FlightHighlights()
     }
 

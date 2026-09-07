@@ -1,7 +1,7 @@
 package com.example.focusflight.data.model
 
 /**
- * Pure cooldown math for docs/design/story-mode.md's two home-base actions - no
+ * Pure cooldown math for docs/modes.md's two home-base actions - no
  * Room/SharedPreferences/Context dependency, mirroring [ChallengeProgress]/[AchievementProgress]'s
  * pattern so this is directly unit-testable (see HomeBaseCooldownTest) independent of
  * `PreferencesRepository`.
@@ -26,11 +26,8 @@ object HomeBaseCooldown {
      * non-null timestamp far enough in the past to already satisfy the same check.
      */
     fun isEligible(now: Long, lastTimestamp: Long?, cooldownDays: Int): Boolean {
-        // DEV OVERRIDE - see DEV_FEATURES_TO_REVERT.md. Both home-base cooldowns are disabled for
-        // testing. Delete this `return true` and uncomment the two lines below to restore it.
-        return true
-        // if (lastTimestamp == null) return true
-        // return now - lastTimestamp >= cooldownDays * DAY_MS
+        if (lastTimestamp == null) return true
+        return now - lastTimestamp >= cooldownDays * DAY_MS
     }
 
     /**

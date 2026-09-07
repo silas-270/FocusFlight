@@ -14,6 +14,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -29,8 +31,15 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.focusflight.ui.theme.*
+import coil3.compose.AsyncImage
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.painterResource
+import com.example.focusflight.R
 
 @Composable
 fun ArrivalCelebrationScreen(
@@ -38,42 +47,40 @@ fun ArrivalCelebrationScreen(
     destIata: String,
     durationMin: Int,
     rank: String,
+    /** Prefetched by `InFlightViewModel` during the flight and handed off via
+     *  `DestinationPhotoChannel` - null means "not resolved, no match, or fetch failed", all of
+     *  which look identical here: fall back to the flat [Midnight] background below, silently. */
+    destPhotoUrl: String? = null,
     onContinue: () -> Unit
 ) {
     BackHandler {
         onContinue()
     }
     
-    val context = LocalContext.current
+    val view = androidx.compose.ui.platform.LocalView.current
     val textMeasurer = rememberTextMeasurer()
-    val configuration = LocalConfiguration.current
-    val density = LocalDensity.current
 
-    // Screen height in pixels for the airplane animation
-    val screenHeightPx = with(density) { configuration.screenHeightDp.dp.toPx() }
-
-    var stampLanded by remember { mutableStateOf(false) }
-    val stampScale by animateFloatAsState(
-        targetValue = if (stampLanded) 1f else 5f,
+    var landed by remember { mutableStateOf(false) }
+    val slam by animateFloatAsState(
+        targetValue = if (landed) 1f else 4f,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioMediumBouncy,
             stiffness = Spring.StiffnessLow
-        )
+        ),
+        label = "celebration_slam"
     )
-    val stampAlpha by animateFloatAsState(
-        targetValue = if (stampLanded) 1f else 0f,
-        animationSpec = tween(300)
+    val fade by animateFloatAsState(
+        targetValue = if (landed) 1f else 0f,
+        animationSpec = tween(300),
+        label = "celebration_fade"
     )
 
-    // Airplane animation states: start just off-screen bottom
-    val planeOffsetY = remember { Animatable(screenHeightPx * 0.7f) }
-
-    // Compute styling details based on rank
-    val inkColor = when (rank) {
-        "GLOBETROTTER" -> Amber
-        "COMMANDER" -> com.example.focusflight.ui.theme.RankCommander
-        "CAPTAIN" -> com.example.focusflight.ui.theme.RankCaptain
-        else -> com.example.focusflight.ui.theme.RankFirstOfficer
+    // Compute rank-specific ink accent color on parchment
+    val stampInkColor = when (rank) {
+        "GLOBETROTTER" -> LogbookInkDark
+        "COMMANDER" -> Color(0xFF6E2814) // Rich deep mahogany / wax red
+        "CAPTAIN" -> Color(0xFF144D30)    // Deep forest passport green
+        else -> LogbookInkDark           // Classic dark sepia ink
     }
 
     val currentDateStr = remember {
@@ -81,27 +88,12 @@ fun ArrivalCelebrationScreen(
     }
 
     LaunchedEffect(Unit) {
-        // Launch airplane animation: from off-screen bottom to off-screen top
-        launch {
-            planeOffsetY.animateTo(
-                targetValue = -screenHeightPx * 0.7f,
-                animationSpec = tween(
-                    durationMillis = 750,
-                    easing = CubicBezierEasing(0.15f, 0.55f, 0.3f, 1.0f) // Slower starting speed, smoother deceleration
-                )
-            )
-        }
-
-        delay(750) // Wait for plane to exit (750ms)
-        stampLanded = true
-        // Massive Haptic touchdown feedback
+        delay(120)
+        landed = true
         try {
-            val view = context as? android.app.Activity
-            view?.window?.decorView?.performHapticFeedback(
-                android.view.HapticFeedbackConstants.LONG_PRESS
-            )
-        } catch (e: Exception) {
-            e.printStackTrace()
+            view.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+        } catch (_: Exception) {
+            // Haptics are a flourish, never a requirement
         }
     }
 
@@ -111,74 +103,116 @@ fun ArrivalCelebrationScreen(
             .background(Midnight),
         contentAlignment = Alignment.Center
     ) {
+        // Fullscreen Destination Landmark Photo (bleeds edge-to-edge behind system bars)
+        if (destPhotoUrl != null) {
+            AsyncImage(
+                model = destPhotoUrl,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.matchParentSize()
+            )
+            // Atmospheric top and bottom dark gradient scrims for contrast
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Midnight.copy(alpha = 0.70f),
+                                Midnight.copy(alpha = 0.25f),
+                                Midnight.copy(alpha = 0.85f)
+                            )
+                        )
+                    )
+            )
+        }
 
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.systemBars)
                 .padding(vertical = Spacing.Large, horizontal = Spacing.Large),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            Spacer(modifier = Modifier.weight(1f))
+
+            // 1. Eyebrow Header
             Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+                modifier = Modifier.graphicsLayer { alpha = fade }
             ) {
-                // Shrunk font size from displayMedium to headlineLarge so it doesn't wrap
                 Text(
                     text = "TOUCHDOWN",
                     style = MaterialTheme.typography.headlineLarge.copy(
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 4.sp
                     ),
-                    color = Haze,
-                    modifier = Modifier.graphicsLayer { alpha = stampAlpha }
+                    color = Amber
                 )
                 
+                Spacer(modifier = Modifier.height(4.dp))
+
                 Text(
                     text = "Welcome to $destIata",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = inkColor.copy(alpha = 0.8f),
-                    modifier = Modifier.padding(top = 8.dp).graphicsLayer { alpha = stampAlpha }
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontFamily = FontFamily.Serif,
+                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                    ),
+                    color = OffWhite.copy(alpha = 0.9f)
+                )
+            }
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            // 2. Torn Paper Piece (Static) with Slamming Stamp Overlay
+            Box(
+                modifier = Modifier
+                    .size(310.dp)
+                    .graphicsLayer { alpha = fade },
+                contentAlignment = Alignment.Center
+            ) {
+                // Static torn paper piece lying on the screen
+                Image(
+                    painter = painterResource(R.drawable.bg_torn_paper),
+                    contentDescription = null,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.fillMaxSize()
                 )
 
-                Spacer(modifier = Modifier.height(32.dp))
-
-                // Massive Vintage Passport Stamp Canvas
+                // Animated Stamp that slams down onto the paper piece
                 Box(
                     modifier = Modifier
-                        .size(240.dp)
-                        .padding(8.dp),
+                        .size(228.dp)
+                        .graphicsLayer {
+                            scaleX = slam
+                            scaleY = slam
+                            alpha = fade
+                            rotationZ = -4f // Authentic angled stamp tilt
+                        },
                     contentAlignment = Alignment.Center
                 ) {
                     Canvas(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .graphicsLayer(
-                                scaleX = stampScale,
-                                scaleY = stampScale,
-                                alpha = stampAlpha,
-                                rotationZ = -5f // Slight tilt for organic stamp look
-                            )
+                        modifier = Modifier.fillMaxSize()
                     ) {
-                        val strokeWidth = 5.dp.toPx()
                         val w = size.width
                         val h = size.height
                         val center = Offset(w / 2f, h / 2f)
 
-                        // Draw Stamp Boundary
+                        // 3. Draw Outer Vintage Stamp Boundary based on Rank (pressed onto paper)
+                        val strokeWidth = 3.5.dp.toPx()
+                        val ink = stampInkColor.copy(alpha = 0.90f)
+
                         when (rank) {
                             "CO-PILOT" -> {
                                 drawCircle(
-                                    color = inkColor.copy(alpha = 0.8f),
+                                    color = ink,
                                     radius = w * 0.46f,
                                     style = Stroke(width = strokeWidth)
                                 )
                                 drawCircle(
-                                    color = inkColor.copy(alpha = 0.8f),
+                                    color = ink.copy(alpha = 0.7f),
                                     radius = w * 0.41f,
-                                    style = Stroke(width = 2.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(12f, 12f), 0f))
+                                    style = Stroke(width = 1.5.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 8f), 0f))
                                 )
                             }
                             "CAPTAIN" -> {
@@ -195,39 +229,44 @@ fun ArrivalCelebrationScreen(
                                 }
                                 drawPath(
                                     path = path,
-                                    color = inkColor.copy(alpha = 0.8f),
+                                    color = ink,
                                     style = Stroke(width = strokeWidth)
+                                )
+                                drawCircle(
+                                    color = ink.copy(alpha = 0.6f),
+                                    radius = w * 0.41f,
+                                    style = Stroke(width = 1.5.dp.toPx())
                                 )
                             }
                             "COMMANDER" -> {
                                 val path = androidx.compose.ui.graphics.Path().apply {
-                                    moveTo(w * 0.5f, h * 0.06f)
-                                    lineTo(w * 0.92f, h * 0.06f)
+                                    moveTo(w * 0.5f, h * 0.08f)
+                                    lineTo(w * 0.92f, h * 0.08f)
                                     lineTo(w * 0.92f, h * 0.52f)
-                                    cubicTo(w * 0.92f, h * 0.78f, w * 0.5f, h * 0.94f, w * 0.5f, h * 0.94f)
-                                    cubicTo(w * 0.5f, h * 0.94f, w * 0.08f, h * 0.78f, w * 0.08f, h * 0.52f)
-                                    lineTo(w * 0.08f, h * 0.06f)
+                                    cubicTo(w * 0.92f, h * 0.76f, w * 0.5f, h * 0.92f, w * 0.5f, h * 0.92f)
+                                    cubicTo(w * 0.5f, h * 0.92f, w * 0.08f, h * 0.76f, w * 0.08f, h * 0.52f)
+                                    lineTo(w * 0.08f, h * 0.08f)
                                     close()
                                 }
                                 drawPath(
                                     path = path,
-                                    color = inkColor.copy(alpha = 0.8f),
+                                    color = ink,
                                     style = Stroke(width = strokeWidth)
                                 )
                             }
-                            else -> { // GLOBETROTTER (Foil Golden Double Ring)
+                            else -> { // GLOBETROTTER
                                 drawCircle(
-                                    color = inkColor.copy(alpha = 0.9f),
+                                    color = ink,
                                     radius = w * 0.48f,
                                     style = Stroke(width = strokeWidth)
                                 )
                                 drawCircle(
-                                    color = inkColor.copy(alpha = 0.9f),
+                                    color = ink.copy(alpha = 0.75f),
                                     radius = w * 0.43f,
-                                    style = Stroke(width = 2.dp.toPx())
+                                    style = Stroke(width = 1.5.dp.toPx())
                                 )
                                 // Surrounding dots
-                                val count = 20
+                                val count = 24
                                 for (i in 0 until count) {
                                     val rad = Math.toRadians((i * (360.0 / count)))
                                     val dotPt = Offset(
@@ -235,22 +274,42 @@ fun ArrivalCelebrationScreen(
                                         center.y + (w * 0.38f) * kotlin.math.sin(rad).toFloat()
                                     )
                                     drawCircle(
-                                        color = inkColor.copy(alpha = 0.8f),
-                                        radius = 3.dp.toPx(),
+                                        color = ink,
+                                        radius = 2.dp.toPx(),
                                         center = dotPt
                                     )
                                 }
                             }
                         }
 
-                        // Draw Large Destination IATA in Center (Exactly Centered)
+                        // 4. Draw Date above IATA
+                        val dateResult = textMeasurer.measure(
+                            text = currentDateStr,
+                            style = TextStyle(
+                                color = ink.copy(alpha = 0.75f),
+                                fontSize = 11.sp,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.SemiBold,
+                                letterSpacing = 1.5.sp
+                            )
+                        )
+                        drawText(
+                            textLayoutResult = dateResult,
+                            topLeft = Offset(
+                                center.x - dateResult.size.width / 2f,
+                                center.y - 52.dp.toPx()
+                            )
+                        )
+
+                        // 5. Draw Large Centered Destination IATA
                         val iataResult = textMeasurer.measure(
                             text = destIata,
                             style = TextStyle(
-                                color = inkColor.copy(alpha = 0.9f),
+                                color = ink,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 48.sp,
-                                fontFamily = FontFamily.Monospace
+                                fontSize = 44.sp,
+                                fontFamily = FontFamily.Monospace,
+                                letterSpacing = 3.sp
                             )
                         )
                         drawText(
@@ -261,31 +320,13 @@ fun ArrivalCelebrationScreen(
                             )
                         )
 
-                        // Draw Stamp Date above IATA (Pushed up for spacing)
-                        val dateResult = textMeasurer.measure(
-                            text = currentDateStr,
-                            style = TextStyle(
-                                color = inkColor.copy(alpha = 0.6f),
-                                fontSize = 12.sp,
-                                fontFamily = FontFamily.Monospace,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        )
-                        drawText(
-                            textLayoutResult = dateResult,
-                            topLeft = Offset(
-                                center.x - dateResult.size.width / 2f,
-                                center.y - 56.dp.toPx()
-                            )
-                        )
-
-                        // Draw Earned Rank below IATA (Symmetrically spaced)
+                        // 6. Draw Earned Rank below IATA
                         val rankResult = textMeasurer.measure(
                             text = rank,
                             style = TextStyle(
-                                color = inkColor.copy(alpha = 0.8f),
+                                color = ink.copy(alpha = 0.85f),
                                 fontWeight = FontWeight.Black,
-                                fontSize = 14.sp,
+                                fontSize = 12.sp,
                                 fontFamily = FontFamily.SansSerif,
                                 letterSpacing = 2.sp
                             )
@@ -294,42 +335,32 @@ fun ArrivalCelebrationScreen(
                             textLayoutResult = rankResult,
                             topLeft = Offset(
                                 center.x - rankResult.size.width / 2f,
-                                center.y + 44.dp.toPx()
+                                center.y + 40.dp.toPx()
                             )
                         )
                     }
                 }
-
-                Spacer(modifier = Modifier.height(40.dp))
-
-                // Monospaced Flight Telemetry Receipt Card
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(DeepNavy.copy(alpha = 0.8f), RoundedCornerShape(16.dp))
-                        .border(1.dp, inkColor.copy(alpha = 0.3f), RoundedCornerShape(16.dp))
-                        .padding(vertical = 28.dp, horizontal = 16.dp)
-                        .graphicsLayer { alpha = stampAlpha },
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    val hours = durationMin / 60
-                    val mins = durationMin % 60
-                    val timeString = if (hours > 0) "${hours}h ${mins}m" else "${mins}m"
-                    
-                    Text(
-                        text = timeString,
-                        style = MaterialTheme.typography.displayLarge.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace,
-                            letterSpacing = 2.sp
-                        ),
-                        color = Haze
-                    )
-                }
             }
 
-            Spacer(modifier = Modifier.height(Spacing.Large))
+            Spacer(modifier = Modifier.weight(1f))
+
+            // 3. Flight Duration: Clean minimal telemetry presentation (positioned between stamp and button)
+            val hours = durationMin / 60
+            val mins = durationMin % 60
+            val timeString = if (hours > 0) "${hours}h ${mins}m" else "${mins}m"
+
+            Text(
+                text = timeString,
+                style = MaterialTheme.typography.displayMedium.copy(
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace,
+                    letterSpacing = 2.sp
+                ),
+                color = OffWhite,
+                modifier = Modifier.graphicsLayer { alpha = fade }
+            )
+
+            Spacer(modifier = Modifier.weight(1f))
 
             // Exit / Continue Button
             Button(
@@ -337,9 +368,12 @@ fun ArrivalCelebrationScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(54.dp)
-                    .graphicsLayer { alpha = stampAlpha },
+                    .graphicsLayer { alpha = fade },
                 shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = inkColor, contentColor = Midnight)
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Amber,
+                    contentColor = Midnight
+                )
             ) {
                 Text(
                     text = "ENTER HUB",
@@ -350,19 +384,6 @@ fun ArrivalCelebrationScreen(
                 )
             }
         }
-
-        // Massive Airplane Flyover - drawn above everything
-        Icon(
-            imageVector = Icons.Default.Flight,
-            contentDescription = null,
-            tint = Amber,
-            modifier = Modifier
-                .fillMaxWidth(0.75f)
-                .aspectRatio(1f)
-                .graphicsLayer {
-                    translationY = planeOffsetY.value
-                }
-        )
     }
 }
 

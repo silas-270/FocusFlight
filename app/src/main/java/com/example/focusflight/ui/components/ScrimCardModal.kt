@@ -21,7 +21,7 @@ import com.example.focusflight.ui.theme.DeepNavy
 import com.example.focusflight.ui.theme.Spacing
 
 /**
- * The app's one modal convention (see docs/design/codebase-map.md): a full-screen scrim [Box] and
+ * The app's one modal convention (see docs/architecture.md): a full-screen scrim [Box] and
  * a sibling centered card [Box] - never `AlertDialog`/`Dialog`. Originated in
  * `InFlightScreen.kt`'s exit/pause confirmation (scrim and card are siblings, not nested, so a tap
  * on the card can't also fall through to the scrim's dismiss handler underneath it - nesting was

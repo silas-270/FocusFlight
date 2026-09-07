@@ -22,16 +22,24 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.focusflight.data.model.Challenge
+import com.example.focusflight.data.model.ChallengeType
 import com.example.focusflight.data.model.progressFraction
 import com.example.focusflight.ui.components.RingProgress
-import com.example.focusflight.ui.components.challengeTypeIcon
+import com.example.focusflight.ui.components.icon
 import com.example.focusflight.ui.theme.Amber
 import com.example.focusflight.ui.theme.DeepNavy
 import com.example.focusflight.ui.theme.Haze
@@ -106,6 +114,12 @@ private fun RowScope.FilledSlot(challenge: Challenge, onClick: () -> Unit) {
         label = "challenge_slot_${challenge.id}"
     )
 
+    val labelText = if (challenge.type == ChallengeType.SET_COMPLETION) {
+        "${challenge.visitedSetMembers.size}/${challenge.setTotalMembers}"
+    } else {
+        "${(animatedProgress * 100).toInt()}%"
+    }
+
     Box(
         modifier = Modifier
             .weight(1f)
@@ -115,10 +129,10 @@ private fun RowScope.FilledSlot(challenge: Challenge, onClick: () -> Unit) {
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
-        // Type icon sits behind the ring, dimmed - it identifies the challenge kind without
+        // Challenge icon sits behind the ring, dimmed - it identifies the challenge without
         // competing with the number, which is the thing you actually read.
         Icon(
-            imageVector = challengeTypeIcon(challenge.type),
+            imageVector = challenge.icon(),
             contentDescription = null,
             tint = Haze.copy(alpha = 0.15f),
             modifier = Modifier.fillMaxSize().padding(Spacing.Large)
@@ -129,14 +143,51 @@ private fun RowScope.FilledSlot(challenge: Challenge, onClick: () -> Unit) {
             strokeWidth = 5.dp,
             fillColor = Amber
         ) {
-            Text(
-                text = "${(animatedProgress * 100).toInt()}%",
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace
-                ),
-                color = OffWhite
+            AutoScalingCenterText(
+                text = labelText,
+                modifier = Modifier.padding(horizontal = 6.dp)
             )
         }
     }
+}
+
+@Composable
+private fun AutoScalingCenterText(
+    text: String,
+    modifier: Modifier = Modifier
+) {
+    val initialSize = when {
+        text.length <= 3 -> 15.sp
+        text.length == 4 -> 13.sp
+        text.length == 5 -> 11.5.sp
+        else -> 10.sp
+    }
+
+    var fontSize by remember(text) { mutableStateOf(initialSize) }
+    var readyToDraw by remember(text) { mutableStateOf(false) }
+
+    Text(
+        text = text,
+        color = OffWhite,
+        maxLines = 1,
+        softWrap = false,
+        textAlign = TextAlign.Center,
+        style = MaterialTheme.typography.titleMedium.copy(
+            fontWeight = FontWeight.Bold,
+            fontFamily = FontFamily.Monospace,
+            fontSize = fontSize
+        ),
+        onTextLayout = { textLayoutResult ->
+            if (textLayoutResult.didOverflowWidth && fontSize.value > 8f) {
+                fontSize = (fontSize.value - 1f).coerceAtLeast(8f).sp
+            } else {
+                readyToDraw = true
+            }
+        },
+        modifier = modifier.drawWithContent {
+            if (readyToDraw) {
+                drawContent()
+            }
+        }
+    )
 }

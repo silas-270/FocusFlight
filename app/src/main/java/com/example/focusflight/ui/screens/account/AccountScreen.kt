@@ -4,6 +4,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -25,6 +26,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -36,12 +39,12 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.paging.LoadState
-import androidx.paging.compose.collectAsLazyPagingItems
 import com.example.focusflight.data.model.AchievementStatus
 import com.example.focusflight.data.model.Airport
 import com.example.focusflight.data.model.FlightLog
 import com.example.focusflight.ui.components.BackTopAppBar
+import com.example.focusflight.data.model.Tour
+import com.example.focusflight.util.formatMiles
 import com.example.focusflight.ui.theme.Amber
 import com.example.focusflight.ui.theme.Haze
 import com.example.focusflight.ui.theme.Midnight
@@ -62,17 +65,27 @@ fun AccountScreen(
     onNavigateHome: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val lazyPagingItems = viewModel.pagedFlights.collectAsLazyPagingItems()
 
-    // Sticky month/year headers only make sense when the list is chronologically
-    // sorted — grouping by distance/duration order would scatter single-item groups.
-    // Computed from uiState.flightHistory (already fully loaded for the map/stats,
-    // independent of the paging window) so this never forces extra pages to load.
-    val monthHeaderLabels = remember(uiState.flightHistory, uiState.sortOrder) {
-        buildMonthHeaderLabels(uiState.flightHistory, uiState.sortOrder)
+    // Rows and headers both come from uiState.flightHistory, which matters more than it looks.
+    // This list used to render from a separate Paging 3 query while the headers were computed
+    // from this one, with index equality as the only contract between them and nothing checking
+    // it - so a sort change or a fresh landing could slide every header one row out of position.
+    // Month headers hid that (a header one row early inside a run of same-month flights looks
+    // plausible); tour headers would not, because the boundary *is* the feature and the header
+    // states a mileage total the rows beneath it would not add up to. The full history is already
+    // in memory for the map, stats, highlights and achievements, so paging a second copy of it
+    // bought nothing - LazyColumn only composes what is visible either way.
+    val sortedFlights = remember(uiState.flightHistory, uiState.sortOrder) {
+        sortFlights(uiState.flightHistory, uiState.sortOrder)
     }
 
-    // Home base + return (docs/design/story-mode.md) - two ScrimCardModal overlays, shown as
+    // Sticky tour headers only make sense when the list is chronologically sorted — grouping by
+    // distance/duration order would scatter single-item groups.
+    val tourHeaders = remember(uiState.tours, uiState.sortOrder) {
+        buildTourHeaders(uiState.tours, uiState.sortOrder)
+    }
+
+    // Home base + return (docs/modes.md) - two ScrimCardModal overlays, shown as
     // siblings of the Scaffold below (not nested inside it) so they draw on top of the whole
     // screen, same reasoning as every other ScrimCardModal use in this codebase.
     var showReturnHomeModal by remember { mutableStateOf(false) }
@@ -92,16 +105,32 @@ fun AccountScreen(
     // Same ScrimCardModal convention for the sort-order picker, replacing the old inline
     // DropdownMenu — this app never uses DropdownMenu/AlertDialog/Dialog elsewhere.
     var showSortModal by remember { mutableStateOf(false) }
-    // Months start collapsed; tapping a MonthHeader adds/removes its label here. Only
-    // meaningful when sorted by date — monthHeaderLabels is empty for distance/duration
-    // order, so nothing ever gets collapsed there.
-    var expandedMonths by remember { mutableStateOf(setOf<String>()) }
+    // Tapping a TourHeader adds/removes its id here. Only meaningful when sorted by date —
+    // tourHeaders is empty for distance/duration order, so nothing ever gets collapsed there.
+    //
+    // Keyed on the tour's id rather than its displayed title, and that is load-bearing: this set
+    // and the stickyHeader key below are both derived from it, and two tours can easily produce
+    // the same title. A duplicate key inside a LazyColumn is a crash, not a cosmetic bug.
+    var expandedTours by rememberSaveable(stateSaver = ExpandedToursSaver) {
+        mutableStateOf(setOf<String>())
+    }
+    // The newest tour opens on arrival. Everything used to start collapsed, which left the
+    // logbook looking empty. Keyed on the id so a brand new tour opens itself, while a tour the
+    // pilot deliberately collapsed stays that way.
+    val newestTourId = uiState.tours.firstOrNull()?.let { tourId(it) }
+    LaunchedEffect(newestTourId) {
+        if (newestTourId != null) expandedTours = expandedTours + newestTourId
+    }
     // Hoisted out of ProfileHeroCard so it survives the card scrolling out of the LazyColumn's
     // viewport and back in.
     var heroExpanded by remember { mutableStateOf(false) }
     // Owned here, not inside AchievementBadgeGrid: a ScrimCardModal opened from inside a
     // LazyColumn item is clipped to that item, so it has to be a sibling of the Scaffold.
-    var selectedBadge by remember { mutableStateOf<AchievementStatus?>(null) }
+    //
+    // Two, because a ladder tile opens onto its tiers while a lone badge opens straight onto its
+    // own card. Only ever one of them is non-null.
+    var selectedStack by remember { mutableStateOf<AchievementStack?>(null) }
+    var selectedAchievement by remember { mutableStateOf<AchievementStatus?>(null) }
     val homeBaseSearchQuery by viewModel.homeBaseSearchQuery.collectAsState()
     val homeBaseSearchResults by viewModel.homeBaseSearchResults.collectAsState()
     val homeBaseSuggestions by viewModel.homeBaseSuggestions.collectAsState()
@@ -187,8 +216,16 @@ fun AccountScreen(
                 item { SectionHeader(title = "ACHIEVEMENTS") }
                 item {
                     AchievementBadgeGrid(
-                        achievements = uiState.unlockedAchievements,
-                        onBadgeClick = { selectedBadge = it }
+                        stacks = uiState.achievementStacks,
+                        onStackClick = { stack ->
+                            // A lone achievement has no tier list worth scrolling - open the badge
+                            // itself, exactly as it always did. Only a real ladder opens the stack.
+                            if (stack.isStacked) {
+                                selectedStack = stack
+                            } else {
+                                selectedAchievement = stack.top
+                            }
+                        }
                     )
                 }
 
@@ -211,59 +248,39 @@ fun AccountScreen(
                     }
                 }
 
-                // ── Paged Logbook Items (with sticky month/year headers) ──────
-                // currentMonthLabel tracks which month index i falls in even when i isn't a
-                // header boundary itself, so every item's visibility can be checked against
-                // expandedMonths, not just the first item of each month.
-                var currentMonthLabel: String? = null
-                for (index in 0 until lazyPagingItems.itemCount) {
-                    val headerLabel = monthHeaderLabels[index]
-                    if (headerLabel != null) {
-                        currentMonthLabel = headerLabel
-                        val isExpanded = headerLabel in expandedMonths
-                        stickyHeader(key = "header_$headerLabel") {
-                            MonthHeader(
-                                label = headerLabel,
+                // ── Logbook Items (with sticky tour headers) ──────────────────
+                // currentTourId tracks which tour index i falls in even when i isn't a header
+                // boundary itself, so every item's visibility can be checked against
+                // expandedTours, not just the first item of each tour.
+                var currentTourId: String? = null
+                sortedFlights.forEachIndexed { index, flight ->
+                    val header = tourHeaders[index]
+                    if (header != null) {
+                        currentTourId = header.id
+                        val isExpanded = header.id in expandedTours
+                        stickyHeader(key = header.id) {
+                            TourHeader(
+                                header = header,
                                 expanded = isExpanded,
                                 onToggle = {
-                                    expandedMonths = if (isExpanded) {
-                                        expandedMonths - headerLabel
+                                    expandedTours = if (isExpanded) {
+                                        expandedTours - header.id
                                     } else {
-                                        expandedMonths + headerLabel
+                                        expandedTours + header.id
                                     }
                                 }
                             )
                         }
                     }
-                    val monthLabel = currentMonthLabel
-                    if (monthLabel == null || monthLabel in expandedMonths) {
-                        item(
-                            key = lazyPagingItems.peek(index)?.id ?: "placeholder_$index",
-                            contentType = "flight"
-                        ) {
-                            val flight = lazyPagingItems[index]
-                            if (flight != null) {
-                                val entryNo = when (uiState.sortOrder) {
-                                    FlightSortOrder.DATE_DESC, FlightSortOrder.DISTANCE_DESC, FlightSortOrder.DURATION_DESC -> uiState.stats.totalFlights - index
-                                    FlightSortOrder.DATE_ASC, FlightSortOrder.DISTANCE_ASC -> index + 1
-                                }
-                                LogbookEntry(flight = flight, entryNumber = entryNo)
+                    val tourId = currentTourId
+                    if (tourId == null || tourId in expandedTours) {
+                        item(key = flight.id, contentType = "flight") {
+                            val entryNo = when (uiState.sortOrder) {
+                                FlightSortOrder.DATE_DESC, FlightSortOrder.DISTANCE_DESC, FlightSortOrder.DURATION_DESC ->
+                                    sortedFlights.size - index
+                                FlightSortOrder.DATE_ASC, FlightSortOrder.DISTANCE_ASC -> index + 1
                             }
-                        }
-                    }
-                }
-
-                // ── Loading Footer ────────────────────────────────────────────
-                val loadState = lazyPagingItems.loadState
-                if (loadState.append is LoadState.Loading) {
-                    item {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator(color = Amber, strokeWidth = 2.dp)
+                            LogbookEntry(flight = flight, entryNumber = entryNo)
                         }
                     }
                 }
@@ -310,10 +327,17 @@ fun AccountScreen(
         )
     }
 
-    selectedBadge?.let { achievement ->
+    selectedStack?.let { stack ->
+        AchievementStackModal(
+            stack = stack,
+            onDismiss = { selectedStack = null }
+        )
+    }
+
+    selectedAchievement?.let { achievement ->
         AchievementBadgeModal(
             achievement = achievement,
-            onDismiss = { selectedBadge = null }
+            onDismiss = { selectedAchievement = null }
         )
     }
 
@@ -392,8 +416,22 @@ private fun locationLine(city: String?, isoCountry: String?): String {
         .uppercase(Locale.US)
 }
 
+/**
+ * One tour's header. [id] is the identity - the collapse set and the `stickyHeader` key both
+ * derive from it - while [title]/[subtitle] are display only and free to collide.
+ */
+private data class TourHeaderData(val id: String, val title: String, val subtitle: String)
+
+/** Two tours cannot share a first-flight timestamp, which is what makes this a safe key. */
+private fun tourId(tour: Tour): String = "tour_${tour.startedAt}"
+
+private val ExpandedToursSaver = listSaver<Set<String>, String>(
+    save = { it.toList() },
+    restore = { it.toSet() }
+)
+
 @Composable
-private fun MonthHeader(label: String, expanded: Boolean, onToggle: () -> Unit) {
+private fun TourHeader(header: TourHeaderData, expanded: Boolean, onToggle: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -403,17 +441,24 @@ private fun MonthHeader(label: String, expanded: Boolean, onToggle: () -> Unit) 
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelMedium.copy(
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.5.sp
-            ),
-            color = Haze
-        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = header.title,
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.5.sp
+                ),
+                color = Amber
+            )
+            Text(
+                text = header.subtitle,
+                style = MaterialTheme.typography.labelSmall,
+                color = Haze
+            )
+        }
         Icon(
             imageVector = Icons.Outlined.ExpandMore,
-            contentDescription = if (expanded) "Collapse month" else "Expand month",
+            contentDescription = if (expanded) "Collapse tour" else "Expand tour",
             tint = Haze,
             modifier = Modifier
                 .size(20.dp)
@@ -422,30 +467,72 @@ private fun MonthHeader(label: String, expanded: Boolean, onToggle: () -> Unit) 
     }
 }
 
-private val monthHeaderFormat = SimpleDateFormat("MMMM yyyy", Locale.US)
+/**
+ * The one place the row order is decided. [buildTourHeaders] indexes against exactly this
+ * ordering, so the two must agree - which is why they are neighbours here rather than one living
+ * in a ViewModel and one in the composable.
+ */
+private fun sortFlights(history: List<FlightLog>, sortOrder: FlightSortOrder): List<FlightLog> =
+    when (sortOrder) {
+        FlightSortOrder.DATE_DESC -> history.sortedByDescending { it.completedAt }
+        FlightSortOrder.DATE_ASC -> history.sortedBy { it.completedAt }
+        FlightSortOrder.DISTANCE_DESC -> history.sortedByDescending { it.distanceKm }
+        FlightSortOrder.DISTANCE_ASC -> history.sortedBy { it.distanceKm }
+        FlightSortOrder.DURATION_DESC -> history.sortedByDescending { it.durationMin }
+    }
 
-// Maps each paged-item index to the month/year header that should precede it —
-// only the index where a new month starts is present in the map. Built from the
-// full (non-paged) flight history so header boundaries are known up front instead
-// of depending on which pages happen to be loaded.
-private fun buildMonthHeaderLabels(
-    flightHistory: List<FlightLog>,
-    sortOrder: FlightSortOrder
-): Map<Int, String> {
-    val chronological = when (sortOrder) {
-        FlightSortOrder.DATE_DESC -> flightHistory.sortedByDescending { it.completedAt }
-        FlightSortOrder.DATE_ASC -> flightHistory.sortedBy { it.completedAt }
+/**
+ * Maps each row index to the tour header that should precede it - only the index where a new tour
+ * starts is present, so the render loop carries the current tour forward for every other row.
+ *
+ * Tours are chronological by definition, so the distance/duration orders get no headers at all
+ * (and, via the null-tour branch in the render loop, no collapsing either) - the same escape the
+ * month headers used, for the same reason: grouping a distance-sorted list by date would scatter
+ * single-item groups.
+ */
+private fun buildTourHeaders(tours: List<Tour>, sortOrder: FlightSortOrder): Map<Int, TourHeaderData> {
+    val ordered = when (sortOrder) {
+        FlightSortOrder.DATE_DESC -> tours
+        FlightSortOrder.DATE_ASC -> tours.asReversed()
         else -> return emptyMap()
     }
 
-    val headers = mutableMapOf<Int, String>()
-    var lastLabel: String? = null
-    chronological.forEachIndexed { index, flight ->
-        val label = monthHeaderFormat.format(Date(flight.completedAt)).uppercase(Locale.US)
-        if (label != lastLabel) {
-            headers[index] = label
-            lastLabel = label
-        }
+    val headers = mutableMapOf<Int, TourHeaderData>()
+    var index = 0
+    ordered.forEach { tour ->
+        headers[index] = TourHeaderData(
+            id = tourId(tour),
+            title = tourDateRange(tour.startedAt, tour.endedAt),
+            subtitle = tourSubtitle(tour)
+        )
+        index += tour.flights.size
     }
     return headers
+}
+
+private val dayMonthFormat = SimpleDateFormat("d MMM", Locale.US)
+private val dayMonthYearFormat = SimpleDateFormat("d MMM yyyy", Locale.US)
+
+private fun tourDateRange(startedAt: Long, endedAt: Long): String {
+    val start = dayMonthYearFormat.format(Date(startedAt)).uppercase(Locale.US)
+    val end = dayMonthYearFormat.format(Date(endedAt)).uppercase(Locale.US)
+    if (start == end) return end
+    // Drop the repeated year from the start of a tour that does not cross one.
+    val sameYear = start.takeLast(4) == end.takeLast(4)
+    val shownStart = if (sameYear) dayMonthFormat.format(Date(startedAt)).uppercase(Locale.US) else start
+    return "$shownStart – $end"
+}
+
+/**
+ * "8 FLIGHTS · 12,400 MI · 11 OF 14 DAYS".
+ *
+ * The days ratio is the point of the whole feature - a bare "11" reads as a small number, while
+ * "11 of 14 days" reads as near-perfect attendance, which is what it actually is. It is dropped
+ * for a single-day tour, where "1 of 1 days" says nothing.
+ */
+private fun tourSubtitle(tour: Tour): String {
+    val flights = if (tour.flights.size == 1) "1 FLIGHT" else "${tour.flights.size} FLIGHTS"
+    val parts = mutableListOf(flights, formatMiles(tour.totalDistanceKm).uppercase(Locale.US))
+    if (tour.spanDays > 1) parts += "${tour.activeDays} OF ${tour.spanDays} DAYS"
+    return parts.joinToString(" · ")
 }

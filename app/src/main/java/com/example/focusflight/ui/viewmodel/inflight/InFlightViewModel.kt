@@ -6,15 +6,19 @@ import androidx.lifecycle.viewModelScope
 import com.example.focusflight.data.model.Airport
 import com.example.focusflight.data.model.CameraPose
 import com.example.focusflight.data.model.Challenge
+import com.example.focusflight.data.model.FlightLog
 import com.example.focusflight.data.model.FlightMode
 import com.example.focusflight.data.model.FlightRoute
 import com.example.focusflight.data.repository.AirportRepository
 import com.example.focusflight.data.repository.ChallengeRepository
+import com.example.focusflight.data.repository.DestinationPhotoChannel
+import com.example.focusflight.data.repository.DestinationPhotoRepository
 import com.example.focusflight.data.repository.FlightLogRepository
 import com.example.focusflight.data.repository.LandingResult
 import com.example.focusflight.data.repository.LandingResultChannel
 import com.example.focusflight.data.repository.PausedFlightStore
 import com.example.focusflight.data.repository.PreferencesRepository
+import com.example.focusflight.data.repository.SessionPausedFlightStore
 import com.example.focusflight.data.repository.processLandingForChallenges
 import com.example.focusflight.data.repository.resolveLandingOutcome
 import com.example.focusflight.domain.loadRouteContext
@@ -54,11 +58,16 @@ class InFlightViewModel(
     private val preferencesRepository: PreferencesRepository,
     private val flightLogRepository: FlightLogRepository,
     private val challengeRepository: ChallengeRepository,
-    /** Phase 3b's landing-result channel (see docs/design/mechanics.md's post-landing pipeline
+    /** Phase 3b's landing-result channel (see docs/core-loop.md's post-landing pipeline
      *  step 5) - published into at the end of [checkAchievementsAndChallenges], read by
      *  `CesiumGameActivity`'s `Screen.ArrivalCelebration` `onContinue` once this ViewModel (and
      *  its nav entry) may already be gone. */
     private val landingResultChannel: LandingResultChannel,
+    /** Prefetches the arrival screen's destination photo as soon as [destAirport] resolves below,
+     *  and publishes it here for `CesiumGameActivity`'s `Screen.ArrivalCelebration` to read - see
+     *  DestinationPhotoChannel's doc for why this can't just be a nav arg. */
+    private val destinationPhotoChannel: DestinationPhotoChannel,
+    private val destinationPhotoRepository: DestinationPhotoRepository,
     private val cacheDir: java.io.File,
     val flightNumber: String,
     val originIata: String,
@@ -66,7 +75,7 @@ class InFlightViewModel(
     val durationMin: Int,
     val mode: FlightMode = FlightMode.STORY,
     /** Which Route challenge this CHALLENGE-tagged session is scoped to (see
-     *  docs/design/challenges.md#persistence--route-scoping) - null for STORY/FREE, and
+     *  docs/challenges.md#persistence--route-scoping) - null for STORY/FREE, and
      *  meaningless when [mode] isn't CHALLENGE. Threaded through the same nav-arg mechanism
      *  Phase 2 used for [originIata] (see Screen.InFlight). */
     val challengeId: Int? = null
@@ -105,21 +114,44 @@ class InFlightViewModel(
     private val landingScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mapRenderer = CesiumHeadlessMapRenderer(cacheDir)
 
+    /**
+     * Set the moment [completeFlight] begins, and never cleared - this flight is over.
+     *
+     * **A landing happens once.** [skipFlight] is a plain `clickable` with no debounce, and the
+     * timer branch can reach [completeFlight] independently of it. Two landings would log the
+     * flight twice and credit the challenge twice - advancing two legs for one flight, or
+     * double-counting a Distance challenge's kilometres.
+     *
+     * It also short-circuits [saveCameraState] and [persistElapsed], which run outside the
+     * landing's own coroutine and would otherwise be assembling a write to a slot the landing is
+     * about to take. That half is a courtesy rather than the guarantee - [SessionPausedFlightStore]
+     * is what actually makes the stale write unrepresentable, and it does so without depending on
+     * this flag being set before the racing read. See its doc for why the two are not the same
+     * check.
+     *
+     * `@Volatile` because it is written from [viewModelScope] (main) and read from the timer
+     * coroutine, and [landingScope] (IO) is what acts on its consequences.
+     */
+    @Volatile
+    private var landingStarted = false
+
     /** Where this session's paused flight lives: the global Story/Free slot, or this specific
      *  Route challenge's own row. Picked once here instead of re-branching on mode/challengeId
      *  on every read/write/clear - see [PausedFlightStore]'s own doc. */
-    private val pausedFlightStore: PausedFlightStore =
+    private val pausedFlightStore: PausedFlightStore = SessionPausedFlightStore(
         if (mode == FlightMode.CHALLENGE && challengeId != null) {
             challengeRepository.pausedFlightStore(challengeId)
         } else {
             preferencesRepository.pausedFlightStore(mode)
         }
+    )
 
     init {
         // A fresh nav entry (new flight, or resuming one) always means a fresh ViewModel
         // instance - clear out whatever the *previous* flight's landing left behind so a stale
         // result can never leak into this flight's own landing sequence.
         landingResultChannel.reset()
+        destinationPhotoChannel.reset()
 
         val totalSec = durationMin * 60L
 
@@ -166,6 +198,9 @@ class InFlightViewModel(
             qx = pose[4], qy = pose[5], qz = pose[6], qw = pose[7]
         )
         viewModelScope.launch {
+            // See [landingStarted]: ON_STOP fires when this screen is popped for the arrival
+            // celebration, which is exactly while the landing is clearing this same slot.
+            if (landingStarted) return@launch
             val current = pausedFlightStore.get() ?: return@launch
             pausedFlightStore.save(current.copy(camera = camera))
         }
@@ -182,6 +217,14 @@ class InFlightViewModel(
             _originAirport.value = context.origin
             _destAirport.value = context.dest
             _routeDetails.value = context.route
+
+            // Prefetch the arrival screen's destination photo now, well ahead of landing, so the
+            // arrival screen itself never has to block on or retry a network call - see
+            // DestinationPhotoChannel's doc.
+            context.dest?.let { dest ->
+                val photoUrl = destinationPhotoRepository.fetchDestinationPhotoUrl(dest.municipality, dest.isoCountry)
+                destinationPhotoChannel.publish(photoUrl)
+            }
 
             // Initialize coordinates to origin
             context.origin?.let { origin ->
@@ -268,6 +311,10 @@ class InFlightViewModel(
     }
 
     private suspend fun persistElapsed(elapsedMs: Long) {
+        // Same reason as [saveCameraState]'s guard: the timer's cancellation is not instant, so a
+        // tick already suspended inside this function can otherwise write the slot back after the
+        // landing has cleared it. See [landingStarted].
+        if (landingStarted) return
         val current = pausedFlightStore.get() ?: return
         pausedFlightStore.save(current.copy(elapsedMs = elapsedMs))
     }
@@ -296,7 +343,7 @@ class InFlightViewModel(
 
     /**
      * Shared landing/completion sequence: stop the timer, kick off the destination pre-render,
-     * then run docs/design/mechanics.md's post-landing pipeline in [landingScope] - step 2
+     * then run docs/core-loop.md's post-landing pipeline in [landingScope] - step 2
      * (logbook), step 3 (`currentAirport`/visited-set, STORY only, and only if step 2 succeeded),
      * step 4 (achievement/challenge check) - and snap the native engine to 100% progress.
      * Invoked by both the normal timer-completion branch and the debug [skipFlight] shortcut so
@@ -313,9 +360,14 @@ class InFlightViewModel(
      * both call sites satisfy this with no suspension point in between (the timer branch sets
      * `elapsedToPersist` only in the not-completed case, so nothing suspends between the update
      * and this call). If you ever add a suspending step before this, the landing becomes
-     * droppable - gate [onCleared]'s cancel on a "landing started" flag instead.
+     * droppable - gate [onCleared]'s cancel on [landingStarted] instead.
      */
     private fun completeFlight() {
+        // A flight lands once. See [landingStarted] for the two ways this used to be reachable
+        // twice, and what a second landing costs.
+        if (landingStarted) return
+        landingStarted = true
+
         timerJob?.cancel()
         timerJob = null
 
@@ -334,7 +386,7 @@ class InFlightViewModel(
             // everything else is conditional on it.
             val logged = saveFlightLog()
 
-            if (logged) {
+            if (logged != null) {
                 // Step 3: only a STORY-tagged session moves the player's main position/visited-set.
                 // FREE and CHALLENGE sessions are logged (above) but never touch currentAirport.
                 if (mode == FlightMode.STORY) {
@@ -354,13 +406,13 @@ class InFlightViewModel(
             // Step 4: always runs, even if the logbook write failed - it is what resolves
             // [landingResultChannel], and an unresolved channel hangs the arrival screen (see
             // [landingScope]). A landing that could not be logged simply has nothing to credit.
-            checkAchievementsAndChallenges(creditChallenges = logged)
+            checkAchievementsAndChallenges(loggedFlight = logged)
         }
 
         com.example.focusflight.engine.live.CesiumLiveJniBridge.nativeSetProgress(1.0)
     }
 
-    // ── Post-landing pipeline step 4 (docs/design/mechanics.md) ─────────────────────────
+    // ── Post-landing pipeline step 4 (docs/modes.md) ─────────────────────────
     // Every eligible flight (STORY or CHALLENGE - never FREE) is checked against all active
     // challenges here, and the result is published to [landingResultChannel] for step 5's landing
     // sequence (the rank stamp always shows first, unchanged; this decides what - if anything -
@@ -371,7 +423,7 @@ class InFlightViewModel(
     // see LandingResultTest.
     //
     // Phase 4 (achievements) deliberately has no achievement half here, and this isn't a stub -
-    // docs/design/achievements.md never specifies an unlock-celebration screen or landing-sequence
+    // docs/achievements.md never specifies an unlock-celebration screen or landing-sequence
     // beat for achievements the way achievements.md/challenges.md explicitly do for challenge
     // completion. Unlike Challenge progress (which lives on the `challenges` row and has to be
     // mutated somewhere), every v1 achievement category is fully re-derivable on read: Geographic
@@ -382,7 +434,7 @@ class InFlightViewModel(
     // `FlightSearchViewModel` already use for `visitedCountries`/`completedContinents`), not
     // checked/persisted here after every landing - there's no "just unlocked" flag to set, and
     // no new Room migration needed for this feature.
-    private suspend fun checkAchievementsAndChallenges(creditChallenges: Boolean) {
+    private suspend fun checkAchievementsAndChallenges(loggedFlight: FlightLog?) {
         val distanceKm = _routeDetails.value?.distanceKm ?: 0.0
 
         // Every exit path from here MUST leave [landingResultChannel] resolved. The arrival
@@ -395,13 +447,15 @@ class InFlightViewModel(
             // for FREE), but short-circuiting here too skips two DB round trips and resolves the
             // channel near-instantly rather than leaving it Pending until a query completes.
             // A landing whose logbook write failed is treated the same way: nothing to credit.
-            if (mode == FlightMode.FREE || !creditChallenges) {
+            if (mode == FlightMode.FREE || loggedFlight == null) {
                 landingResultChannel.publish(LandingResult.None)
                 return
             }
 
             val before: List<Challenge> = challengeRepository.listActiveChallenges()
-            processLandingForChallenges(challengeRepository, mode, challengeId, destIata, distanceKm)
+            processLandingForChallenges(
+                challengeRepository, mode, challengeId, destIata, distanceKm, loggedFlight.completedAt
+            )
             // Re-fetched by id (not re-listing "active" challenges) because a challenge that just
             // *completed* this landing is no longer ACTIVE - listing active-only here would make
             // every completion invisible to the diff. See resolveLandingOutcome's own note.
@@ -435,11 +489,15 @@ class InFlightViewModel(
     }
 
     /**
-     * Writes the logbook entry. Returns whether it actually landed - the caller gates the
-     * position write on it, so this must never report success it didn't achieve. Body only; the
+     * Writes the logbook entry and returns it, or null if the write failed - the caller gates the
+     * position write on that, so this must never report success it didn't achieve. Body only; the
      * caller owns the scope.
+     *
+     * Returns the row rather than a Boolean because Streak challenges need its `completedAt`: the
+     * timestamp is assigned here, and reading a fresh `now` further down the pipeline would put a
+     * flight on the wrong side of midnight.
      */
-    private suspend fun saveFlightLog(): Boolean = try {
+    private suspend fun saveFlightLog(): FlightLog? = try {
         val route = _routeDetails.value
         val distanceKm = route?.distanceKm ?: 0.0
 
@@ -451,10 +509,9 @@ class InFlightViewModel(
             distanceKm = distanceKm,
             mode = mode
         )
-        true
     } catch (e: Exception) {
         android.util.Log.e("InFlightViewModel", "Error saving flight log to Room", e)
-        false
+        null
     }
 
     override fun onCleared() {
@@ -479,6 +536,8 @@ class InFlightViewModelFactory(
     private val flightLogRepository: FlightLogRepository,
     private val challengeRepository: ChallengeRepository,
     private val landingResultChannel: LandingResultChannel,
+    private val destinationPhotoChannel: DestinationPhotoChannel,
+    private val destinationPhotoRepository: DestinationPhotoRepository,
     private val cacheDir: java.io.File,
     private val flightNumber: String,
     private val originIata: String,
@@ -490,7 +549,7 @@ class InFlightViewModelFactory(
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(InFlightViewModel::class.java)) {
-            return InFlightViewModel(airportRepository, preferencesRepository, flightLogRepository, challengeRepository, landingResultChannel, cacheDir, flightNumber, originIata, destIata, durationMin, mode, challengeId) as T
+            return InFlightViewModel(airportRepository, preferencesRepository, flightLogRepository, challengeRepository, landingResultChannel, destinationPhotoChannel, destinationPhotoRepository, cacheDir, flightNumber, originIata, destIata, durationMin, mode, challengeId) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

@@ -16,6 +16,8 @@ val Haze      = Color(0xFFA89886)   // Warm sand / desert taupe secondary text
 val Dim       = Color(0xFF6B584B)   // Muted mocha / tertiary text
 val Green     = Color(0xFF10B981)   // Emerald green accent
 val Border    = Color(0xFF3D2A1F)   // Warm leather edge border
+val CrimsonRed  = Color(0xFFE54D4D) // Luxury crimson red for destructive / dangerous actions
+val SoftCrimson = Color(0x2EE54D4D) // Translucent crimson red container
 
 // ── Achievement Medals ───────────────────────────────────────────────────────
 val Gold       = Color(0xFFFFDF73)
@@ -29,6 +31,13 @@ val SilverIcon = Color(0xFFFFFFFF)
 val Bronze     = Color(0xFFD48148)
 val BronzeDeep = Color(0xFF6E3618)
 val BronzeIcon = Color(0xFFFFE8DC)
+
+/** Not a metal, and deliberately so - the unranked band (see `AchievementTier.RUBY`). Warm enough
+ *  to sit beside the champagne golds rather than fight them, and clearly distinct from
+ *  [CrimsonRed], which this palette reserves for destructive actions. */
+val Ruby       = Color(0xFFE8607A)
+val RubyDeep   = Color(0xFF6E1226)
+val RubyIcon   = Color(0xFFFFDDE4)
 
 // ── World Map ────────────────────────────────────────────────────────────────
 val MapOcean                    = Color(0xFF19110B)   // Deep espresso ocean
@@ -83,6 +92,11 @@ val SilverIcon = Color(0xFFFFFFFF)
 val Bronze     = Color(0xFFE68550)
 val BronzeDeep = Color(0xFF6E3618)
 val BronzeIcon = Color(0xFFFFE6D9)
+
+/** The unranked band - see the light palette's note. */
+val Ruby       = Color(0xFFF2708A)
+val RubyDeep   = Color(0xFF6B1526)
+val RubyIcon   = Color(0xFFFFE1E8)
 
 val MapOcean                    = Color(0xFF0F172A)   // Slate 900 ocean
 val MapUnvisitedLand            = Color(0xFF1E293B)   // Slate 800 unvisited land
