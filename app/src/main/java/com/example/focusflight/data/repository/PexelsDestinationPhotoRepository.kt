@@ -4,6 +4,7 @@ import com.example.focusflight.BuildConfig
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -44,15 +45,28 @@ class PexelsDestinationPhotoRepository(
         val trimmedMunicipality = municipality.trim()
         if (apiKey.isBlank() || trimmedMunicipality.isBlank()) return null
         return withContext(Dispatchers.IO) {
-            val queries = buildQueryCandidates(trimmedMunicipality, isoCountry.trim())
-            for (query in queries) {
-                val photoUrl = searchSingleQuery(query, trimmedMunicipality)
-                if (photoUrl != null) {
-                    return@withContext photoUrl
+            // Bounds the whole cascade, not just each request - without this, a municipality
+            // whose first few queries all come back empty can chain up to 5 * 8s of timeouts
+            // (~40s+) before giving up, stalling the arrival screen's photo load.
+            withTimeoutOrNull(TOTAL_FETCH_BUDGET_MS) {
+                val queries = buildQueryCandidates(trimmedMunicipality, isoCountry.trim())
+                for (query in queries) {
+                    // runInterruptible so the timeout above can actually abort an in-flight
+                    // OkHttp call instead of only skipping queries that hadn't started yet.
+                    val photoUrl = kotlinx.coroutines.runInterruptible {
+                        searchSingleQuery(query, trimmedMunicipality)
+                    }
+                    if (photoUrl != null) {
+                        return@withTimeoutOrNull photoUrl
+                    }
                 }
+                null
             }
-            null
         }
+    }
+
+    private companion object {
+        const val TOTAL_FETCH_BUDGET_MS = 12_000L
     }
 
     internal fun buildQueryCandidates(municipality: String, isoCountry: String): List<String> {
