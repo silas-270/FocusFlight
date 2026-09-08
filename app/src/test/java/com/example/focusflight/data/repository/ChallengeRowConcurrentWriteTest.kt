@@ -102,6 +102,21 @@ class ChallengeRowConcurrentWriteTest {
             rows.values.count { it.userId == userId && it.status == status }
         override suspend fun getByStatusOrderedByCompletedAt(userId: Int, status: ChallengeStatus) =
             rows.values.filter { it.userId == userId && it.status == status }
+
+        override fun getSlotDisplayFlow(userId: Int, active: ChallengeStatus, completed: ChallengeStatus): Flow<List<Challenge>> =
+            MutableStateFlow(
+                rows.values.filter { it.userId == userId && (it.status == active || (it.status == completed && !it.celebrated)) }
+            )
+
+        override suspend fun countOccupyingSlots(userId: Int, active: ChallengeStatus, completed: ChallengeStatus): Int =
+            rows.values.count { it.userId == userId && (it.status == active || (it.status == completed && !it.celebrated)) }
+
+        override suspend fun getCelebratedCompletedOrderedByCompletedAt(userId: Int): List<Challenge> =
+            rows.values.filter { it.userId == userId && it.status == ChallengeStatus.COMPLETED && it.celebrated }
+
+        override suspend fun markCelebrated(id: Int) {
+            rows[id]?.let { rows[id] = it.copy(celebrated = true) }
+        }
     }
 
     private class FakeUserProfileDao : UserProfileDao {

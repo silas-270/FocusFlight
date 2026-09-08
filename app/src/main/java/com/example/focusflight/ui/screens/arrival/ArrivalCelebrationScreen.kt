@@ -30,6 +30,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.focusflight.ui.components.FocusButton
 import com.example.focusflight.ui.theme.*
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.delay
@@ -363,26 +364,13 @@ fun ArrivalCelebrationScreen(
             Spacer(modifier = Modifier.weight(1f))
 
             // Exit / Continue Button
-            Button(
+            FocusButton(
+                text = "ENTER HUB",
                 onClick = onContinue,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(54.dp)
-                    .graphicsLayer { alpha = fade },
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Amber,
-                    contentColor = Midnight
-                )
-            ) {
-                Text(
-                    text = "ENTER HUB",
-                    style = MaterialTheme.typography.labelLarge.copy(
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.5.sp
-                    )
-                )
-            }
+                    .graphicsLayer { alpha = fade }
+            )
         }
     }
 }

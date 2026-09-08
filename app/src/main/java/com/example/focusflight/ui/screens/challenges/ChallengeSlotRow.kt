@@ -29,6 +29,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -64,7 +67,8 @@ import com.example.focusflight.data.repository.MAX_ACTIVE_CHALLENGES
 internal fun ChallengeSlotRow(
     challenges: List<Challenge>,
     onEmptySlotClick: () -> Unit,
-    onChallengeClick: (Challenge) -> Unit
+    onChallengeClick: (Challenge) -> Unit,
+    onSlotPositioned: (slotIndex: Int, bounds: Rect) -> Unit = { _, _ -> }
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -72,21 +76,32 @@ internal fun ChallengeSlotRow(
     ) {
         for (index in 0 until MAX_ACTIVE_CHALLENGES) {
             val challenge = challenges.getOrNull(index)
-            if (challenge != null) {
-                FilledSlot(challenge = challenge, onClick = { onChallengeClick(challenge) })
-            } else {
-                EmptySlot(onClick = onEmptySlotClick)
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .aspectRatio(1f)
+                    .onGloballyPositioned { coordinates ->
+                        onSlotPositioned(index, coordinates.boundsInWindow())
+                    }
+            ) {
+                if (challenge != null) {
+                    FilledSlot(
+                        challenge = challenge,
+                        onClick = { onChallengeClick(challenge) }
+                    )
+                } else {
+                    EmptySlot(onClick = onEmptySlotClick)
+                }
             }
         }
     }
 }
 
 @Composable
-private fun RowScope.EmptySlot(onClick: () -> Unit) {
+private fun EmptySlot(onClick: () -> Unit) {
     Box(
         modifier = Modifier
-            .weight(1f)
-            .aspectRatio(1f)
+            .fillMaxSize()
             .clip(RoundedCornerShape(16.dp))
             // Borderless, so flat Slate has to carry the slot on its own. It can't be a dimmed
             // DeepNavy "recess" any more - without the outline that read as nothing at all
@@ -107,7 +122,10 @@ private fun RowScope.EmptySlot(onClick: () -> Unit) {
 }
 
 @Composable
-private fun RowScope.FilledSlot(challenge: Challenge, onClick: () -> Unit) {
+private fun FilledSlot(
+    challenge: Challenge,
+    onClick: () -> Unit
+) {
     val animatedProgress by animateFloatAsState(
         targetValue = challenge.progressFraction(),
         animationSpec = tween(durationMillis = 800, easing = FastOutSlowInEasing),
@@ -122,8 +140,7 @@ private fun RowScope.FilledSlot(challenge: Challenge, onClick: () -> Unit) {
 
     Box(
         modifier = Modifier
-            .weight(1f)
-            .aspectRatio(1f)
+            .fillMaxSize()
             .clip(RoundedCornerShape(16.dp))
             .background(DeepNavy)
             .clickable(onClick = onClick),

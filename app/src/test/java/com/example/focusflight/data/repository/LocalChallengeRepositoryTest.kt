@@ -14,6 +14,7 @@ import com.example.focusflight.data.model.Runway
 import com.example.focusflight.data.model.UserProfile
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -96,6 +97,25 @@ class LocalChallengeRepositoryTest {
             rows.values
                 .filter { it.userId == userId && it.status == status }
                 .sortedByDescending { it.completedAt ?: 0L }
+
+        override fun getSlotDisplayFlow(userId: Int, active: ChallengeStatus, completed: ChallengeStatus): Flow<List<Challenge>> =
+            MutableStateFlow(
+                rows.values
+                    .filter { it.userId == userId && (it.status == active || (it.status == completed && !it.celebrated)) }
+                    .sortedBy { it.id }
+            )
+
+        override suspend fun countOccupyingSlots(userId: Int, active: ChallengeStatus, completed: ChallengeStatus): Int =
+            rows.values.count { it.userId == userId && (it.status == active || (it.status == completed && !it.celebrated)) }
+
+        override suspend fun getCelebratedCompletedOrderedByCompletedAt(userId: Int): List<Challenge> =
+            rows.values
+                .filter { it.userId == userId && it.status == ChallengeStatus.COMPLETED && it.celebrated }
+                .sortedByDescending { it.completedAt ?: 0L }
+
+        override suspend fun markCelebrated(id: Int) {
+            rows[id]?.let { rows[id] = it.copy(celebrated = true) }
+        }
     }
 
     private class FakeUserProfileDao(private val profile: UserProfile) : UserProfileDao {
@@ -222,6 +242,48 @@ class LocalChallengeRepositoryTest {
 
         assertEquals(StartChallengeResult.CapReached, fourth)
         assertEquals(3, repository.listActiveChallenges().size)
+    }
+
+    @Test
+    fun `an uncelebrated completion still counts against the cap`() = runTest {
+        val completed = (repository.startCustomDistanceChallenge(100.0, "Done") as StartChallengeResult.Started).challenge
+        repository.creditEligibleFlight("DST", 100.0, DAY_1)
+        assertEquals(ChallengeStatus.COMPLETED, dao.getById(completed.id)?.status)
+
+        repository.startCustomDistanceChallenge(1000.0, "B")
+        repository.startCustomDistanceChallenge(2000.0, "C")
+
+        // Only 2 challenges are ACTIVE, but the completed-and-not-yet-celebrated one is still
+        // occupying a slot visually, so a 4th start must still be refused.
+        val fourth = repository.startCustomDistanceChallenge(3000.0, "D")
+
+        assertEquals(StartChallengeResult.CapReached, fourth)
+    }
+
+    @Test
+    fun `marking a challenge celebrated moves it from the slot display into the completed log`() = runTest {
+        val challenge = (repository.startCustomDistanceChallenge(100.0, "Done") as StartChallengeResult.Started).challenge
+        repository.creditEligibleFlight("DST", 100.0, DAY_1)
+
+        assertTrue(
+            "an uncelebrated completion must still occupy a slot",
+            repository.listSlotDisplayChallengesFlow().first().any { it.id == challenge.id }
+        )
+        assertTrue(
+            "an uncelebrated completion must not yet be in the log",
+            repository.listCompletedChallenges().none { it.id == challenge.id }
+        )
+
+        repository.markCelebrated(challenge.id)
+
+        assertTrue(
+            "a celebrated completion must no longer occupy a slot",
+            repository.listSlotDisplayChallengesFlow().first().none { it.id == challenge.id }
+        )
+        assertTrue(
+            "a celebrated completion must now be in the log",
+            repository.listCompletedChallenges().any { it.id == challenge.id }
+        )
     }
 
     @Test

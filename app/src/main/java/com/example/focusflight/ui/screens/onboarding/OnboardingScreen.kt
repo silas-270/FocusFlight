@@ -28,6 +28,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import com.example.focusflight.ui.components.FocusButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -166,45 +167,19 @@ fun OnboardingScreen(
             Spacer(modifier = Modifier.weight(1f))
 
             // ── CTA Button ──────────────────────────────────────────
-            Button(
+            FocusButton(
+                text = "SET HOME AIRPORT",
                 onClick = {
-                    // Navigate only once the profile row is actually written. saveHomeAirport()
-                    // now awaits that write and reports failure, and nothing pops this screen
-                    // until it returns - so this scope cannot be torn down mid-write, and a
-                    // failed write leaves the pilot here to retry rather than stranding them in a
-                    // half-onboarded app.
                     onboardingScope.launch {
                         if (viewModel.saveHomeAirport()) {
                             onOnboardingComplete()
                         }
                     }
                 },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
                 enabled = selectedAirport != null,
-                shape = RoundedCornerShape(16.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Amber,
-                    contentColor = Midnight,
-                    disabledContainerColor = Dim,
-                    disabledContentColor = Haze
-                )
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.FlightTakeoff,
-                    contentDescription = null,
-                    modifier = Modifier.size(24.dp)
-                )
-                Spacer(modifier = Modifier.width(Spacing.Small))
-                Text(
-                    text = "SET HOME AIRPORT",
-                    style = MaterialTheme.typography.labelLarge.copy(
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.5.sp
-                    )
-                )
-            }
+                icon = Icons.Outlined.FlightTakeoff,
+                modifier = Modifier.fillMaxWidth()
+            )
 
             Spacer(modifier = Modifier.height(Spacing.Large))
         }

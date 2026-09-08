@@ -35,8 +35,10 @@ class ChallengeLandingTest {
 
         override suspend fun listActiveChallenges(): List<Challenge> = emptyList()
         override fun listActiveChallengesFlow(): Flow<List<Challenge>> = MutableStateFlow(emptyList())
+        override fun listSlotDisplayChallengesFlow(): Flow<List<Challenge>> = MutableStateFlow(emptyList())
         override suspend fun getChallenge(id: Int): Challenge? = null
         override suspend fun listCompletedChallenges(): List<Challenge> = emptyList()
+        override suspend fun markCelebrated(id: Int) = Unit
         override suspend fun startCuratedChallenge(catalogId: String): StartChallengeResult =
             StartChallengeResult.UnknownTemplate
         override suspend fun startCustomRouteChallenge(originIata: String, destIata: String, name: String): StartChallengeResult =

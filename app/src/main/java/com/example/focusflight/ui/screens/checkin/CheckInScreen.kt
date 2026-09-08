@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.focusflight.ui.components.BackTopAppBar
+import com.example.focusflight.ui.components.FocusButton
 import com.example.focusflight.ui.theme.Amber
 import com.example.focusflight.ui.theme.Border
 import com.example.focusflight.ui.theme.DeepNavy
@@ -324,7 +325,8 @@ fun CheckInScreen(
             Spacer(modifier = Modifier.height(Spacing.Large))
 
             // Action: Start Flight
-            Button(
+            FocusButton(
+                text = "START FLIGHT",
                 onClick = {
                     val durationMin = routeDetails?.durationMin ?: 0
                     if (durationMin > 0) {
@@ -332,31 +334,9 @@ fun CheckInScreen(
                     }
                 },
                 enabled = routeDetails != null,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(54.dp),
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Amber,
-                    contentColor = Midnight,
-                    disabledContainerColor = Slate,
-                    disabledContentColor = Haze
-                )
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.FlightTakeoff,
-                    contentDescription = null,
-                    modifier = Modifier.size(24.dp)
-                )
-                Spacer(modifier = Modifier.width(Spacing.Small))
-                Text(
-                    text = "START FLIGHT",
-                    style = MaterialTheme.typography.labelLarge.copy(
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.5.sp
-                    )
-                )
-            }
+                icon = Icons.Outlined.FlightTakeoff,
+                modifier = Modifier.fillMaxWidth()
+            )
 
         }
     }

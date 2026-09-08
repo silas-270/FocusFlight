@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import com.example.focusflight.data.model.FlightMode
 import com.example.focusflight.data.model.PausedFlight
+import com.example.focusflight.data.model.ThemeMode
 
 /**
  * Primary constructor takes [SharedPreferences] directly so JVM unit tests can drive it with
@@ -21,12 +22,24 @@ class PreferencesRepository(private val prefs: SharedPreferences) {
         private const val KEY_FOCUSED_ROUTE_CHALLENGE_ID = "focused_route_challenge_id"
         private const val KEY_PAUSED_FLIGHT = "paused_flight"
         private const val KEY_PAUSED_FREE_FLIGHT = "paused_free_flight"
+        private const val KEY_THEME_MODE = "theme_mode"
 
         // docs/modes.md's two distinct home-base cooldowns (see HomeBaseCooldown) -
         // deliberately two separate keys, not one, since the two actions' cooldowns reset
         // independently of each other.
         private const val KEY_LAST_RETURN_HOME_AT = "last_return_home_at"
         private const val KEY_LAST_HOME_BASE_CHANGED_AT = "last_home_base_changed_at"
+    }
+
+    /** Defaults to [ThemeMode.SYSTEM] - the app follows the device's light/dark setting until the
+     *  pilot explicitly picks a mode via the Account screen's toggle. */
+    fun getThemeMode(): ThemeMode {
+        val raw = prefs.getString(KEY_THEME_MODE, null) ?: return ThemeMode.SYSTEM
+        return runCatching { ThemeMode.valueOf(raw) }.getOrDefault(ThemeMode.SYSTEM)
+    }
+
+    fun setThemeMode(mode: ThemeMode) {
+        prefs.edit().putString(KEY_THEME_MODE, mode.name).apply()
     }
 
     fun isOnboardingCompleted(): Boolean {

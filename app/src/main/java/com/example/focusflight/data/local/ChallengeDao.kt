@@ -89,4 +89,58 @@ interface ChallengeDao {
      *  same as the flight logbook. */
     @Query("SELECT * FROM challenges WHERE user_id = :userId AND status = :status ORDER BY completed_at DESC")
     suspend fun getByStatusOrderedByCompletedAt(userId: Int, status: ChallengeStatus): List<Challenge>
+
+    /** ACTIVE, or COMPLETED-but-not-yet-celebrated - everything that should still occupy a slot
+     *  on the Challenges screen (docs/challenges.md). Ordered by id so slot position is stable
+     *  and matches original creation order, same as the plain ACTIVE-only query it replaces for
+     *  slot display. */
+    @Query(
+        """
+        SELECT * FROM challenges
+        WHERE user_id = :userId
+        AND (status = :active OR (status = :completed AND celebrated = 0))
+        ORDER BY id ASC
+        """
+    )
+    fun getSlotDisplayFlow(
+        userId: Int,
+        active: ChallengeStatus = ChallengeStatus.ACTIVE,
+        completed: ChallengeStatus = ChallengeStatus.COMPLETED
+    ): Flow<List<Challenge>>
+
+    /** Same "occupying a slot" definition as [getSlotDisplayFlow], as a count - what the
+     *  active-challenge cap check (`LocalChallengeRepository.hasCapSlot`) tests against, so an
+     *  uncelebrated completion still counts against `MAX_ACTIVE_CHALLENGES` instead of leaving a
+     *  fourth challenge with nowhere to render. */
+    @Query(
+        """
+        SELECT COUNT(*) FROM challenges
+        WHERE user_id = :userId
+        AND (status = :active OR (status = :completed AND celebrated = 0))
+        """
+    )
+    suspend fun countOccupyingSlots(
+        userId: Int,
+        active: ChallengeStatus = ChallengeStatus.ACTIVE,
+        completed: ChallengeStatus = ChallengeStatus.COMPLETED
+    ): Int
+
+    /** The completed-challenges log, but only entries the player has actually been shown the
+     *  completion-presentation animation for - a completion is not "in the log" until its
+     *  celebration has played (docs/challenges.md). Backs `listCompletedChallenges()`; replaces
+     *  [getByStatusOrderedByCompletedAt] for that one caller. */
+    @Query(
+        """
+        SELECT * FROM challenges WHERE user_id = :userId AND status = 'COMPLETED' AND celebrated = 1
+        ORDER BY completed_at DESC
+        """
+    )
+    suspend fun getCelebratedCompletedOrderedByCompletedAt(userId: Int): List<Challenge>
+
+    /** Flips the one column the completion-presentation overlay owns, once its fly-out animation
+     *  finishes for this challenge - scoped rather than a whole-row [update] for the same reason
+     *  [updatePausedFlight] is: this writer is not the writer of the progress/status columns next
+     *  to it, and must not revert them if it races one of those writes. */
+    @Query("UPDATE challenges SET celebrated = 1 WHERE id = :id")
+    suspend fun markCelebrated(id: Int)
 }

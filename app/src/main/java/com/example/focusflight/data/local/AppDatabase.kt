@@ -55,9 +55,26 @@ val MIGRATION_8_9 = object : Migration(8, 9) {
     }
 }
 
+/**
+ * Adds the [Challenge.celebrated] column to `challenges` (see docs/challenges.md).
+ *
+ * Every existing COMPLETED row predates the completion-presentation animation this backs, and
+ * must come out the far side as already-celebrated - not queued up to replay on the pilot's next
+ * visit, which is the reason MIGRATION_9_10 backfills existing COMPLETED rows to `1` (celebrated)
+ * rather than leaving the column's own DEFAULT 0 stand for them. Existing ACTIVE rows are
+ * unaffected either way, since only a COMPLETED row is ever read as "occupying a slot because
+ * uncelebrated".
+ */
+val MIGRATION_9_10 = object : Migration(9, 10) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `challenges` ADD COLUMN `celebrated` INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("UPDATE `challenges` SET `celebrated` = 1 WHERE `status` = 'COMPLETED'")
+    }
+}
+
 @Database(
     entities = [UserProfile::class, FlightLog::class, Challenge::class, AchievementUnlock::class],
-    version = 9,
+    version = 10,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -90,7 +107,7 @@ abstract class AppDatabase : RoomDatabase() {
                     //
                     // Every version bump from here needs a Migration here and a committed
                     // schemas/*.json for the version it migrates from.
-                    .addMigrations(MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
+                    .addMigrations(MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
                     .fallbackToDestructiveMigrationFrom(1, 2, 3, 4, 5)
                     .build()
                 INSTANCE = instance

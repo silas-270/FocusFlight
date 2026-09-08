@@ -200,6 +200,7 @@ class CesiumGameActivity : GameActivity() {
         airportRepository = LocalAirportRepository(AirportRouteSqliteDataSource(applicationContext))
         pendingFlightLoader = PendingFlightLoader(airportRepository)
         preferencesRepository = PreferencesRepository(applicationContext)
+        com.example.focusflight.ui.theme.ThemeModeHolder.current = preferencesRepository.getThemeMode()
 
         // Initialize Room database and repositories
         val appDatabase = AppDatabase.getInstance(applicationContext)
@@ -247,7 +248,8 @@ class CesiumGameActivity : GameActivity() {
 
         val composeView = ComposeView(this).apply {
             setContent {
-                FocusFlightTheme {
+                val themeMode = com.example.focusflight.ui.theme.ThemeModeHolder.current
+                FocusFlightTheme(mode = themeMode) {
                     // Resolve the profile-exists check off the main thread instead of blocking
                     // onCreate with runBlocking - the splash screen stays up (via
                     // setKeepOnScreenCondition) until this resolves, so there's no flash of the
@@ -366,6 +368,9 @@ class CesiumGameActivity : GameActivity() {
                                     },
                                     onPassportClick = {
                                         navController.navigate(Screen.Account.route)
+                                    },
+                                    onSettingsClick = {
+                                        navController.navigate(Screen.Settings.route)
                                     },
                                     onContinueChallengeClick = { challengeId ->
                                         coroutineScope.launch {
@@ -686,8 +691,21 @@ class CesiumGameActivity : GameActivity() {
                                 ChallengeOutcomeScreen(
                                     outcomes = outcomes,
                                     onContinue = {
-                                        navController.navigate(Screen.Hub.route) {
-                                            popUpTo(Screen.Hub.route) { inclusive = true }
+                                        // Any completion (even mixed with merely-advanced
+                                        // challenges) sends the pilot to Challenges instead of
+                                        // Hub, so they land on the completion-presentation
+                                        // celebration (docs/challenges.md) rather than having to
+                                        // think to go check. Collapses the whole flight-session
+                                        // stack down to Hub the same way the plain-Hub branch
+                                        // below does, just with Challenges pushed on top of it.
+                                        if (outcomes.any { it is ChallengeOutcome.Completed }) {
+                                            navController.navigate(Screen.Challenges.route) {
+                                                popUpTo(Screen.Hub.route) { inclusive = false }
+                                            }
+                                        } else {
+                                            navController.navigate(Screen.Hub.route) {
+                                                popUpTo(Screen.Hub.route) { inclusive = true }
+                                            }
                                         }
                                     }
                                 )
@@ -701,9 +719,21 @@ class CesiumGameActivity : GameActivity() {
                                 
                                 com.example.focusflight.ui.screens.account.AccountScreen(
                                     viewModel = viewModel,
+                                    onBackClick = { navController.popBackStack() }
+                                )
+                            }
+
+                            // ── Settings ──
+                            composable(Screen.Settings.route) {
+                                val viewModel: AccountViewModel = viewModel(
+                                    factory = AccountViewModelFactory(applicationContext, userRepository, flightLogRepository, airportRepository, preferencesRepository, pilotProgressRepository, cacheDir)
+                                )
+
+                                com.example.focusflight.ui.screens.settings.SettingsScreen(
+                                    viewModel = viewModel,
                                     onBackClick = { navController.popBackStack() },
                                     // The home-base celebrations end their flow at the Hub rather
-                                    // than dropping back onto the Passport - same collapse-the-stack
+                                    // than dropping back onto Settings - same collapse-the-stack
                                     // pattern every other "done, go home" hand-off uses.
                                     onNavigateHome = {
                                         navController.navigate(Screen.Hub.route) {

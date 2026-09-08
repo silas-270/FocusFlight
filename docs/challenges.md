@@ -127,6 +127,28 @@ each tick-up from its old value, so the pilot sees the movement their flight cau
 rather than only its result. When nothing changed, the result is `LandingResult.None`
 and the screen is skipped entirely.
 
+## Completion presentation
+
+Reaching `COMPLETED` and being *shown* that completion are two different moments, tracked by one
+column: `challenges.celebrated`, `false` by default. A challenge with `celebrated = false` keeps
+occupying its slot on the Challenges screen (and keeps counting against the active-challenge cap,
+`hasCapSlot`) and is excluded from the completed-challenges log — `ChallengeDao.getSlotDisplayFlow`
+and `getCelebratedCompletedOrderedByCompletedAt` are the two queries this splits across. Nothing
+else about completion (crediting, `status`, `completed_at`) waits on it; only the presentation does.
+
+Any landing that completes at least one challenge sends CONTINUE (from the Challenge Outcome
+screen) to the Challenges screen instead of Hub — see [navigation.md](navigation.md). There, each
+uncelebrated completion plays a short animation, left to right in slot order: the card duplicates
+from its slot and grows to center stage with a confetti burst while the slot row immediately
+compacts to slide remaining challenges left and reveal the newly opened empty slot, then — on tap —
+flies up and vanishes into a new entry at the top of the log, at which point
+`LocalChallengeRepository.markCelebrated` finally flips the flag. `ChallengesViewModel.celebrationQueue`
+is computed **once**, from the database, when the ViewModel is constructed — not kept live — so a
+challenge already mid-animation this session is never re-queued, and the queue is naturally rebuilt
+correctly no matter when or how the app was last closed: any `COMPLETED, celebrated = false` row is
+still sitting in its slot the next time Challenges opens, regardless of what screen the pilot was on
+when they left.
+
 ## Isolation
 
 A `SET_COMPLETION` challenge starts **fresh**. It is never seeded from Story Mode's

@@ -9,7 +9,7 @@ import androidx.compose.ui.unit.sp
 import com.example.focusflight.ui.theme.Amber
 
 @Composable
-internal fun SectionHeader(
+fun SectionHeader(
     title: String,
     modifier: Modifier = Modifier
 ) {

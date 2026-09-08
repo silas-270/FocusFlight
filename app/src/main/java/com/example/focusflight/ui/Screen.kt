@@ -50,6 +50,11 @@ sealed class Screen(val route: String) {
 
     object Account : Screen("account")
 
+    // Preferences (theme) and the Story Mode home-base actions (return home / change home base) -
+    // split out of the Passport so that screen can stay a read-only trophy case/logbook and this
+    // one owns anything that changes app state or app-wide settings.
+    object Settings : Screen("settings")
+
     // The modes/goals surface: Free Mode entry, the three challenge slots, the completed-challenge
     // log, and the still-unearned achievements tab. A full destination rather than the Hub bottom
     // sheet this used to be - that sheet needed its own inner scroll and swapped five view states

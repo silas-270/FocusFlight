@@ -167,4 +167,57 @@ class MigrationTest {
             assertEquals(0, cursor.getInt(3))
         }
     }
+
+    /**
+     * The `celebrated` column backing the completion-presentation animation (docs/challenges.md).
+     * A COMPLETED row that predates the feature must come out backfilled to celebrated - not
+     * queued up to replay its completion the next time the pilot opens Challenges - while an
+     * existing ACTIVE row must come out at the column's own default (0), since it isn't COMPLETED
+     * at all and the backfill only touches COMPLETED rows.
+     */
+    @Test
+    fun migrate9To10_backfillsExistingCompletionsAsCelebrated() {
+        helper.createDatabase(TEST_DB, 9).apply {
+            execSQL(
+                """
+                INSERT INTO user_profile
+                    (id, username, user_code, home_airport_iata, created_at, updated_at)
+                VALUES (1, 'testpilot', 'FF-TEST', 'LHR', 1700000000000, 1700000000000)
+                """.trimIndent()
+            )
+            execSQL(
+                """
+                INSERT INTO challenges
+                    (id, user_id, type, source, status, name, description, route_progress_fraction,
+                     target_distance_km, cumulative_distance_km, set_total_members,
+                     set_visited_members, started_at, completed_at, streak_days, leg_index)
+                VALUES (1, 1, 'DISTANCE', 'CUSTOM', 'COMPLETED', 'Already done', '', 0.0, 1000.0,
+                        1000.0, 0, '', 1700000000000, 1700000001000, 0, 0)
+                """.trimIndent()
+            )
+            execSQL(
+                """
+                INSERT INTO challenges
+                    (id, user_id, type, source, status, name, description, route_progress_fraction,
+                     target_distance_km, cumulative_distance_km, set_total_members,
+                     set_visited_members, started_at, streak_days, leg_index)
+                VALUES (2, 1, 'DISTANCE', 'CUSTOM', 'ACTIVE', 'Still going', '', 0.0, 1000.0,
+                        200.0, 0, '', 1700000000000, 0, 0)
+                """.trimIndent()
+            )
+            close()
+        }
+
+        val db = helper.runMigrationsAndValidate(TEST_DB, 10, true, MIGRATION_9_10)
+
+        db.query("SELECT id, celebrated FROM challenges ORDER BY id").use { cursor ->
+            assertTrue("the completed challenge must survive the migration", cursor.moveToFirst())
+            assertEquals(1, cursor.getInt(0))
+            assertEquals("a pre-existing completion must not replay its celebration", 1, cursor.getInt(1))
+
+            assertTrue("the active challenge must survive the migration", cursor.moveToNext())
+            assertEquals(2, cursor.getInt(0))
+            assertEquals("an active challenge is untouched by the backfill", 0, cursor.getInt(1))
+        }
+    }
 }

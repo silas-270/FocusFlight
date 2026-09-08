@@ -1,4 +1,4 @@
-package com.example.focusflight.ui.screens.account
+package com.example.focusflight.ui.screens.settings
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable

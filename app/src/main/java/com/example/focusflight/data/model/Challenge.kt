@@ -109,5 +109,11 @@ data class Challenge(
     @ColumnInfo(name = "icon_name") val iconName: String? = null,
 
     @ColumnInfo(name = "started_at") val startedAt: Long = System.currentTimeMillis(),
-    @ColumnInfo(name = "completed_at") val completedAt: Long? = null
+    @ColumnInfo(name = "completed_at") val completedAt: Long? = null,
+
+    // Whether the completion-presentation animation has been shown to the player yet. A
+    // COMPLETED challenge with this still false keeps occupying its slot (and the cap) and is
+    // excluded from the completed-log query - see docs/challenges.md and docs/state.md. Same
+    // defaultValue reasoning as legIndex/streakDays above.
+    @ColumnInfo(name = "celebrated", defaultValue = "0") val celebrated: Boolean = false
 )

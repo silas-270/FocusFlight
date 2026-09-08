@@ -203,6 +203,20 @@ class AccountViewModel(
     private val _sortOrder = MutableStateFlow(FlightSortOrder.DATE_DESC)
     val sortOrder: StateFlow<FlightSortOrder> = _sortOrder.asStateFlow()
 
+    // Seeded from ThemeModeHolder (itself seeded from PreferencesRepository in
+    // CesiumGameActivity.onCreate) rather than reading preferencesRepository directly here, so
+    // this always reflects what FocusFlightTheme is actually rendering right now.
+    private val _themeMode = MutableStateFlow(com.example.focusflight.ui.theme.ThemeModeHolder.current)
+    val themeMode: StateFlow<com.example.focusflight.data.model.ThemeMode> = _themeMode.asStateFlow()
+
+    /** Toggling is always an explicit LIGHT/DARK choice - never writes SYSTEM back, since that is
+     *  only the pre-toggle default (see [com.example.focusflight.data.model.ThemeMode]). */
+    fun setThemeMode(mode: com.example.focusflight.data.model.ThemeMode) {
+        _themeMode.value = mode
+        com.example.focusflight.ui.theme.ThemeModeHolder.current = mode
+        preferencesRepository.setThemeMode(mode)
+    }
+
     // The logbook used to render from a Pager here while its headers were computed from
     // uiState.flightHistory, with nothing keeping the two indexes aligned. The whole history is
     // already loaded eagerly for the map, stats, highlights and achievements, so the Pager was a

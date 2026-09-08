@@ -1,4 +1,4 @@
-package com.example.focusflight.ui.screens.account
+package com.example.focusflight.ui.screens.settings
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
@@ -30,6 +30,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import com.example.focusflight.ui.components.FocusButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -243,26 +244,13 @@ internal fun HomeBaseCelebrationScreen(
 
             Spacer(modifier = Modifier.weight(1f))
 
-            Button(
+            FocusButton(
+                text = ctaText,
                 onClick = onContinue,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(54.dp)
-                    .graphicsLayer { alpha = fade },
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Amber,
-                    contentColor = Midnight
-                )
-            ) {
-                Text(
-                    text = ctaText,
-                    style = MaterialTheme.typography.labelLarge.copy(
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.5.sp
-                    )
-                )
-            }
+                    .graphicsLayer { alpha = fade }
+            )
 
             Spacer(modifier = Modifier.height(Spacing.Large))
         }

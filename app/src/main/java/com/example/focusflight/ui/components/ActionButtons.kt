@@ -1,5 +1,6 @@
 package com.example.focusflight.ui.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -8,6 +9,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -19,27 +21,140 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.focusflight.ui.theme.Amber
 import com.example.focusflight.ui.theme.Border
 import com.example.focusflight.ui.theme.CrimsonRed
+import com.example.focusflight.ui.theme.DarkPalette
 import com.example.focusflight.ui.theme.DeepNavy
+import com.example.focusflight.ui.theme.Green
 import com.example.focusflight.ui.theme.Haze
 import com.example.focusflight.ui.theme.OffWhite
 import com.example.focusflight.ui.theme.Radius
 import com.example.focusflight.ui.theme.Slate
-import com.example.focusflight.ui.theme.SoftCrimson
 import com.example.focusflight.ui.theme.Spacing
 
+enum class ButtonVariant {
+    Primary,     // Amber accent
+    Secondary,   // Slate neutral
+    Danger,      // CrimsonRed destructive
+    Success      // Green emerald accent
+}
+
+enum class ButtonStyle {
+    Filled,
+    Outlined
+}
+
+enum class ButtonSize {
+    Standard,    // 54.dp height, main CTA
+    Compact      // 42.dp height, modals and compact actions
+}
+
 /**
- * The app's filled primary-CTA button (Amber fill, DeepNavy label). Originated as an
- * internal-to-challenges helper in ChallengeUiCommon.kt; promoted here so screens outside
- * challenges (Hub, Flight Search, Onboarding) can share the same look instead of hand-rolling
- * their own Box/Button variants.
+ * The app's unified, standardized button component.
+ *
+ * Enforces consistent sizing (54dp standard / 42dp compact), 14dp rounded corners,
+ * bold monospace typography, and WCAG-contrast-safe text colors across both Dark
+ * and Light ("Sky") themes.
+ */
+@Composable
+fun FocusButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    variant: ButtonVariant = ButtonVariant.Primary,
+    style: ButtonStyle = ButtonStyle.Filled,
+    size: ButtonSize = ButtonSize.Standard,
+    icon: ImageVector? = null,
+    enabled: Boolean = true,
+    fillMaxWidth: Boolean = true
+) {
+    val height = when (size) {
+        ButtonSize.Standard -> 54.dp
+        ButtonSize.Compact -> 42.dp
+    }
+    val shape = RoundedCornerShape(Radius.Medium)
+
+    val containerColor = when {
+        !enabled -> if (style == ButtonStyle.Filled) Slate.copy(alpha = 0.5f) else Color.Transparent
+        style == ButtonStyle.Outlined -> Color.Transparent
+        variant == ButtonVariant.Primary -> Amber
+        variant == ButtonVariant.Secondary -> Slate
+        variant == ButtonVariant.Danger -> CrimsonRed
+        variant == ButtonVariant.Success -> Green
+        else -> Amber
+    }
+
+    val contentColor = when {
+        !enabled -> Haze
+        style == ButtonStyle.Outlined -> when (variant) {
+            ButtonVariant.Primary -> Amber
+            ButtonVariant.Secondary -> OffWhite
+            ButtonVariant.Danger -> CrimsonRed
+            ButtonVariant.Success -> Green
+        }
+        variant == ButtonVariant.Primary -> DarkPalette.midnight
+        variant == ButtonVariant.Secondary -> OffWhite
+        variant == ButtonVariant.Danger -> OffWhite
+        variant == ButtonVariant.Success -> DarkPalette.midnight
+        else -> DarkPalette.midnight
+    }
+
+    val borderStroke = when {
+        style == ButtonStyle.Filled -> null
+        !enabled -> BorderStroke(1.dp, Border.copy(alpha = 0.5f))
+        variant == ButtonVariant.Primary -> BorderStroke(1.dp, Amber)
+        variant == ButtonVariant.Secondary -> BorderStroke(1.dp, Border)
+        variant == ButtonVariant.Danger -> BorderStroke(1.dp, CrimsonRed)
+        variant == ButtonVariant.Success -> BorderStroke(1.dp, Green)
+        else -> null
+    }
+
+    val borderModifier = if (borderStroke != null) Modifier.border(borderStroke, shape) else Modifier
+
+    Box(
+        modifier = modifier
+            .then(if (fillMaxWidth) Modifier.fillMaxWidth() else Modifier)
+            .height(height)
+            .clip(shape)
+            .then(borderModifier)
+            .background(containerColor)
+            .clickable(enabled = enabled, onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+            modifier = Modifier.padding(horizontal = Spacing.Medium)
+        ) {
+            if (icon != null) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = contentColor,
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(Spacing.Small))
+            }
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelLarge.copy(
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp
+                ),
+                color = contentColor
+            )
+        }
+    }
+}
+
+/**
+ * Backward-compatible wrapper for primary CTA button.
  */
 @Composable
 fun PrimaryActionButton(
@@ -49,36 +164,20 @@ fun PrimaryActionButton(
     enabled: Boolean = true,
     onClick: () -> Unit
 ) {
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(Radius.Medium))
-            .background(if (enabled) Amber else Slate)
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(vertical = 16.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (icon != null) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = if (enabled) DeepNavy else Haze,
-                    modifier = Modifier.size(24.dp)
-                )
-                Spacer(modifier = Modifier.width(Spacing.Small))
-            }
-            Text(
-                text = text,
-                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
-                color = if (enabled) DeepNavy else Haze
-            )
-        }
-    }
+    FocusButton(
+        text = text,
+        onClick = onClick,
+        modifier = modifier,
+        variant = ButtonVariant.Primary,
+        style = ButtonStyle.Filled,
+        size = ButtonSize.Standard,
+        icon = icon,
+        enabled = enabled
+    )
 }
 
 /**
- * Secondary neutral action button (Slate fill, OffWhite text).
+ * Backward-compatible wrapper for secondary neutral action button.
  */
 @Composable
 fun SecondaryActionButton(
@@ -87,23 +186,20 @@ fun SecondaryActionButton(
     enabled: Boolean = true,
     onClick: () -> Unit
 ) {
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(Radius.Medium))
-            .background(Slate)
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(vertical = 16.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
-            color = if (enabled) OffWhite else Haze
-        )
-    }
+    FocusButton(
+        text = text,
+        onClick = onClick,
+        modifier = modifier,
+        variant = ButtonVariant.Secondary,
+        style = ButtonStyle.Filled,
+        size = ButtonSize.Standard,
+        enabled = enabled
+    )
 }
 
+/**
+ * Backward-compatible wrapper for destructive action button.
+ */
 @Composable
 fun DestructiveActionButton(
     text: String,
@@ -111,21 +207,15 @@ fun DestructiveActionButton(
     enabled: Boolean = true,
     onClick: () -> Unit
 ) {
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(Radius.Medium))
-            .background(if (enabled) CrimsonRed else Slate)
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(vertical = 16.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
-            color = if (enabled) OffWhite else Haze
-        )
-    }
+    FocusButton(
+        text = text,
+        onClick = onClick,
+        modifier = modifier,
+        variant = ButtonVariant.Danger,
+        style = ButtonStyle.Filled,
+        size = ButtonSize.Standard,
+        enabled = enabled
+    )
 }
 
 @Composable
@@ -137,40 +227,24 @@ fun ModalButtonRow(
     isDestructive: Boolean = false
 ) {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .clip(RoundedCornerShape(Radius.Small))
-                .background(Slate)
-                .clickable(onClick = onDismiss)
-                .padding(vertical = 14.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = dismissText,
-                color = OffWhite,
-                fontWeight = FontWeight.Bold,
-                fontFamily = FontFamily.Monospace,
-                fontSize = 13.sp
-            )
-        }
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .clip(RoundedCornerShape(Radius.Small))
-                .background(if (isDestructive) CrimsonRed else Amber)
-                .clickable(onClick = onConfirm)
-                .padding(vertical = 14.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = confirmText,
-                color = if (isDestructive) OffWhite else DeepNavy,
-                fontWeight = FontWeight.Bold,
-                fontFamily = FontFamily.Monospace,
-                fontSize = 13.sp
-            )
-        }
+        FocusButton(
+            text = dismissText,
+            onClick = onDismiss,
+            modifier = Modifier.weight(1f),
+            variant = ButtonVariant.Secondary,
+            style = ButtonStyle.Filled,
+            size = ButtonSize.Compact,
+            fillMaxWidth = false
+        )
+        FocusButton(
+            text = confirmText,
+            onClick = onConfirm,
+            modifier = Modifier.weight(1f),
+            variant = if (isDestructive) ButtonVariant.Danger else ButtonVariant.Primary,
+            style = ButtonStyle.Filled,
+            size = ButtonSize.Compact,
+            fillMaxWidth = false
+        )
     }
 }
 

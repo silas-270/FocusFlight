@@ -1,4 +1,4 @@
-package com.example.focusflight.ui.screens.account
+package com.example.focusflight.ui.screens.settings
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.focusflight.data.model.Airport
 import com.example.focusflight.ui.components.BackTopAppBar
+import com.example.focusflight.ui.components.FocusButton
 import com.example.focusflight.ui.components.airportpicker.AirportMapConfirmCard
 import com.example.focusflight.ui.components.airportpicker.AirportSearchStep
 import com.example.focusflight.ui.components.airportpicker.AirportSuggestion
@@ -103,34 +104,13 @@ internal fun ChangeHomeBaseScreen(
 
             Spacer(modifier = Modifier.weight(1f))
 
-            Button(
+            FocusButton(
+                text = "SET NEW HOME BASE",
                 onClick = { airport?.let(onAirportSelect) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
                 enabled = airport != null,
-                shape = RoundedCornerShape(16.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Amber,
-                    contentColor = Midnight,
-                    disabledContainerColor = Dim,
-                    disabledContentColor = Haze
-                )
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.FlightTakeoff,
-                    contentDescription = null,
-                    modifier = Modifier.size(24.dp)
-                )
-                Spacer(modifier = Modifier.width(Spacing.Small))
-                Text(
-                    text = "SET NEW HOME BASE",
-                    style = MaterialTheme.typography.labelLarge.copy(
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.5.sp
-                    )
-                )
-            }
+                icon = Icons.Outlined.FlightTakeoff,
+                modifier = Modifier.fillMaxWidth()
+            )
 
             Spacer(modifier = Modifier.height(Spacing.Large))
         }
