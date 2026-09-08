@@ -27,6 +27,7 @@ import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.FlightTakeoff
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -62,8 +63,11 @@ import coil3.compose.AsyncImage
 import com.example.focusflight.data.model.Challenge
 import com.example.focusflight.data.model.PausedFlight
 import com.example.focusflight.data.model.progressFraction
+import com.example.focusflight.ui.components.ButtonStyle
+import com.example.focusflight.ui.components.ButtonVariant
 import com.example.focusflight.ui.components.ChallengeProgressBar
 import com.example.focusflight.ui.components.DiscardFlightConfirmModal
+import com.example.focusflight.ui.components.FocusButton
 import com.example.focusflight.ui.components.PrimaryActionButton
 import com.example.focusflight.ui.components.challengeTypeLabel
 import com.example.focusflight.ui.components.icon
@@ -86,6 +90,7 @@ fun HubScreen(
     onResumeFlightClick: (flight: PausedFlight) -> Unit,
     onPassportClick: () -> Unit,
     onChallengesClick: () -> Unit,
+    onSettingsClick: () -> Unit,
     onContinueChallengeClick: (challengeId: Int) -> Unit
 ) {
     val currentAirport by viewModel.currentAirport.collectAsState()
@@ -228,7 +233,8 @@ fun HubScreen(
                 // Secondary Button (when any active flight exists, in story mode or route challenge)
                 if (pausedFlight != null) {
                     Spacer(modifier = Modifier.height(30.dp))
-                    Button(
+                    FocusButton(
+                        text = "BOOK NEW FLIGHT",
                         onClick = {
                             if (pausedFlight != null) {
                                 showDiscardFlightConfirm = true
@@ -238,24 +244,10 @@ fun HubScreen(
                                 onBookFlightClick()
                             }
                         },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(56.dp),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = DeepNavy,
-                            contentColor = Amber
-                        ),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Amber)
-                    ) {
-                        Text(
-                            text = "BOOK NEW FLIGHT",
-                            style = MaterialTheme.typography.labelLarge.copy(
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 1.5.sp
-                            )
-                        )
-                    }
+                        variant = ButtonVariant.Primary,
+                        style = ButtonStyle.Outlined,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             }
         }
@@ -324,49 +316,70 @@ fun HubScreen(
                 }
             }
 
-            // Top Header & Navigation (outside solid container so globe is behind)
+            // Top Header & Navigation (outside solid container so globe is behind). Settings sits
+            // alone on the left so it doesn't compete with the Challenges/Account pair - those two
+            // are the frequent, session-shaped destinations; Settings is the occasional one.
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .windowInsetsPadding(WindowInsets.statusBars)
                     .padding(start = Spacing.Large, end = Spacing.Large, top = Spacing.Large, bottom = Spacing.Medium),
-                horizontalArrangement = Arrangement.End,
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Challenges: Free Mode entry, the challenge slots, and achievements
+                // Settings: theme preference and the Story Mode home-base actions.
                 Box(
                     modifier = Modifier
                         .size(40.dp)
                         .clip(RoundedCornerShape(12.dp))
                         .background(DeepNavy)
-                        .clickable { onChallengesClick() },
+                        .clickable { onSettingsClick() },
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = Icons.Outlined.Explore,
-                        contentDescription = "Challenges",
+                        imageVector = Icons.Outlined.Settings,
+                        contentDescription = "Settings",
                         tint = OffWhite,
                         modifier = Modifier.size(20.dp)
                     )
                 }
 
-                Spacer(modifier = Modifier.width(Spacing.Small))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Challenges: Free Mode entry, the challenge slots, and achievements
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(DeepNavy)
+                            .clickable { onChallengesClick() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Explore,
+                            contentDescription = "Challenges",
+                            tint = OffWhite,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
 
-                // Account
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(DeepNavy)
-                        .clickable { onPassportClick() },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Person,
-                        contentDescription = "Account",
-                        tint = OffWhite,
-                        modifier = Modifier.size(20.dp)
-                    )
+                    Spacer(modifier = Modifier.width(Spacing.Small))
+
+                    // Account
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(DeepNavy)
+                            .clickable { onPassportClick() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Person,
+                            contentDescription = "Account",
+                            tint = OffWhite,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
             }
         }

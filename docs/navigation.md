@@ -62,7 +62,8 @@ In-Flight ──▶ Arrival Celebration      (landed — popUpTo InFlight, inclu
 Arrival Celebration ──▶ Challenge Outcome   (only if the landing affected a challenge)
                     ──▶ Hub                 (otherwise)
 
-Challenge Outcome ──▶ Hub
+Challenge Outcome ──▶ Challenges           (any outcome completed a challenge — popUpTo Hub, exclusive)
+                  ──▶ Hub                 (otherwise — popUpTo Hub, inclusive)
 Account ──▶ Hub                        (return home)
 ```
 
@@ -115,6 +116,15 @@ The arrival screen waits up to `LANDING_RESULT_TIMEOUT_MS` (5s) for the channel 
 resolve before continuing to the Hub anyway. That bound exists to stop a pathological
 case hanging the screen, not to race a healthy check — which resolves well inside it on
 any device.
+
+`Screen.Challenges` is the one exception to "reached via a channel": which challenges to
+run the completion-presentation animation for (see
+[challenges.md](challenges.md#completion-presentation)) is **not** threaded through this
+hop at all, from the channel or otherwise — `ChallengesViewModel` derives its own queue
+straight from the database (`COMPLETED, celebrated = false`) when it's constructed. That
+is deliberate: it makes the animation work identically whether the pilot arrived via this
+nav edge or just opened Challenges normally, and survives the app being killed anywhere
+in between.
 
 ## Shared entry points
 

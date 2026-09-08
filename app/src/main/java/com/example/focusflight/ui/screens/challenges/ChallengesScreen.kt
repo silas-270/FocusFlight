@@ -31,6 +31,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -38,6 +39,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -88,8 +92,9 @@ fun ChallengesScreen(
     onResumeRouteChallenge: (challenge: Challenge) -> Unit,
     onChallengeStarted: () -> Unit
 ) {
-    val activeChallenges by viewModel.activeChallenges.collectAsState()
+    val slotChallenges by viewModel.slotChallenges.collectAsState()
     val completedChallenges by viewModel.completedChallenges.collectAsState()
+    val celebrationQueue by viewModel.celebrationQueue.collectAsState()
     val unfinishedAchievements by viewModel.unfinishedAchievements.collectAsState()
     val startResult by viewModel.startResult.collectAsState()
     val focusedChallengeId by viewModel.focusedChallengeId.collectAsState()
@@ -104,6 +109,40 @@ fun ChallengesScreen(
     // Hoisted here, not inside the tab's item block: a ScrimCardModal opened from inside a
     // LazyColumn item is clipped to that item, so it has to be a sibling of the Scaffold.
     var detailAchievement by remember { mutableStateOf<AchievementStatus?>(null) }
+
+    // Completion-presentation tracking (docs/challenges.md):
+    // Track celebrated IDs in this session so that even before Room database emission completes,
+    // celebrating/celebrated challenges are immediately removed from the active slot display.
+    var celebratedIds by remember { mutableStateOf(emptySet<Int>()) }
+    val slotBoundsByIndex = remember { mutableStateMapOf<Int, Rect>() }
+    var logAnchorRect by remember { mutableStateOf<Rect?>(null) }
+    val currentCelebration = celebrationQueue.firstOrNull()
+
+    // Track whether the current celebrating card has begun lifting off from its slot
+    var isCardLiftingOff by remember(currentCelebration?.id) { mutableStateOf(false) }
+
+    // Challenges occupying the active slots before lifting off the currently celebrated one
+    val candidateChallenges = remember(slotChallenges, celebratedIds) {
+        slotChallenges.filterNot { it.id in celebratedIds }
+    }
+
+    // The slot index where currentCelebration was located before duplicating & flying to center
+    val celebratingSlotIndex = remember(candidateChallenges, currentCelebration?.id) {
+        currentCelebration?.let { cur ->
+            val idx = candidateChallenges.indexOfFirst { it.id == cur.id }
+            if (idx >= 0) idx else null
+        }
+    }
+
+    // Displayed challenges: while waiting (initial delay), still show the completed challenge in its slot.
+    // As soon as it lifts off, compact immediately to shift remaining challenges left and reveal the '+' slot.
+    val displayedChallenges = remember(candidateChallenges, currentCelebration?.id, isCardLiftingOff) {
+        if (isCardLiftingOff) {
+            candidateChallenges.filterNot { it.id == currentCelebration?.id }
+        } else {
+            candidateChallenges
+        }
+    }
 
     // A successful start just fills a slot - close the picker and let the slot row update. A
     // Route challenge additionally takes over the Hub's focus (already set by the ViewModel), so
@@ -168,13 +207,20 @@ fun ChallengesScreen(
                     ChallengesTab.CHALLENGES -> {
                         item {
                             ChallengeSlotRow(
-                                challenges = activeChallenges,
+                                challenges = displayedChallenges,
                                 onEmptySlotClick = { showPicker = true },
-                                onChallengeClick = { infoChallenge = it }
+                                onChallengeClick = { infoChallenge = it },
+                                onSlotPositioned = { slotIndex, bounds -> slotBoundsByIndex[slotIndex] = bounds }
                             )
                         }
 
-                        item { CaptionLabel(text = "COMPLETED") }
+                        item {
+                            Box(
+                                modifier = Modifier.onGloballyPositioned { logAnchorRect = it.boundsInWindow() }
+                            ) {
+                                CaptionLabel(text = "COMPLETED")
+                            }
+                        }
 
                         if (completedChallenges.isEmpty()) {
                             item { EmptyLine("No challenges completed yet.") }
@@ -320,6 +366,20 @@ fun ChallengesScreen(
             // Shouldn't happen from UI-driven catalogIds - defensive only.
             LaunchedEffect(it) { viewModel.clearStartResult() }
         }
+
+        // Rendered last so it sits on top of - and its scrim blocks taps into - everything else on
+        // this screen, including the modals above, whenever a completion is queued.
+        ChallengeCompletionOverlay(
+            current = currentCelebration,
+            slotRect = celebratingSlotIndex?.let { slotBoundsByIndex[it] },
+            logAnchorRect = logAnchorRect,
+            isFirstCelebration = celebratedIds.isEmpty(),
+            onFlyInStart = { isCardLiftingOff = true },
+            onCelebrated = { id ->
+                celebratedIds = celebratedIds + id
+                viewModel.celebrate(id)
+            }
+        )
     }
 }
 

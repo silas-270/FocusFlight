@@ -1,4 +1,4 @@
-package com.example.focusflight.ui.screens.account
+package com.example.focusflight.ui.screens.settings
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing

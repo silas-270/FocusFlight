@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.focusflight.data.model.AchievementStatus
 import com.example.focusflight.data.model.Airport
 import com.example.focusflight.data.model.Challenge
+import com.example.focusflight.data.model.ChallengeStatus
 import com.example.focusflight.data.model.ChallengeType
 import com.example.focusflight.data.model.PausedFlight
 import com.example.focusflight.data.local.airport.AirportDataException
@@ -21,6 +22,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -37,19 +39,32 @@ class ChallengesViewModel(
     private val preferencesRepository: PreferencesRepository
 ) : ViewModel() {
 
-    /** Active challenges (cap of 3), reactively updated - drives the three slots directly.
-     *  `WhileSubscribed` rather than `Eagerly` since this is only ever collected while the
-     *  Challenges screen is actually open. */
-    val activeChallenges: StateFlow<List<Challenge>> =
-        challengeRepository.listActiveChallengesFlow()
+    /** What the three slots actually render: ACTIVE challenges, plus any COMPLETED-but-not-yet-
+     *  celebrated one (docs/challenges.md) - so a just-finished challenge keeps its slot until its
+     *  completion-presentation animation has shown it. `WhileSubscribed` rather than `Eagerly`
+     *  since this is only ever collected while the Challenges screen is actually open. */
+    val slotChallenges: StateFlow<List<Challenge>> =
+        challengeRepository.listSlotDisplayChallengesFlow()
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     /** Completed challenges, newest-first (the DAO orders by `completed_at DESC`) - the logbook-
-     *  style list below the slots. Refreshed off [activeChallenges] rather than its own Flow:
-     *  a challenge can only ever reach this list by leaving the active one, so that emission is
-     *  an exact signal, not an approximation. */
+     *  style list below the slots. Refreshed off [slotChallenges] rather than its own Flow:
+     *  a challenge can only ever leave [slotChallenges] by being celebrated, so that emission is
+     *  an exact signal, not an approximation. Only *celebrated* completions ever appear here -
+     *  see [ChallengeRepository.listCompletedChallenges]. */
     private val _completedChallenges = MutableStateFlow<List<Challenge>>(emptyList())
     val completedChallenges: StateFlow<List<Challenge>> = _completedChallenges.asStateFlow()
+
+    /** Which completed-but-uncelebrated challenges to run the completion-presentation animation
+     *  for this session, in slot order (left to right) - see docs/challenges.md. Computed **once**
+     *  from the current snapshot rather than kept live off [slotChallenges], so a challenge that's
+     *  already mid-animation is never re-queued by a later, unrelated emission (e.g. another
+     *  challenge's own celebration finishing). This is also what makes the feature resilient to
+     *  the app being killed mid-celebration: the queue is reconstructed fresh from the database -
+     *  `status = COMPLETED AND celebrated = false` - every time this ViewModel (and therefore this
+     *  screen) is created, regardless of how the player got here or when they left last time. */
+    private val _celebrationQueue = MutableStateFlow<List<Challenge>>(emptyList())
+    val celebrationQueue: StateFlow<List<Challenge>> = _celebrationQueue.asStateFlow()
 
     /** Still-unearned achievements, flat and ungrouped (no category headers by design), ordered
      *  closest-to-done first so the next reachable goal is always on top. Earned ones are
@@ -73,9 +88,18 @@ class ChallengesViewModel(
 
     init {
         viewModelScope.launch(Dispatchers.IO) {
-            // The completed-challenge log still keys off the active set - a challenge can only
-            // reach that list by leaving this one, so the emission is an exact signal.
-            activeChallenges.collect { _completedChallenges.value = challengeRepository.listCompletedChallenges() }
+            // The completed-challenge log still keys off the slot-display set - a challenge can
+            // only reach the log by leaving that one (being celebrated), so the emission is an
+            // exact signal.
+            slotChallenges.collect { _completedChallenges.value = challengeRepository.listCompletedChallenges() }
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            // One-shot, not a live collect - see celebrationQueue's own doc for why. Reads the
+            // repository directly rather than slotChallenges' own StateFlow, since that one only
+            // starts collecting once something subscribes to it (WhileSubscribed) and has no
+            // value yet this early in construction.
+            _celebrationQueue.value = challengeRepository.listSlotDisplayChallengesFlow().first()
+                .filter { it.status == ChallengeStatus.COMPLETED && !it.celebrated }
         }
         viewModelScope.launch {
             // The achievement board is no longer re-derived here. It used to call loadBoard() on
@@ -190,6 +214,16 @@ class ChallengesViewModel(
 
     fun abandon(id: Int) {
         viewModelScope.launch { challengeRepository.abandonChallenge(id) }
+    }
+
+    /** Called by the completion-presentation overlay the instant a challenge's fly-out animation
+     *  finishes - persists the flag (moving it into the log/off the slot) and advances the local
+     *  queue so the overlay moves on to the next one. */
+    fun celebrate(id: Int) {
+        viewModelScope.launch {
+            challengeRepository.markCelebrated(id)
+            _celebrationQueue.value = _celebrationQueue.value.filterNot { it.id == id }
+        }
     }
 
     fun clearStartResult() {

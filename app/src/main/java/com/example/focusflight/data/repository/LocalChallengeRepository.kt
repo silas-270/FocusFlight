@@ -94,14 +94,24 @@ class LocalChallengeRepository(
         emitAll(challengeDao.getByStatusFlow(userId, ChallengeStatus.ACTIVE).map { it.withStreaksEvaluated() })
     }
 
+    /** Same "collect-time user lookup" reasoning as [listActiveChallengesFlow] above. */
+    override fun listSlotDisplayChallengesFlow(): Flow<List<Challenge>> = flow {
+        val userId = userProfileDao.requireProfileId()
+        emitAll(challengeDao.getSlotDisplayFlow(userId).map { it.withStreaksEvaluated() })
+    }
+
     override suspend fun getChallenge(id: Int): Challenge? =
         challengeDao.getById(id)?.withStreakEvaluatedAt(LocalDate.now(clock))
 
     override suspend fun listCompletedChallenges(): List<Challenge> =
-        challengeDao.getByStatusOrderedByCompletedAt(userProfileDao.requireProfileId(), ChallengeStatus.COMPLETED)
+        challengeDao.getCelebratedCompletedOrderedByCompletedAt(userProfileDao.requireProfileId())
+
+    override suspend fun markCelebrated(id: Int) = writeMutex.withLock {
+        challengeDao.markCelebrated(id)
+    }
 
     private suspend fun hasCapSlot(userId: Int): Boolean =
-        challengeDao.countByStatus(userId, ChallengeStatus.ACTIVE) < MAX_ACTIVE_CHALLENGES
+        challengeDao.countOccupyingSlots(userId) < MAX_ACTIVE_CHALLENGES
 
     override suspend fun startCuratedChallenge(catalogId: String): StartChallengeResult = writeMutex.withLock {
         val template = CuratedChallengeCatalog.find(catalogId) ?: return StartChallengeResult.UnknownTemplate

@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.focusflight.data.repository.ChallengeOutcome
 import com.example.focusflight.ui.components.CaptionLabel
+import com.example.focusflight.ui.components.FocusButton
 import com.example.focusflight.ui.components.ChallengeProgressBar
 import com.example.focusflight.ui.components.challengeIcon
 import com.example.focusflight.ui.components.challengeTypeLabel
@@ -141,18 +142,12 @@ fun ChallengeOutcomeScreen(outcomes: List<ChallengeOutcome>, onContinue: () -> U
 
             Spacer(modifier = Modifier.height(Spacing.ExtraLarge))
 
-            Button(
+            FocusButton(
+                text = "CONTINUE",
                 onClick = onContinue,
-                modifier = Modifier.fillMaxWidth().height(54.dp),
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = buttonColor, contentColor = Midnight),
-                enabled = showContinue
-            ) {
-                Text(
-                    text = "CONTINUE",
-                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
-                )
-            }
+                enabled = showContinue,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
 
         ConfettiOverlay(trigger = showConfetti)

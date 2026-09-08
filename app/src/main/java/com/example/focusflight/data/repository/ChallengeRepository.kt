@@ -31,14 +31,32 @@ interface ChallengeRepository {
     suspend fun getChallenge(id: Int): Challenge?
 
     /**
+     * ACTIVE challenges, plus any COMPLETED one that hasn't been shown its completion-presentation
+     * animation yet (see [Challenge.celebrated], docs/challenges.md) - what the Challenges
+     * screen's three slots actually render, as opposed to [listActiveChallengesFlow]'s strict
+     * ACTIVE-only view (used for landing-outcome diffing, where an uncelebrated completion must
+     * NOT be mistaken for still-active).
+     */
+    fun listSlotDisplayChallengesFlow(): Flow<List<Challenge>>
+
+    /**
      * Every completed challenge (curated or custom, duplicates included for repeat completions of
      * the same one), newest first - the data source for the Achievements screen's "Challenges
      * completed" log (docs/achievements.md). Cross-mode exception per achievements.md's
      * "Scope & isolation": this is the one place a CHALLENGE-tagged flight's effect (completing a
      * Route challenge) or any mode's Distance/Set-completion crediting surfaces in Achievements,
      * display/recognition only - it grants nothing Story-Mode-scoped.
+     *
+     * Only *celebrated* completions - a challenge doesn't join this log until its
+     * completion-presentation animation has played (see [markCelebrated]).
      */
     suspend fun listCompletedChallenges(): List<Challenge>
+
+    /** Marks challenge [id]'s completion as shown to the player - called once, by the
+     *  completion-presentation overlay, the instant its fly-out animation for this challenge
+     *  finishes. Moves the row out of [listSlotDisplayChallengesFlow] and into
+     *  [listCompletedChallenges] in the same write. No-op if [id] doesn't exist. */
+    suspend fun markCelebrated(id: Int)
 
     suspend fun startCuratedChallenge(catalogId: String): StartChallengeResult
     suspend fun startCustomRouteChallenge(originIata: String, destIata: String, name: String): StartChallengeResult

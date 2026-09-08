@@ -25,7 +25,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.collectAsState
@@ -40,7 +39,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.focusflight.data.model.AchievementStatus
-import com.example.focusflight.data.model.Airport
 import com.example.focusflight.data.model.FlightLog
 import com.example.focusflight.ui.components.BackTopAppBar
 import com.example.focusflight.data.model.Tour
@@ -48,21 +46,24 @@ import com.example.focusflight.util.formatMiles
 import com.example.focusflight.ui.theme.Amber
 import com.example.focusflight.ui.theme.Haze
 import com.example.focusflight.ui.theme.Midnight
-import com.example.focusflight.ui.theme.OffWhite
 import com.example.focusflight.ui.theme.Spacing
 import com.example.focusflight.ui.viewmodel.account.AccountViewModel
-import com.example.focusflight.ui.viewmodel.account.HomeBaseActionResult
 import com.example.focusflight.data.model.FlightSortOrder
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+/**
+ * The Pilot Passport: a read-only trophy case and logbook (identity card, travel map,
+ * achievements, flight highlights, flight history). Anything that changes app state or
+ * preferences - theme, return home, change home base - lives on the separate Settings screen
+ * (see `SettingsScreen.kt`) instead, reached from the Hub's own icon rather than from here.
+ */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun AccountScreen(
     viewModel: AccountViewModel,
-    onBackClick: () -> Unit,
-    onNavigateHome: () -> Unit
+    onBackClick: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -85,22 +86,6 @@ fun AccountScreen(
         buildTourHeaders(uiState.tours, uiState.sortOrder)
     }
 
-    // Home base + return (docs/modes.md) - two ScrimCardModal overlays, shown as
-    // siblings of the Scaffold below (not nested inside it) so they draw on top of the whole
-    // screen, same reasoning as every other ScrimCardModal use in this codebase.
-    var showReturnHomeModal by remember { mutableStateOf(false) }
-    var showReturningHomeModal by remember { mutableStateOf(false) }
-    // Full screen rather than a ScrimCardModal overlay (see ChangeHomeBaseScreen's and
-    // HomeBaseCelebrationScreen's doc comments) - all three are drawn as the last siblings of the
-    // Box below so they cover the whole screen instead of sitting inside the Scaffold's content
-    // area. The two celebrations come last of all, since either can open on top of the picker.
-    var showChangeHomeBase by remember { mutableStateOf(false) }
-    // Neither celebration flag is set at its call site any more. Both home-base actions re-check
-    // their cooldown inside the ViewModel and can refuse silently, so tapping "confirm" is not
-    // evidence that anything happened - these are flipped from homeBaseActionResult below, i.e.
-    // only once the write has actually landed.
-    var showWelcomeHome by remember { mutableStateOf(false) }
-    var homeBaseSetAirport by remember { mutableStateOf<Airport?>(null) }
     var showTravelMapModal by remember { mutableStateOf(false) }
     // Same ScrimCardModal convention for the sort-order picker, replacing the old inline
     // DropdownMenu — this app never uses DropdownMenu/AlertDialog/Dialog elsewhere.
@@ -111,19 +96,11 @@ fun AccountScreen(
     // Keyed on the tour's id rather than its displayed title, and that is load-bearing: this set
     // and the stickyHeader key below are both derived from it, and two tours can easily produce
     // the same title. A duplicate key inside a LazyColumn is a crash, not a cosmetic bug.
+    // Every tour starts collapsed - expanding the newest one by default forced its flights
+    // (each a Canvas-drawn parchment card) to compose immediately, slowing the initial render.
     var expandedTours by rememberSaveable(stateSaver = ExpandedToursSaver) {
         mutableStateOf(setOf<String>())
     }
-    // The newest tour opens on arrival. Everything used to start collapsed, which left the
-    // logbook looking empty. Keyed on the id so a brand new tour opens itself, while a tour the
-    // pilot deliberately collapsed stays that way.
-    val newestTourId = uiState.tours.firstOrNull()?.let { tourId(it) }
-    LaunchedEffect(newestTourId) {
-        if (newestTourId != null) expandedTours = expandedTours + newestTourId
-    }
-    // Hoisted out of ProfileHeroCard so it survives the card scrolling out of the LazyColumn's
-    // viewport and back in.
-    var heroExpanded by remember { mutableStateOf(false) }
     // Owned here, not inside AchievementBadgeGrid: a ScrimCardModal opened from inside a
     // LazyColumn item is clipped to that item, so it has to be a sibling of the Scaffold.
     //
@@ -131,37 +108,6 @@ fun AccountScreen(
     // own card. Only ever one of them is non-null.
     var selectedStack by remember { mutableStateOf<AchievementStack?>(null) }
     var selectedAchievement by remember { mutableStateOf<AchievementStatus?>(null) }
-    val homeBaseSearchQuery by viewModel.homeBaseSearchQuery.collectAsState()
-    val homeBaseSearchResults by viewModel.homeBaseSearchResults.collectAsState()
-    val homeBaseSuggestions by viewModel.homeBaseSuggestions.collectAsState()
-    val homeBaseActionResult by viewModel.homeBaseActionResult.collectAsState()
-
-    // The single place either celebration is armed. The work runs in viewModelScope (it must
-    // outlive this composable), so the result arrives here asynchronously some time after the tap
-    // that started it - and it can just as well say the cooldown re-check refused the action, in
-    // which case the correct behaviour is to show nothing at all. There is deliberately no error
-    // dialog or snackbar: this codebase uses neither, and a refusal is a no-op, not a fault the
-    // pilot has to acknowledge. Consumed either way so a result is acted on exactly once and can't
-    // replay on the next recomposition or a config change.
-    LaunchedEffect(homeBaseActionResult) {
-        when (val result = homeBaseActionResult) {
-            null -> Unit
-            is HomeBaseActionResult.ReturnedHome -> {
-                showWelcomeHome = true
-                viewModel.consumeHomeBaseActionResult()
-            }
-            is HomeBaseActionResult.HomeBaseSet -> {
-                // The airport comes from the result, not from uiState: the Room profile flow that
-                // feeds uiState.homeAirportIata may not have re-emitted yet, and this is the value
-                // that was actually written.
-                homeBaseSetAirport = result.airport
-                viewModel.consumeHomeBaseActionResult()
-            }
-            HomeBaseActionResult.Ineligible, HomeBaseActionResult.Failed -> {
-                viewModel.consumeHomeBaseActionResult()
-            }
-        }
-    }
 
     Box(modifier = Modifier.fillMaxSize()) {
     Scaffold(
@@ -193,18 +139,9 @@ fun AccountScreen(
                 )
             ) {
                 // ── Hero Profile Card ─────────────────────────────────────────
-                // Tap to expand for the home-base actions (see HomeBaseSection.kt) - they used to
-                // be a permanent section right here, which overstated two actions behind 7- and
-                // 30-day cooldowns.
-                item {
-                    ProfileHeroCard(
-                        state = uiState,
-                        expanded = heroExpanded,
-                        onToggleExpanded = { heroExpanded = !heroExpanded },
-                        onReturnHomeClick = { showReturnHomeModal = true },
-                        onChangeHomeBaseClick = { showChangeHomeBase = true }
-                    )
-                }
+                // Static identity card - no longer expandable. The home-base actions it used to
+                // reveal live on the Settings screen now (see SettingsScreen.kt).
+                item { ProfileHeroCard(state = uiState) }
 
                 // ── Travel Map ────────────────────────────────────────────────
                 // Straight under the hero card: shows the whole playthrough at a glance.
@@ -288,37 +225,6 @@ fun AccountScreen(
         }
     }
 
-    if (showReturnHomeModal) {
-        ReturnHomeConfirmModal(
-            homeAirportIata = uiState.homeAirportIata,
-            currentAirportIata = uiState.currentAirportIata,
-            onConfirm = {
-                showReturnHomeModal = false
-                showReturningHomeModal = true
-            },
-            onDismiss = { showReturnHomeModal = false }
-        )
-    }
-
-    // The teleport's outcome is settled the moment this modal appears - it cannot be dismissed and
-    // it ends by attempting the teleport - so the globe the Hub will want is rendered during the
-    // animation instead of after it. Keyed on Unit inside the `if` so it fires once per showing.
-    if (showReturningHomeModal) {
-        LaunchedEffect(Unit) { viewModel.prepareReturnHome() }
-    }
-
-    if (showReturningHomeModal) {
-        // The teleport animation finishing only means it's time to *attempt* the teleport; whether
-        // "WELCOME BACK" follows is decided by the result the ViewModel publishes (see the
-        // LaunchedEffect above), not by this callback.
-        ReturningHomeModal(
-            onComplete = {
-                viewModel.returnHome()
-                showReturningHomeModal = false
-            }
-        )
-    }
-
     if (showSortModal) {
         SortOrderModal(
             currentOrder = uiState.sortOrder,
@@ -352,68 +258,7 @@ fun AccountScreen(
             onDismiss = { showTravelMapModal = false }
         )
     }
-
-    // Drawn last so it's the topmost sibling, fully covering everything above it.
-    if (showChangeHomeBase) {
-        ChangeHomeBaseScreen(
-            query = homeBaseSearchQuery,
-            onQueryChange = { viewModel.onHomeBaseSearchQueryChanged(it) },
-            results = homeBaseSearchResults,
-            suggestions = homeBaseSuggestions,
-            // Close the picker on select, but leave the celebration to the published result -
-            // changeHomeBase re-checks the 30-day cooldown and may write nothing at all.
-            onAirportSelect = { airport ->
-                viewModel.changeHomeBase(airport)
-                showChangeHomeBase = false
-            },
-            onBackClick = { showChangeHomeBase = false }
-        )
     }
-
-    // ── Celebrations ─────────────────────────────────────────────────
-    // Topmost of all: either can open over the picker above, and both end the flow by handing the
-    // pilot back to the Hub rather than returning them here.
-    if (showWelcomeHome) {
-        val home = uiState.homeAirport
-        HomeBaseCelebrationScreen(
-            eyebrow = "WELCOME BACK",
-            iata = uiState.homeAirportIata,
-            airportName = home?.name.orEmpty(),
-            locationLine = locationLine(home?.municipality, home?.isoCountry),
-            onContinue = {
-                showWelcomeHome = false
-                onNavigateHome()
-            },
-            inlineHero = { HomeBaseSetHero() }
-        )
-    }
-
-    homeBaseSetAirport?.let { airport ->
-        HomeBaseCelebrationScreen(
-            eyebrow = "HOME BASE SET",
-            iata = airport.iataCode,
-            airportName = airport.name,
-            locationLine = locationLine(airport.municipality, airport.isoCountry),
-            onContinue = {
-                homeBaseSetAirport = null
-                onNavigateHome()
-            },
-            inlineHero = { HomeBaseSetHero() }
-        )
-    }
-    }
-}
-
-/** "MUNICH · GERMANY". [isoCountry] is a 2-letter code, and the app has no code-to-name table -
- *  `Locale` already ships one, and falls back to blank for anything it doesn't recognise. */
-private fun locationLine(city: String?, isoCountry: String?): String {
-    val country = isoCountry
-        ?.takeIf { it.isNotBlank() }
-        ?.let { Locale("", it).getDisplayCountry(Locale.US) }
-        ?.takeIf { it.isNotBlank() }
-    return listOfNotNull(city?.takeIf { it.isNotBlank() }, country)
-        .joinToString(" · ")
-        .uppercase(Locale.US)
 }
 
 /**
