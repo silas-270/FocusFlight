@@ -183,13 +183,13 @@ fun HubScreen(
             sheetDragHandle = {
                 Box(
                     modifier = Modifier
-                        .padding(top = 12.dp, bottom = 16.dp)
+                        .padding(top = 12.dp, bottom = 38.dp)
                         .width(80.dp)
                         .height(4.dp)
                         .background(Border, RoundedCornerShape(2.dp))
                 )
             },
-            sheetPeekHeight = 160.dp,
+            sheetPeekHeight = 191.dp,
             containerColor = Midnight,
             sheetContent = {
             Column(
@@ -204,7 +204,7 @@ fun HubScreen(
                     color = Amber,
                     letterSpacing = 0.5.sp
                 )
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(9.dp))
                 
                 Text(
                     text = currentAirport?.iataCode ?: "---",
@@ -214,6 +214,7 @@ fun HubScreen(
                     ),
                     color = OffWhite
                 )
+                Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     text = currentAirport?.name ?: "Loading base...",
                     style = MaterialTheme.typography.bodyLarge,

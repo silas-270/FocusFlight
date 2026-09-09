@@ -68,8 +68,8 @@ class CesiumHeadlessMapRenderer(private val cacheDir: File) {
         return try {
             Log.d(TAG, "Triggering route rendering for ${routesData.size} routes ($centerIata)...")
             val success = CesiumHeadlessJnaBindings.renderRoutes(
-                width = 1080,
-                height = 1320,
+                width = RENDER_WIDTH,
+                height = RENDER_HEIGHT,
                 routesData = routesData,
                 outPath = outFile.absolutePath
             )
@@ -90,6 +90,8 @@ class CesiumHeadlessMapRenderer(private val cacheDir: File) {
 
     companion object {
         private const val TAG = "CesiumHeadlessMapRenderer"
+        internal const val RENDER_WIDTH = 1080
+        internal const val RENDER_HEIGHT = 1670
         internal const val MAX_DISTANCE_KM = 10000.0
         internal const val MAX_ROUTES = 12
     }

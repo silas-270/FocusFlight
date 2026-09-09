@@ -7,6 +7,7 @@ import com.example.focusflight.data.model.Challenge
 import com.example.focusflight.data.model.ChallengeType
 import com.example.focusflight.data.model.predefinedRoute
 import com.example.focusflight.data.model.progressFraction
+import com.example.focusflight.ui.components.ButtonSize
 import com.example.focusflight.ui.components.ModalButtonRow
 import com.example.focusflight.ui.components.ModalTitle
 import com.example.focusflight.ui.components.PrimaryActionButton
@@ -112,6 +113,6 @@ internal fun InfoModal(title: String, message: String, onDismiss: () -> Unit) {
         Spacer(modifier = Modifier.height(8.dp))
         Text(text = message, style = MaterialTheme.typography.bodyMedium, color = Haze)
         Spacer(modifier = Modifier.height(24.dp))
-        PrimaryActionButton(text = "OK", onClick = onDismiss)
+        PrimaryActionButton(text = "OK", size = ButtonSize.Compact, onClick = onDismiss)
     }
 }

@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -69,7 +70,7 @@ enum class SetMemberFilter(val label: String) {
 fun SetMemberChecklist(
     members: List<SetMemberProgress>,
     modifier: Modifier = Modifier,
-    maxHeight: androidx.compose.ui.unit.Dp = 280.dp
+    height: androidx.compose.ui.unit.Dp = 190.dp
 ) {
     // Filter state is owned here rather than hoisted: it is a way of reading this one list, not
     // something any caller acts on, and every surface wants the identical three options. Resets
@@ -91,7 +92,7 @@ fun SetMemberChecklist(
             onSelect = { filter = it }
         )
         Spacer(modifier = Modifier.height(8.dp))
-        SetMemberRows(members = visible, maxHeight = maxHeight, filter = filter)
+        SetMemberRows(members = visible, height = height, filter = filter)
     }
 }
 
@@ -144,63 +145,68 @@ private fun SetMemberFilterBar(
 @Composable
 private fun SetMemberRows(
     members: List<SetMemberProgress>,
-    maxHeight: androidx.compose.ui.unit.Dp,
+    height: androidx.compose.ui.unit.Dp,
     filter: SetMemberFilter
 ) {
-    if (members.isEmpty()) {
-        Text(
-            text = when (filter) {
-                SetMemberFilter.FINISHED -> "Nothing here yet."
-                SetMemberFilter.MISSING -> "Nothing missing - this set is complete."
-                SetMemberFilter.ALL -> "Nothing to show."
-            },
-            style = MaterialTheme.typography.bodySmall,
-            color = Haze,
-            modifier = Modifier.padding(vertical = 8.dp)
-        )
-        return
-    }
-
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(max = maxHeight)
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+            .height(height),
+        contentAlignment = Alignment.Center
     ) {
-        members.forEach { member ->
-            Row(
+        if (members.isEmpty()) {
+            val emptyMessage = when (filter) {
+                SetMemberFilter.FINISHED -> "No destinations visited yet"
+                SetMemberFilter.MISSING -> "All destinations visited!"
+                SetMemberFilter.ALL -> "No destinations in this set"
+            }
+            Text(
+                text = emptyMessage,
+                style = MaterialTheme.typography.bodySmall,
+                color = Haze
+            )
+        } else {
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(
-                        if (member.isVisited) Amber.copy(alpha = 0.12f) else Slate.copy(alpha = 0.35f)
-                    )
-                    .padding(horizontal = 12.dp, vertical = 7.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(7.dp)
-                        .clip(CircleShape)
-                        .background(if (member.isVisited) Amber else Haze.copy(alpha = 0.35f))
-                )
-                Spacer(modifier = Modifier.width(10.dp))
-                Text(
-                    text = member.displayName,
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        fontWeight = if (member.isVisited) FontWeight.SemiBold else FontWeight.Normal
-                    ),
-                    color = if (member.isVisited) OffWhite else Haze,
-                    modifier = Modifier.weight(1f)
-                )
-                if (member.isVisited) {
-                    Icon(
-                        imageVector = Icons.Outlined.Check,
-                        contentDescription = "Visited",
-                        tint = Amber,
-                        modifier = Modifier.size(15.dp)
-                    )
+                members.forEach { member ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(
+                                if (member.isVisited) Amber.copy(alpha = 0.12f) else Slate.copy(alpha = 0.35f)
+                            )
+                            .padding(horizontal = 12.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(7.dp)
+                                .clip(CircleShape)
+                                .background(if (member.isVisited) Amber else Haze.copy(alpha = 0.35f))
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = member.displayName,
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontWeight = if (member.isVisited) FontWeight.SemiBold else FontWeight.Normal
+                            ),
+                            color = if (member.isVisited) OffWhite else Haze,
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (member.isVisited) {
+                            Icon(
+                                imageVector = Icons.Outlined.Check,
+                                contentDescription = "Visited",
+                                tint = Amber,
+                                modifier = Modifier.size(15.dp)
+                            )
+                        }
+                    }
                 }
             }
         }

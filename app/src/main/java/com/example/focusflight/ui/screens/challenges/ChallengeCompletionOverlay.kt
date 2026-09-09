@@ -99,12 +99,12 @@ import kotlin.math.sin
 import kotlin.random.Random
 
 private const val InitialDelayMs = 325L
-private const val FlyInDurationMs = 480
+private const val FlyInDurationMs = 460
 private const val AnticipationDurationMs = 90
 private const val SmashDurationMs = 300
 private const val ImpactDurationMs = 220
 private const val CardSizeDp = 220
-private const val ConfettiBurstDurationMs = 1400
+private const val ConfettiBurstDurationMs = 2000
 
 private enum class CelebrationPhase {
     INITIAL_DELAY,
@@ -207,27 +207,51 @@ internal fun ChallengeCompletionOverlay(
             }
 
             // 1. Initial delay so pilot clearly sees where they are and registers their completed slot
-            val delayMs = if (isFirstCelebration) InitialDelayMs else 225L
+            val delayMs = if (isFirstCelebration) InitialDelayMs else 200L
             delay(delayMs)
 
-            // 2. Start flying to center and signal the slot row to compact
+            // 2. Start flying to center with dynamic arc & camera overshoot
             onFlyInStart()
             phase = CelebrationPhase.FLYING_IN
-            fraction.animateTo(1f, tween(FlyInDurationMs, easing = FastOutSlowInEasing))
+            val flyInJob = launch {
+                fraction.animateTo(
+                    targetValue = 1f,
+                    animationSpec = tween(FlyInDurationMs, easing = CubicBezierEasing(0.05f, 0.85f, 0.15f, 1f))
+                )
+            }
 
-            // 3. Fully upscaled and settled in the center - now trigger confetti!
-            phase = CelebrationPhase.PRESENTED
-            delay(40)
+            // 3. Fire confetti and apex flash right as the card snaps into center stage (74% through flight)
+            delay((FlyInDurationMs * 0.74f).toLong())
             showConfetti = true
+            flyInJob.join()
+
+            // 4. Settled at center stage
+            phase = CelebrationPhase.PRESENTED
         }
+
+        val t = fraction.value
 
         val animatedRect = when (phase) {
             CelebrationPhase.INITIAL_DELAY -> startRect
-            CelebrationPhase.FLYING_IN -> lerpRect(startRect, centerRect, fraction.value)
+            CelebrationPhase.FLYING_IN -> lerpRect(startRect, centerRect, t)
             CelebrationPhase.PRESENTED -> centerRect
             CelebrationPhase.ANTICIPATION -> lerpRect(centerRect, anticipationRect, fraction.value)
             CelebrationPhase.SMASHING_DOWN -> lerpRect(anticipationRect, targetLogEntryRect, fraction.value)
             CelebrationPhase.IMPACT -> targetLogEntryRect
+        }
+
+        val scaleMultiplier = when (phase) {
+            CelebrationPhase.FLYING_IN -> 1f + 0.10f * sin((t * Math.PI).toFloat())
+            CelebrationPhase.ANTICIPATION -> 1f + 0.04f * fraction.value
+            else -> 1f
+        }
+
+        val startOffsetX = startRect.center.x - centerRect.center.x
+        val maxTiltDeg = (startOffsetX / centerXPx).coerceIn(-1f, 1f) * 6.5f
+        val currentRotation = when (phase) {
+            CelebrationPhase.FLYING_IN -> maxTiltDeg * (1f - t) * cos(t * Math.PI.toFloat() * 1.5f)
+            CelebrationPhase.ANTICIPATION -> -1.5f * fraction.value
+            else -> 0f
         }
 
         val morphProgress = when (phase) {
@@ -320,59 +344,76 @@ internal fun ChallengeCompletionOverlay(
         val currentCornerRadius = ((16.dp * currentScale) * (1f - morphProgress) + 8.dp * morphProgress).coerceAtLeast(6.dp)
 
         if (glowAlpha > 0.01f) {
-            val blurRadiusDp = (28 * (currentScale / 2.5f)).coerceIn(20f, 36f).dp
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                Box(
-                    modifier = Modifier
-                        .offset { IntOffset(animatedRect.left.roundToInt(), animatedRect.top.roundToInt()) }
-                        .size(
-                            width = with(density) { animatedRect.width.toDp() },
-                            height = with(density) { animatedRect.height.toDp() }
-                        )
-                        .graphicsLayer {
-                            this.alpha = 0.70f * glowAlpha
-                        }
-                        .blur(radius = blurRadiusDp, edgeTreatment = BlurredEdgeTreatment.Unbounded)
-                        .background(Amber, RoundedCornerShape(currentCornerRadius))
-                )
-            } else {
-                Canvas(modifier = Modifier.fillMaxSize()) {
-                    val baseRect = animatedRect
-                    val blurRadiusPx = with(density) { blurRadiusDp.toPx() }
-                    val radiusPx = with(density) { currentCornerRadius.toPx() }
-                    drawIntoCanvas { canvas ->
-                        val paint = android.graphics.Paint().apply {
-                            isAntiAlias = true
-                            color = Amber.copy(alpha = 0.70f * glowAlpha).toArgb()
-                            maskFilter = android.graphics.BlurMaskFilter(blurRadiusPx, android.graphics.BlurMaskFilter.Blur.NORMAL)
-                        }
-                        canvas.nativeCanvas.drawRoundRect(
-                            baseRect.left,
-                            baseRect.top,
-                            baseRect.right,
-                            baseRect.bottom,
-                            radiusPx,
-                            radiusPx,
-                            paint
-                        )
-                    }
-                }
-            }
+            val blurRadiusDp = (32 * (currentScale / 2.5f)).coerceIn(24f, 44f).dp
+            val radiusPx = with(density) { currentCornerRadius.toPx() }
+            val maxSpreadPx = with(density) { blurRadiusDp.toPx() }
 
-            // Crisp accent border directly outlining the card's edge
             Canvas(modifier = Modifier.fillMaxSize()) {
-                val radiusPx = with(density) { currentCornerRadius.toPx() }
+                val baseRect = animatedRect
+                val steps = 14
+                for (i in steps downTo 1) {
+                    val progress = i.toFloat() / steps
+                    val spread = progress * maxSpreadPx
+                    val alphaFactor = (1f - progress) * (1f - progress)
+                    val layerAlpha = (0.28f * glowAlpha * alphaFactor).coerceIn(0f, 1f)
+
+                    drawRoundRect(
+                        color = Amber.copy(alpha = layerAlpha),
+                        topLeft = Offset(baseRect.left - spread, baseRect.top - spread),
+                        size = Size(baseRect.width + spread * 2f, baseRect.height + spread * 2f),
+                        cornerRadius = CornerRadius(radiusPx + spread)
+                    )
+                }
+
+                // Crisp accent border directly outlining the card's edge
                 drawRoundRect(
-                    color = Amber.copy(alpha = 0.55f * glowAlpha),
-                    topLeft = animatedRect.topLeft,
-                    size = animatedRect.size,
+                    color = Amber.copy(alpha = 0.65f * glowAlpha),
+                    topLeft = baseRect.topLeft,
+                    size = baseRect.size,
                     cornerRadius = CornerRadius(radiusPx),
                     style = Stroke(width = with(density) { 1.5.dp.toPx() })
                 )
             }
         }
 
-        // ── Confetti Burst (fires only after full upscale) ──
+        // ── Apex Arrival Flash (radial bloom explosion at the apex punch) ──
+        val apexFlashAlpha = remember(current.id) { Animatable(0f) }
+        val apexFlashRadius = remember(current.id) { Animatable(0.4f) }
+        LaunchedEffect(showConfetti) {
+            if (showConfetti) {
+                launch {
+                    apexFlashAlpha.snapTo(0.90f)
+                    apexFlashAlpha.animateTo(0f, tween(480, easing = FastOutSlowInEasing))
+                }
+                launch {
+                    apexFlashRadius.snapTo(0.4f)
+                    apexFlashRadius.animateTo(1.75f, tween(480, easing = FastOutSlowInEasing))
+                }
+            }
+        }
+
+        if (apexFlashAlpha.value > 0.01f) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val center = Offset(centerRect.center.x, centerRect.center.y)
+                val baseRadius = centerRect.width * 0.55f
+                val radius = baseRadius * apexFlashRadius.value
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            Amber.copy(alpha = apexFlashAlpha.value * 0.80f),
+                            ChallengeGold.copy(alpha = apexFlashAlpha.value * 0.40f),
+                            Color.Transparent
+                        ),
+                        center = center,
+                        radius = radius
+                    ),
+                    center = center,
+                    radius = radius
+                )
+            }
+        }
+
+        // ── Confetti Burst (fires right at apex punch) ──
         if (showConfetti) {
             RadialConfettiBurst(
                 trigger = true,
@@ -386,6 +427,8 @@ internal fun ChallengeCompletionOverlay(
             challenge = current,
             rect = animatedRect,
             alpha = cardAlpha,
+            rotationZ = currentRotation,
+            scaleMultiplier = scaleMultiplier,
             baseSlotWidthPx = baseSlotWidthPx,
             morphProgress = morphProgress
         )
@@ -476,7 +519,9 @@ private fun CelebrationCard(
     rect: Rect,
     alpha: Float,
     baseSlotWidthPx: Float,
-    morphProgress: Float = 0f
+    morphProgress: Float = 0f,
+    rotationZ: Float = 0f,
+    scaleMultiplier: Float = 1f
 ) {
     if (alpha <= 0.001f) return
 
@@ -505,7 +550,12 @@ private fun CelebrationCard(
         modifier = Modifier
             .offset { IntOffset(rect.left.roundToInt(), rect.top.roundToInt()) }
             .size(width = widthDp, height = heightDp)
-            .alpha(alpha)
+            .graphicsLayer {
+                this.rotationZ = rotationZ
+                this.scaleX = scaleMultiplier
+                this.scaleY = scaleMultiplier
+                this.alpha = alpha
+            }
             .clip(RoundedCornerShape(cornerRadius))
             .background(bgColor)
     ) {
@@ -647,7 +697,14 @@ private data class BurstParticle(
     val rotationSpeedDegPerMs: Float
 )
 
-private val ConfettiColors = listOf(ChallengeGold, Amber, Green, OffWhite)
+private val ConfettiColors = listOf(
+    ChallengeGold,
+    Amber,
+    Green,
+    OffWhite,
+    Color(0xFFFFD54F),
+    Color(0xFFFFB74D)
+)
 
 /**
  * Adapted from `ChallengeOutcomeScreen`'s `ConfettiOverlay` - same `Animatable`-driven,
@@ -662,15 +719,17 @@ private fun RadialConfettiBurst(trigger: Boolean, centerPx: Offset, key: Any) {
     if (!trigger) return
 
     val particles = remember(key) {
-        List(36) {
+        List(75) { i ->
+            val baseAngle = (i.toFloat() / 75f) * (2f * Math.PI.toFloat())
+            val jitter = (Random.nextFloat() - 0.5f) * 0.35f
             BurstParticle(
-                angleRad = Random.nextFloat() * (2 * Math.PI).toFloat(),
-                velocityPx = Random.nextInt(300, 700).toFloat(),
-                fallDurationMs = Random.nextInt(700, ConfettiBurstDurationMs),
-                delayMs = Random.nextInt(0, 120),
+                angleRad = baseAngle + jitter,
+                velocityPx = Random.nextInt(320, 800).toFloat(),
+                fallDurationMs = Random.nextInt(1000, ConfettiBurstDurationMs),
+                delayMs = Random.nextInt(0, 140),
                 color = ConfettiColors[Random.nextInt(ConfettiColors.size)],
-                sizePx = Random.nextInt(6, 14).toFloat(),
-                rotationSpeedDegPerMs = Random.nextFloat() * 0.6f - 0.3f
+                sizePx = Random.nextInt(6, 15).toFloat(),
+                rotationSpeedDegPerMs = Random.nextFloat() * 0.8f - 0.4f
             )
         }
     }
@@ -689,15 +748,29 @@ private fun RadialConfettiBurst(trigger: Boolean, centerPx: Offset, key: Any) {
             val localElapsed = now - p.delayMs
             if (localElapsed < 0f) return@forEach
             val t = (localElapsed / p.fallDurationMs).coerceIn(0f, 1f)
-            // Eases outward then settles - constant velocity would look mechanical.
-            val travel = p.velocityPx * (1f - (1f - t) * (1f - t))
+            if (t >= 1f) return@forEach // Fully finished and faded out
+
+            // Eases outward then settles
+            val outwardEase = 1f - (1f - t) * (1f - t)
+            val travel = p.velocityPx * outwardEase
+
+            // Gravity gently pulls the confetti down
+            val gravityDrop = 120f * t * t
 
             val x = centerPx.x + cos(p.angleRad) * travel
-            val y = centerPx.y + sin(p.angleRad) * travel
+            val y = centerPx.y + sin(p.angleRad) * travel + gravityDrop
+
+            // Smooth fadeout in the second half of life down to 0
+            val alpha = if (t < 0.45f) {
+                1f
+            } else {
+                (1f - (t - 0.45f) / 0.55f).coerceIn(0f, 1f)
+            }
+            if (alpha <= 0.01f) return@forEach
 
             rotate(degrees = localElapsed * p.rotationSpeedDegPerMs, pivot = Offset(x, y)) {
                 drawRect(
-                    color = p.color.copy(alpha = 1f - t * 0.5f),
+                    color = p.color.copy(alpha = alpha),
                     topLeft = Offset(x - p.sizePx / 2f, y - p.sizePx / 2f),
                     size = Size(p.sizePx, p.sizePx * 1.6f)
                 )

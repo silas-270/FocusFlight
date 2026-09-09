@@ -6,10 +6,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
-import com.example.focusflight.ui.theme.Haze
+import com.example.focusflight.ui.theme.TextSecondary
 
 /**
- * The small-caps section caption style (bold, letter-spaced, Haze) used above lists and form
+ * The small-caps section caption style (bold, letter-spaced, TextSecondary) used above lists and form
  * sections - e.g. "COMPLETED", "SUGGESTED DESTINATIONS", "FLY FROM ANYWHERE", "CAMERA VIEW".
  * Deliberately a different, quieter tier than `account/SectionHeader.kt` (Amber, larger, more
  * prominent) and `ModalTitle` (modal-only) - those stay separate on purpose.
@@ -23,6 +23,6 @@ fun CaptionLabel(text: String, modifier: Modifier = Modifier) {
             fontWeight = FontWeight.Bold,
             letterSpacing = 1.sp
         ),
-        color = Haze
+        color = TextSecondary
     )
 }

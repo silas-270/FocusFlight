@@ -25,16 +25,17 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.focusflight.ui.theme.Amber
+import com.example.focusflight.ui.theme.Accent
+import com.example.focusflight.ui.theme.AccentSubtle
 import com.example.focusflight.ui.theme.Border
-import com.example.focusflight.ui.theme.CrimsonRed
+import com.example.focusflight.ui.theme.Container
+import com.example.focusflight.ui.theme.Danger
+import com.example.focusflight.ui.theme.DangerSubtle
 import com.example.focusflight.ui.theme.DarkPalette
-import com.example.focusflight.ui.theme.Green
-import com.example.focusflight.ui.theme.Haze
-import com.example.focusflight.ui.theme.OffWhite
-import com.example.focusflight.ui.theme.Slate
-import com.example.focusflight.ui.theme.SoftAmber
-import com.example.focusflight.ui.theme.SoftCrimson
+import com.example.focusflight.ui.theme.Success
+import com.example.focusflight.ui.theme.SuccessSubtle
+import com.example.focusflight.ui.theme.TextPrimary
+import com.example.focusflight.ui.theme.TextSecondary
 
 enum class BadgeVariant {
     Primary,   // Amber / Gold
@@ -75,36 +76,36 @@ fun FocusBadge(
 ) {
     val containerColor = when (style) {
         BadgeStyle.Filled -> when (variant) {
-            BadgeVariant.Primary -> Amber
-            BadgeVariant.Success -> Green
-            BadgeVariant.Danger -> CrimsonRed
-            BadgeVariant.Neutral -> Slate
-            BadgeVariant.Muted -> Slate.copy(alpha = 0.5f)
+            BadgeVariant.Primary -> Accent
+            BadgeVariant.Success -> Success
+            BadgeVariant.Danger -> Danger
+            BadgeVariant.Neutral -> Container
+            BadgeVariant.Muted -> Container.copy(alpha = 0.5f)
         }
         BadgeStyle.Translucent -> when (variant) {
-            BadgeVariant.Primary -> SoftAmber
-            BadgeVariant.Success -> Green.copy(alpha = 0.2f)
-            BadgeVariant.Danger -> SoftCrimson
-            BadgeVariant.Neutral -> Slate.copy(alpha = 0.7f)
-            BadgeVariant.Muted -> Haze.copy(alpha = 0.15f)
+            BadgeVariant.Primary -> AccentSubtle
+            BadgeVariant.Success -> SuccessSubtle
+            BadgeVariant.Danger -> DangerSubtle
+            BadgeVariant.Neutral -> Container.copy(alpha = 0.7f)
+            BadgeVariant.Muted -> TextSecondary.copy(alpha = 0.15f)
         }
         BadgeStyle.Outlined -> Color.Transparent
     }
 
     val contentColor = when (style) {
         BadgeStyle.Filled -> when (variant) {
-            BadgeVariant.Primary -> DarkPalette.midnight
-            BadgeVariant.Success -> DarkPalette.midnight
-            BadgeVariant.Danger -> OffWhite
-            BadgeVariant.Neutral -> OffWhite
-            BadgeVariant.Muted -> Haze
+            BadgeVariant.Primary -> DarkPalette.background
+            BadgeVariant.Success -> DarkPalette.background
+            BadgeVariant.Danger -> TextPrimary
+            BadgeVariant.Neutral -> TextPrimary
+            BadgeVariant.Muted -> TextSecondary
         }
         BadgeStyle.Translucent, BadgeStyle.Outlined -> when (variant) {
-            BadgeVariant.Primary -> Amber
-            BadgeVariant.Success -> Green
-            BadgeVariant.Danger -> CrimsonRed
-            BadgeVariant.Neutral -> OffWhite
-            BadgeVariant.Muted -> Haze
+            BadgeVariant.Primary -> Accent
+            BadgeVariant.Success -> Success
+            BadgeVariant.Danger -> Danger
+            BadgeVariant.Neutral -> TextPrimary
+            BadgeVariant.Muted -> TextSecondary
         }
     }
 
@@ -112,9 +113,9 @@ fun FocusBadge(
         BadgeStyle.Filled -> null
         BadgeStyle.Translucent -> null
         BadgeStyle.Outlined -> when (variant) {
-            BadgeVariant.Primary -> BorderStroke(1.dp, Amber)
-            BadgeVariant.Success -> BorderStroke(1.dp, Green)
-            BadgeVariant.Danger -> BorderStroke(1.dp, CrimsonRed)
+            BadgeVariant.Primary -> BorderStroke(1.dp, Accent)
+            BadgeVariant.Success -> BorderStroke(1.dp, Success)
+            BadgeVariant.Danger -> BorderStroke(1.dp, Danger)
             BadgeVariant.Neutral -> BorderStroke(1.dp, Border)
             BadgeVariant.Muted -> BorderStroke(1.dp, Border.copy(alpha = 0.5f))
         }
