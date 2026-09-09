@@ -38,9 +38,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.PaddingValues
 import com.example.focusflight.data.model.Challenge
 import com.example.focusflight.data.model.ChallengeType
 import com.example.focusflight.data.model.progressFraction
+import com.example.focusflight.ui.components.CardVariant
+import com.example.focusflight.ui.components.FocusCard
 import com.example.focusflight.ui.components.RingProgress
 import com.example.focusflight.ui.components.icon
 import com.example.focusflight.ui.theme.Amber
@@ -99,25 +102,25 @@ internal fun ChallengeSlotRow(
 
 @Composable
 private fun EmptySlot(onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .clip(RoundedCornerShape(16.dp))
-            // Borderless, so flat Slate has to carry the slot on its own. It can't be a dimmed
-            // DeepNavy "recess" any more - without the outline that read as nothing at all
-            // against Midnight - so an open slot goes one step *brighter* than the filled
-            // slot's DeepNavy instead. Slate is the palette's secondary-container tone and is
-            // already the empty/neutral surface elsewhere (modal buttons, picker rows).
-            .background(Slate)
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center
+    FocusCard(
+        modifier = Modifier.fillMaxSize(),
+        variant = CardVariant.Secondary,
+        shape = RoundedCornerShape(16.dp),
+        contentPadding = PaddingValues(0.dp),
+        onClick = onClick,
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Icon(
-            imageVector = Icons.Outlined.Add,
-            contentDescription = "Start a challenge",
-            tint = Haze,
-            modifier = Modifier.size(28.dp)
-        )
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.Add,
+                contentDescription = "Start a challenge",
+                tint = Haze,
+                modifier = Modifier.size(28.dp)
+            )
+        }
     }
 }
 
@@ -138,32 +141,37 @@ private fun FilledSlot(
         "${(animatedProgress * 100).toInt()}%"
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .clip(RoundedCornerShape(16.dp))
-            .background(DeepNavy)
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center
+    FocusCard(
+        modifier = Modifier.fillMaxSize(),
+        variant = CardVariant.Surface,
+        shape = RoundedCornerShape(16.dp),
+        contentPadding = PaddingValues(0.dp),
+        onClick = onClick,
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Challenge icon sits behind the ring, dimmed - it identifies the challenge without
-        // competing with the number, which is the thing you actually read.
-        Icon(
-            imageVector = challenge.icon(),
-            contentDescription = null,
-            tint = Haze.copy(alpha = 0.15f),
-            modifier = Modifier.fillMaxSize().padding(Spacing.Large)
-        )
-        RingProgress(
-            progress = animatedProgress,
-            modifier = Modifier.fillMaxSize().padding(Spacing.Small),
-            strokeWidth = 5.dp,
-            fillColor = Amber
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
         ) {
-            AutoScalingCenterText(
-                text = labelText,
-                modifier = Modifier.padding(horizontal = 6.dp)
+            // Challenge icon sits behind the ring, dimmed - it identifies the challenge without
+            // competing with the number, which is the thing you actually read.
+            Icon(
+                imageVector = challenge.icon(),
+                contentDescription = null,
+                tint = Haze.copy(alpha = 0.15f),
+                modifier = Modifier.fillMaxSize().padding(Spacing.Large)
             )
+            RingProgress(
+                progress = animatedProgress,
+                modifier = Modifier.fillMaxSize().padding(Spacing.Small),
+                strokeWidth = 5.dp,
+                fillColor = Amber
+            ) {
+                AutoScalingCenterText(
+                    text = labelText,
+                    modifier = Modifier.padding(horizontal = 6.dp)
+                )
+            }
         }
     }
 }

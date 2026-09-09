@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.sp
 import com.example.focusflight.data.model.AchievementStatus
 import com.example.focusflight.data.model.FlightLog
 import com.example.focusflight.ui.components.BackTopAppBar
+import com.example.focusflight.ui.components.SectionHeader
 import com.example.focusflight.data.model.Tour
 import com.example.focusflight.util.formatMiles
 import com.example.focusflight.ui.theme.Amber
@@ -172,17 +173,15 @@ fun AccountScreen(
 
                 // ── Flight History Header + Sorting Bar ───────────────────────
                 item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        SectionHeader(title = "FLIGHT HISTORY")
-                        SortOrderButton(
-                            currentOrder = uiState.sortOrder,
-                            onClick = { showSortModal = true }
-                        )
-                    }
+                    SectionHeader(
+                        title = "FLIGHT HISTORY",
+                        trailingAction = {
+                            SortOrderButton(
+                                currentOrder = uiState.sortOrder,
+                                onClick = { showSortModal = true }
+                            )
+                        }
+                    )
                 }
 
                 // ── Logbook Items (with sticky tour headers) ──────────────────

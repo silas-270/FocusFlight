@@ -21,6 +21,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.focusflight.data.model.Challenge
 import com.example.focusflight.data.model.ChallengeSource
+import com.example.focusflight.ui.components.BadgeSize
+import com.example.focusflight.ui.components.BadgeStyle
+import com.example.focusflight.ui.components.BadgeVariant
+import com.example.focusflight.ui.components.FocusBadge
 import com.example.focusflight.ui.components.challengeTypeLabel
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -47,7 +51,6 @@ internal fun ChallengeCompletionEntry(challenge: Challenge, entryNumber: Int) {
     val inkDark   = LogbookInkDark
     val inkMid    = LogbookInkMid
     val inkFaint  = LogbookInkFaint
-    val marginRed = LogbookMarginRed
 
     LogPaperCard(entryNumber = entryNumber) {
         Column(
@@ -70,22 +73,13 @@ internal fun ChallengeCompletionEntry(challenge: Challenge, entryNumber: Int) {
                     ),
                     color = inkFaint
                 )
-                Box(
-                    modifier = Modifier
-                        .border(1.dp, marginRed.copy(alpha = 0.55f), RoundedCornerShape(3.dp))
-                        .padding(horizontal = 5.dp, vertical = 1.dp)
-                ) {
-                    Text(
-                        text = challengeTypeLabel(challenge.type),
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontFamily = FontFamily.Monospace,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 9.sp,
-                            letterSpacing = 0.8.sp
-                        ),
-                        color = marginRed.copy(alpha = 0.75f)
-                    )
-                }
+                FocusBadge(
+                    text = challengeTypeLabel(challenge.type),
+                    variant = BadgeVariant.Danger,
+                    style = BadgeStyle.Outlined,
+                    size = BadgeSize.Compact,
+                    shape = RoundedCornerShape(3.dp)
+                )
             }
 
             // Row 2: challenge name (in place of LogbookEntry's ORIGIN ✈ DEST route stamp - a

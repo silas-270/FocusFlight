@@ -32,7 +32,7 @@ import androidx.compose.ui.unit.dp
 import com.example.focusflight.data.model.Airport
 import com.example.focusflight.data.model.ThemeMode
 import com.example.focusflight.ui.components.BackTopAppBar
-import com.example.focusflight.ui.screens.account.SectionHeader
+import com.example.focusflight.ui.components.SectionHeader
 import com.example.focusflight.ui.theme.ActivePalette
 import com.example.focusflight.ui.theme.Midnight
 import com.example.focusflight.ui.theme.Spacing

@@ -56,8 +56,10 @@ import com.example.focusflight.ui.components.AchievementDetailModal
 import com.example.focusflight.ui.components.AchievementProgressRow
 import com.example.focusflight.ui.components.achievementCategoryLabel
 import com.example.focusflight.ui.components.BackTopAppBar
-import com.example.focusflight.ui.components.CaptionLabel
+import com.example.focusflight.ui.components.CardVariant
 import com.example.focusflight.ui.components.DiscardFlightConfirmModal
+import com.example.focusflight.ui.components.FocusCard
+import com.example.focusflight.ui.components.SectionHeader
 import com.example.focusflight.ui.screens.account.ChallengeCompletionEntry
 import com.example.focusflight.ui.theme.Amber
 import com.example.focusflight.ui.theme.Border
@@ -164,9 +166,7 @@ fun ChallengesScreen(
             topBar = {
                 BackTopAppBar(
                     title = "CHALLENGES",
-                    onBackClick = onBackClick,
-                    accentColor = OffWhite,
-                    letterSpacing = 2.sp
+                    onBackClick = onBackClick
                 )
             }
         ) { padding ->
@@ -218,7 +218,7 @@ fun ChallengesScreen(
                             Box(
                                 modifier = Modifier.onGloballyPositioned { logAnchorRect = it.boundsInWindow() }
                             ) {
-                                CaptionLabel(text = "COMPLETED")
+                                SectionHeader(title = "COMPLETED")
                             }
                         }
 
@@ -250,19 +250,18 @@ fun ChallengesScreen(
                                 if (inCategory.isEmpty()) return@forEach
 
                                 item(key = "header_${category.name}") {
-                                    CaptionLabel(text = achievementCategoryLabel(category))
+                                    SectionHeader(title = achievementCategoryLabel(category))
                                 }
                                 items(
                                     items = inCategory,
                                     key = { achievement -> achievement.id }
                                 ) { achievement ->
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clip(RoundedCornerShape(16.dp))
-                                            .background(DeepNavy)
-                                            .clickable { detailAchievement = achievement }
-                                            .padding(Spacing.Medium)
+                                    FocusCard(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        variant = CardVariant.Surface,
+                                        shape = RoundedCornerShape(16.dp),
+                                        contentPadding = PaddingValues(Spacing.Medium),
+                                        onClick = { detailAchievement = achievement }
                                     ) {
                                         // Everything on this tab is unearned by construction, so
                                         // the "DONE" pill and locked/unlocked dot would be dead
@@ -393,11 +392,11 @@ fun ChallengesScreen(
  */
 @Composable
 private fun FreeModeRow(pausedFlight: PausedFlight?, onClick: () -> Unit, onResumeClick: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(DeepNavy)
+    FocusCard(
+        modifier = Modifier.fillMaxWidth(),
+        variant = CardVariant.Surface,
+        shape = RoundedCornerShape(16.dp),
+        contentPadding = PaddingValues(0.dp)
     ) {
         Row(
             modifier = Modifier
