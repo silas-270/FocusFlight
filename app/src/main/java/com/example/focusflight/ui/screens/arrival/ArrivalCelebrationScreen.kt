@@ -31,6 +31,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.focusflight.ui.components.FocusButton
+import com.example.focusflight.ui.components.FocusInfoRow
 import com.example.focusflight.ui.theme.*
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.delay
@@ -375,26 +376,16 @@ fun ArrivalCelebrationScreen(
     }
 }
 
+/**
+ * Backward compatibility alias for the centralized [com.example.focusflight.ui.components.FocusInfoRow].
+ */
+@Deprecated("Use FocusInfoRow instead", ReplaceWith("FocusInfoRow(label = label, value = value)", "com.example.focusflight.ui.components.FocusInfoRow"))
 @Composable
 fun CelebrationRow(label: String, value: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-            color = Haze.copy(alpha = 0.6f)
-        )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodySmall.copy(
-                fontFamily = FontFamily.Monospace,
-                fontWeight = FontWeight.Bold
-            ),
-            color = Haze
-        )
-    }
+    FocusInfoRow(
+        label = label,
+        value = value,
+        labelColor = Haze.copy(alpha = 0.6f),
+        valueColor = Haze
+    )
 }

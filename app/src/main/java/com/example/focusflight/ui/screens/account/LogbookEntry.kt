@@ -35,6 +35,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.focusflight.data.model.FlightLog
+import com.example.focusflight.ui.components.BadgeSize
+import com.example.focusflight.ui.components.BadgeStyle
+import com.example.focusflight.ui.components.BadgeVariant
+import com.example.focusflight.ui.components.FocusBadge
 import com.example.focusflight.ui.theme.Amber
 import com.example.focusflight.ui.theme.Haze
 import java.text.SimpleDateFormat
@@ -230,7 +234,6 @@ internal fun LogbookEntry(flight: FlightLog, entryNumber: Int) {
     val inkDark   = LogbookInkDark
     val inkMid    = LogbookInkMid
     val inkFaint  = LogbookInkFaint
-    val marginRed = LogbookMarginRed
 
     LogPaperCard(entryNumber = entryNumber) {
         // ── Main data columns ──
@@ -254,22 +257,13 @@ internal fun LogbookEntry(flight: FlightLog, entryNumber: Int) {
                     color = inkFaint
                 )
                 // Flight number — rubber-stamp style
-                Box(
-                    modifier = Modifier
-                        .border(1.dp, marginRed.copy(alpha = 0.55f), RoundedCornerShape(3.dp))
-                        .padding(horizontal = 5.dp, vertical = 1.dp)
-                ) {
-                    Text(
-                        text = flight.flightNumber,
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontFamily = FontFamily.Monospace,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 9.sp,
-                            letterSpacing = 0.8.sp
-                        ),
-                        color = marginRed.copy(alpha = 0.75f)
-                    )
-                }
+                FocusBadge(
+                    text = flight.flightNumber,
+                    variant = BadgeVariant.Danger,
+                    style = BadgeStyle.Outlined,
+                    size = BadgeSize.Compact,
+                    shape = RoundedCornerShape(3.dp)
+                )
             }
 
             // Row 2: ORIGIN ··✈·· DEST

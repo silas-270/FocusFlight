@@ -35,11 +35,20 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.focusflight.ui.components.BackTopAppBar
+import com.example.focusflight.ui.components.BadgeSize
+import com.example.focusflight.ui.components.BadgeStyle
+import com.example.focusflight.ui.components.BadgeVariant
+import com.example.focusflight.ui.components.CardVariant
+import com.example.focusflight.ui.components.FocusBadge
 import com.example.focusflight.ui.components.FocusButton
+import com.example.focusflight.ui.components.FocusCard
+import com.example.focusflight.ui.components.FocusInfoRow
+import com.example.focusflight.ui.components.SectionHeader
 import com.example.focusflight.ui.theme.Amber
 import com.example.focusflight.ui.theme.Border
 import com.example.focusflight.ui.theme.DeepNavy
@@ -77,62 +86,37 @@ fun CheckInScreen(
         ) {
 
             // Boarding Pass Ticket Card
-            Column(
+            FocusCard(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f)
-                    .background(DeepNavy, RoundedCornerShape(16.dp))
-                    .border(1.dp, Border, RoundedCornerShape(16.dp))
-                    .padding(vertical = Spacing.Large)
+                    .weight(1f),
+                variant = CardVariant.Elevated,
+                contentPadding = PaddingValues(vertical = Spacing.Large)
             ) {
                 // Ticket Header
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = Spacing.Large),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "FOCUSFLIGHT",
-                        style = MaterialTheme.typography.labelLarge.copy(
-                            fontWeight = FontWeight.Black,
-                            fontFamily = FontFamily.Monospace,
-                            letterSpacing = 1.sp
-                        ),
-                        color = Amber
-                    )
-                    Text(
-                        text = "BOARDING PASS",
-                        style = MaterialTheme.typography.labelMedium.copy(
-                            fontWeight = FontWeight.Normal,
-                            fontFamily = FontFamily.Monospace
-                        ),
-                        color = Haze
-                    )
-                }
+                SectionHeader(
+                    title = "FOCUSFLIGHT",
+                    modifier = Modifier.padding(horizontal = Spacing.Large),
+                    trailingAction = {
+                        FocusBadge(
+                            text = "BOARDING PASS",
+                            variant = BadgeVariant.Neutral,
+                            style = BadgeStyle.Translucent,
+                            size = BadgeSize.Compact
+                        )
+                    }
+                )
 
                 Spacer(modifier = Modifier.height(Spacing.Large))
                 DashedDivider(color = Border, thickness = 1.dp)
                 Spacer(modifier = Modifier.height(Spacing.Large))
 
                 // Passenger Info
-                Column(modifier = Modifier.padding(horizontal = Spacing.Large)) {
-                    Text(
-                        text = "PASSENGER",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Haze,
-                        letterSpacing = 1.sp
-                    )
-                    Text(
-                        text = "Captain",
-                        style = MaterialTheme.typography.bodyLarge.copy(
-                            fontFamily = FontFamily.Monospace,
-                            fontWeight = FontWeight.Bold
-                        ),
-                        color = OffWhite
-                    )
-                }
+                FocusInfoRow(
+                    label = "PASSENGER",
+                    value = "Captain",
+                    modifier = Modifier.padding(horizontal = Spacing.Large)
+                )
 
                 Spacer(modifier = Modifier.height(Spacing.Medium))
                 DashedDivider(color = Border, thickness = 1.dp)
@@ -214,98 +198,41 @@ fun CheckInScreen(
                 DashedDivider(color = Border, thickness = 1.dp)
                 Spacer(modifier = Modifier.height(Spacing.Large))
 
-                // DURATION / DISTANCE Row
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = Spacing.Large),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column {
-                        Text(
-                            text = "DURATION",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Haze,
-                            letterSpacing = 1.sp
-                        )
-                        val durationMin = routeDetails?.durationMin ?: 0
-                        val hours = durationMin / 60
-                        val minutes = durationMin % 60
-                        val durationText = if (hours > 0) "${hours}h ${minutes}m" else "${minutes}m"
-                        Text(
-                            text = durationText,
-                            style = MaterialTheme.typography.bodyLarge.copy(
-                                fontFamily = FontFamily.Monospace,
-                                fontWeight = FontWeight.Bold
-                            ),
-                            color = OffWhite
-                        )
-                    }
+                // DURATION / DISTANCE Rows
+                val durationMin = routeDetails?.durationMin ?: 0
+                val hours = durationMin / 60
+                val minutes = durationMin % 60
+                val durationText = if (hours > 0) "${hours}h ${minutes}m" else "${minutes}m"
+                val distanceKm = routeDetails?.distanceKm ?: 0.0
 
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text(
-                            text = "DISTANCE",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Haze,
-                            letterSpacing = 1.sp
-                        )
-                        val distanceKm = routeDetails?.distanceKm ?: 0.0
-                        Text(
-                            text = com.example.focusflight.util.formatMiles(distanceKm),
-                            style = MaterialTheme.typography.bodyLarge.copy(
-                                fontFamily = FontFamily.Monospace,
-                                fontWeight = FontWeight.Bold
-                            ),
-                            color = OffWhite
-                        )
-                    }
-                }
+                FocusInfoRow(
+                    label = "DURATION",
+                    value = durationText,
+                    modifier = Modifier.padding(horizontal = Spacing.Large)
+                )
+                Spacer(modifier = Modifier.height(Spacing.Small))
+                FocusInfoRow(
+                    label = "DISTANCE",
+                    value = com.example.focusflight.util.formatMiles(distanceKm),
+                    modifier = Modifier.padding(horizontal = Spacing.Large)
+                )
 
                 Spacer(modifier = Modifier.height(Spacing.Medium))
                 DashedDivider(color = Border, thickness = 1.dp)
                 Spacer(modifier = Modifier.height(Spacing.Large))
 
-                // FLIGHT / DATE Row
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = Spacing.Large),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column {
-                        Text(
-                            text = "FLIGHT NO.",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Haze,
-                            letterSpacing = 1.sp
-                        )
-                        Text(
-                            text = viewModel.flightNumber,
-                            style = MaterialTheme.typography.bodyLarge.copy(
-                                fontFamily = FontFamily.Monospace,
-                                fontWeight = FontWeight.Bold
-                            ),
-                            color = OffWhite
-                        )
-                    }
-
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text(
-                            text = "DATE",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Haze,
-                            letterSpacing = 1.sp
-                        )
-                        Text(
-                            text = viewModel.currentDate,
-                            style = MaterialTheme.typography.bodyLarge.copy(
-                                fontFamily = FontFamily.Monospace,
-                                fontWeight = FontWeight.Bold
-                            ),
-                            color = OffWhite
-                        )
-                    }
-                }
+                // FLIGHT / DATE Rows
+                FocusInfoRow(
+                    label = "FLIGHT NO.",
+                    value = viewModel.flightNumber,
+                    modifier = Modifier.padding(horizontal = Spacing.Large)
+                )
+                Spacer(modifier = Modifier.height(Spacing.Small))
+                FocusInfoRow(
+                    label = "DATE",
+                    value = viewModel.currentDate,
+                    modifier = Modifier.padding(horizontal = Spacing.Large)
+                )
 
                 Spacer(modifier = Modifier.weight(1f))
                 DashedDivider(color = Border, thickness = 1.dp)

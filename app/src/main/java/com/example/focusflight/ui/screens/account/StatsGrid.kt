@@ -29,6 +29,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.focusflight.ui.components.FocusStatCard
 import com.example.focusflight.ui.theme.Amber
 import com.example.focusflight.ui.theme.DeepNavy
 import com.example.focusflight.ui.theme.Haze
@@ -64,17 +65,17 @@ internal fun StatsGrid2x2(state: AccountUiState) {
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            StatCard(
-                modifier = Modifier.weight(1f),
+            FocusStatCard(
                 value = state.stats.totalFlights.toString(),
                 label = "FLIGHTS",
-                icon = Icons.Outlined.AirplanemodeActive
+                icon = Icons.Outlined.AirplanemodeActive,
+                modifier = Modifier.weight(1f)
             )
-            StatCard(
-                modifier = Modifier.weight(1f),
+            FocusStatCard(
                 value = state.stats.airportsVisited.toString(),
                 label = "AIRPORTS",
-                icon = Icons.Outlined.FlightLand
+                icon = Icons.Outlined.FlightLand,
+                modifier = Modifier.weight(1f)
             )
         }
         if (currentTour != null) {
@@ -82,17 +83,17 @@ internal fun StatsGrid2x2(state: AccountUiState) {
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                StatCard(
-                    modifier = Modifier.weight(1f),
+                FocusStatCard(
                     value = "${currentTour.activeDays} / ${currentTour.spanDays}",
                     label = "TOUR DAYS",
-                    icon = Icons.Outlined.Event
+                    icon = Icons.Outlined.Event,
+                    modifier = Modifier.weight(1f)
                 )
-                StatCard(
-                    modifier = Modifier.weight(1f),
+                FocusStatCard(
                     value = currentTour.flights.size.toString(),
                     label = "THIS TOUR",
-                    icon = Icons.Outlined.Schedule
+                    icon = Icons.Outlined.Schedule,
+                    modifier = Modifier.weight(1f)
                 )
             }
         }
@@ -106,38 +107,10 @@ internal fun StatCard(
     label: String,
     icon: ImageVector
 ) {
-    Row(
+    FocusStatCard(
+        value = value,
+        label = label,
+        icon = icon,
         modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
-            .background(DeepNavy)
-            .padding(horizontal = Spacing.Medium, vertical = Spacing.Medium),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(Spacing.Medium)
-    ) {
-        Box(
-            modifier = Modifier
-                .size(40.dp)
-                .clip(CircleShape)
-                .background(Slate),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(icon, contentDescription = null, tint = Amber, modifier = Modifier.size(20.dp))
-        }
-        Column {
-            Text(
-                text = value,
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.Bold
-                ),
-                color = OffWhite
-            )
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelSmall,
-                color = Haze,
-                letterSpacing = 0.5.sp
-            )
-        }
-    }
+    )
 }

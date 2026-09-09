@@ -63,11 +63,16 @@ import coil3.compose.AsyncImage
 import com.example.focusflight.data.model.Challenge
 import com.example.focusflight.data.model.PausedFlight
 import com.example.focusflight.data.model.progressFraction
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.PaddingValues
 import com.example.focusflight.ui.components.ButtonStyle
 import com.example.focusflight.ui.components.ButtonVariant
+import com.example.focusflight.ui.components.CardVariant
 import com.example.focusflight.ui.components.ChallengeProgressBar
 import com.example.focusflight.ui.components.DiscardFlightConfirmModal
 import com.example.focusflight.ui.components.FocusButton
+import com.example.focusflight.ui.components.FocusCard
+import com.example.focusflight.ui.components.FocusStatItem
 import com.example.focusflight.ui.components.PrimaryActionButton
 import com.example.focusflight.ui.components.challengeTypeLabel
 import com.example.focusflight.ui.components.icon
@@ -223,11 +228,11 @@ fun HubScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    StatItem(value = stats.totalFlights.toString(), label = "FLIGHTS")
+                    FocusStatItem(value = stats.totalFlights.toString(), label = "FLIGHTS")
                     val hoursInt = stats.totalMinutes / 60
                     val minutesInt = stats.totalMinutes % 60
-                    StatItem(value = String.format(java.util.Locale.US, "%02d:%02d", hoursInt, minutesInt), label = "HOURS")
-                    StatItem(value = stats.airportsVisited.toString(), label = "AIRPORTS")
+                    FocusStatItem(value = String.format(java.util.Locale.US, "%02d:%02d", hoursInt, minutesInt), label = "HOURS")
+                    FocusStatItem(value = stats.airportsVisited.toString(), label = "AIRPORTS")
                 }
 
                 // Secondary Button (when any active flight exists, in story mode or route challenge)
@@ -286,12 +291,11 @@ fun HubScreen(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
                         ) {
-                            Column(
+                            FocusCard(
+                                variant = CardVariant.Surface,
+                                onClick = { viewModel.retryRenderMap() },
                                 horizontalAlignment = Alignment.CenterHorizontally,
-                                modifier = Modifier
-                                    .background(DeepNavy.copy(alpha = 0.8f), RoundedCornerShape(16.dp))
-                                    .padding(Spacing.Large)
-                                    .clickable { viewModel.retryRenderMap() }
+                                contentPadding = PaddingValues(Spacing.Large)
                             ) {
                                 Icon(
                                     imageVector = Icons.Outlined.Info,
@@ -409,13 +413,11 @@ fun HubScreen(
  */
 @Composable
 private fun FocusedChallengeCard(challenge: Challenge, onExit: () -> Unit, modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(Slate)
-            .border(1.dp, Border.copy(alpha = 0.6f), RoundedCornerShape(16.dp))
-            .padding(horizontal = Spacing.Medium, vertical = 12.dp)
+    FocusCard(
+        modifier = modifier.fillMaxWidth(),
+        variant = CardVariant.Secondary,
+        border = BorderStroke(1.dp, Border.copy(alpha = 0.6f)),
+        contentPadding = PaddingValues(horizontal = Spacing.Medium, vertical = 12.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -494,19 +496,8 @@ private fun FocusedChallengeCard(challenge: Challenge, onExit: () -> Unit, modif
     }
 }
 
+@Deprecated("Use FocusStatItem instead", ReplaceWith("FocusStatItem(value, label)", "com.example.focusflight.ui.components.FocusStatItem"))
 @Composable
 private fun StatItem(value: String, label: String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-            text = value,
-            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-            color = OffWhite
-        )
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = Haze,
-            letterSpacing = 1.sp
-        )
-    }
+    FocusStatItem(value = value, label = label)
 }

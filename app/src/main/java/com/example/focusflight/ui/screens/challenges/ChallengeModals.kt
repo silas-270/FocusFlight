@@ -49,6 +49,14 @@ import com.example.focusflight.data.model.predefinedRoute
 import com.example.focusflight.data.model.resolveSetMemberProgress
 import com.example.focusflight.data.model.CuratedChallengeCatalog
 import com.example.focusflight.data.model.progressFraction
+import androidx.compose.foundation.layout.PaddingValues
+import com.example.focusflight.ui.components.BadgeSize
+import com.example.focusflight.ui.components.BadgeStyle
+import com.example.focusflight.ui.components.BadgeVariant
+import com.example.focusflight.ui.components.CardVariant
+import com.example.focusflight.ui.components.FocusBadge
+import com.example.focusflight.ui.components.FocusCard
+import com.example.focusflight.ui.components.FocusInfoRow
 import com.example.focusflight.ui.components.ChallengeProgressBar
 import com.example.focusflight.ui.components.DestructiveActionButton
 import com.example.focusflight.ui.components.ModalTitle
@@ -197,25 +205,36 @@ internal fun ChallengePickerModal(
                         )
                     } else {
                         templates.forEach { template ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(14.dp))
-                                    .background(Slate.copy(alpha = 0.4f))
-                                    .clickable { viewModel.startCurated(template.catalogId) }
-                                    .padding(Spacing.Medium),
-                                verticalAlignment = Alignment.CenterVertically
+                            FocusCard(
+                                modifier = Modifier.fillMaxWidth(),
+                                variant = CardVariant.Secondary,
+                                shape = RoundedCornerShape(14.dp),
+                                contentPadding = PaddingValues(Spacing.Medium),
+                                onClick = { viewModel.startCurated(template.catalogId) }
                             ) {
-                                Column {
-                                    Text(
-                                        text = template.name,
-                                        style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
-                                        color = OffWhite
-                                    )
-                                    Text(
-                                        text = template.description,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = Haze
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = template.name,
+                                            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+                                            color = OffWhite
+                                        )
+                                        Text(
+                                            text = template.description,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = Haze
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(Spacing.Small))
+                                    FocusBadge(
+                                        text = challengeTypeLabel(template.type),
+                                        variant = BadgeVariant.Neutral,
+                                        style = BadgeStyle.Translucent,
+                                        size = BadgeSize.Compact
                                     )
                                 }
                             }
@@ -305,23 +324,19 @@ private fun ChallengeTypeCard(
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(16.dp))
-            .background(Slate.copy(alpha = 0.45f))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 14.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.SpaceBetween
+    FocusCard(
+        modifier = modifier,
+        variant = CardVariant.Secondary,
+        shape = RoundedCornerShape(16.dp),
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 14.dp),
+        onClick = onClick,
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(
+        FocusBadge(
             text = challengeTypeLabel(type),
-            style = MaterialTheme.typography.labelMedium.copy(
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.sp
-            ),
-            color = Amber,
-            textAlign = TextAlign.Center
+            variant = BadgeVariant.Primary,
+            style = BadgeStyle.Translucent,
+            size = BadgeSize.Compact
         )
         Spacer(modifier = Modifier.height(10.dp))
         Icon(
@@ -410,15 +425,13 @@ private fun CustomRouteModalForm(
             else -> {
                 val origin = pickedOrigin!!
                 val dest = pickedDest!!
-                Text(
-                    text = "${origin.municipality} → ${dest.municipality}",
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    color = OffWhite
+                FocusInfoRow(
+                    label = "ORIGIN",
+                    value = "${origin.municipality} (${origin.iataCode})"
                 )
-                Text(
-                    text = "${origin.iataCode} → ${dest.iataCode}",
-                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
-                    color = Haze
+                FocusInfoRow(
+                    label = "DESTINATION",
+                    value = "${dest.municipality} (${dest.iataCode})"
                 )
                 Spacer(modifier = Modifier.height(Spacing.Medium))
                 PrimaryActionButton(text = "START CHALLENGE") { onCreate(origin, dest) }
@@ -529,6 +542,26 @@ internal fun ChallengeInfoModal(
     onDismiss: () -> Unit
 ) {
     ScrimCardModal(onScrimTap = onDismiss) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            FocusBadge(
+                text = challengeTypeLabel(challenge.type),
+                variant = BadgeVariant.Primary,
+                style = BadgeStyle.Translucent,
+                size = BadgeSize.Standard
+            )
+            FocusBadge(
+                text = if (isFocused) "ACTIVE" else "IN PROGRESS",
+                variant = if (isFocused) BadgeVariant.Success else BadgeVariant.Neutral,
+                style = BadgeStyle.Translucent,
+                size = BadgeSize.Standard
+            )
+        }
+        Spacer(modifier = Modifier.height(Spacing.Small))
+
         Text(
             text = challenge.name,
             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
@@ -545,11 +578,15 @@ internal fun ChallengeInfoModal(
 
         Spacer(modifier = Modifier.height(Spacing.Medium))
         ChallengeProgressBar(progress = challenge.progressFraction(), height = 12.dp)
-        Spacer(modifier = Modifier.height(6.dp))
-        Text(
-            text = challengeSubtitle(challenge),
-            style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
-            color = Haze
+        Spacer(modifier = Modifier.height(Spacing.Small))
+
+        FocusInfoRow(
+            label = "PROGRESS",
+            value = "${(challenge.progressFraction() * 100).toInt()}%"
+        )
+        FocusInfoRow(
+            label = "STATUS",
+            value = challengeSubtitle(challenge)
         )
 
         val setMembers = challenge.resolveSetMemberProgress()
@@ -560,13 +597,9 @@ internal fun ChallengeInfoModal(
 
         challenge.predefinedRoute()?.let { route ->
             if (route.hasDistances) {
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    // The number the percentage above is actually made of - progress on these is
-                    // kilometres flown along the itinerary, not legs ticked off.
-                    text = "${formatKm(route.distanceFlownKm(challenge.legIndex))} of ${formatKm(route.totalDistanceKm)} flown",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Haze
+                FocusInfoRow(
+                    label = "DISTANCE FLOWN",
+                    value = "${formatKm(route.distanceFlownKm(challenge.legIndex))} of ${formatKm(route.totalDistanceKm)}"
                 )
             }
             Spacer(modifier = Modifier.height(Spacing.Medium))
@@ -680,10 +713,11 @@ private fun RouteLegList(route: PredefinedRoute, legIndex: Int) {
                 )
                 if (isNext) {
                     Spacer(modifier = Modifier.width(10.dp))
-                    Text(
+                    FocusBadge(
                         text = "NEXT",
-                        style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.sp),
-                        color = Amber
+                        variant = BadgeVariant.Primary,
+                        style = BadgeStyle.Translucent,
+                        size = BadgeSize.Compact
                     )
                 }
                 // Right-aligned so the distances form a column - this is what says which legs are

@@ -46,9 +46,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.PaddingValues
 import com.example.focusflight.data.repository.ChallengeOutcome
+import com.example.focusflight.ui.components.BadgeSize
+import com.example.focusflight.ui.components.BadgeStyle
+import com.example.focusflight.ui.components.BadgeVariant
 import com.example.focusflight.ui.components.CaptionLabel
+import com.example.focusflight.ui.components.CardVariant
+import com.example.focusflight.ui.components.FocusBadge
 import com.example.focusflight.ui.components.FocusButton
+import com.example.focusflight.ui.components.FocusCard
+import com.example.focusflight.ui.components.FocusInfoRow
 import com.example.focusflight.ui.components.ChallengeProgressBar
 import com.example.focusflight.ui.components.challengeIcon
 import com.example.focusflight.ui.components.challengeTypeLabel
@@ -126,17 +134,22 @@ fun ChallengeOutcomeScreen(outcomes: List<ChallengeOutcome>, onContinue: () -> U
 
             Spacer(modifier = Modifier.height(Spacing.ExtraLarge))
 
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(DeepNavy, RoundedCornerShape(20.dp))
-                    .verticalScroll(rememberScrollState())
-                    .padding(24.dp),
-                verticalArrangement = Arrangement.spacedBy(20.dp)
+            FocusCard(
+                modifier = Modifier.fillMaxWidth(),
+                variant = CardVariant.Surface,
+                shape = RoundedCornerShape(20.dp),
+                contentPadding = PaddingValues(24.dp)
             ) {
-                outcomes.forEachIndexed { index, outcome ->
-                    if (index > 0) HorizontalDivider(color = Border, thickness = 1.dp)
-                    ChallengeOutcomeRow(outcome = outcome, animateIn = animateIn)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(20.dp)
+                ) {
+                    outcomes.forEachIndexed { index, outcome ->
+                        if (index > 0) HorizontalDivider(color = Border, thickness = 1.dp)
+                        ChallengeOutcomeRow(outcome = outcome, animateIn = animateIn)
+                    }
                 }
             }
 
@@ -196,11 +209,25 @@ private fun ChallengeOutcomeRow(outcome: ChallengeOutcome, animateIn: Boolean) {
                 modifier = Modifier.weight(1f),
                 maxLines = 1
             )
-            Text(
-                text = challengeTypeLabel(outcome.type),
-                style = MaterialTheme.typography.labelSmall,
-                color = Haze
-            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                FocusBadge(
+                    text = challengeTypeLabel(outcome.type),
+                    variant = BadgeVariant.Primary,
+                    style = BadgeStyle.Translucent,
+                    size = BadgeSize.Compact
+                )
+                if (isCompleted) {
+                    FocusBadge(
+                        text = "COMPLETED",
+                        variant = BadgeVariant.Success,
+                        style = BadgeStyle.Translucent,
+                        size = BadgeSize.Compact
+                    )
+                }
+            }
         }
 
         Spacer(modifier = Modifier.height(10.dp))
@@ -209,21 +236,11 @@ private fun ChallengeOutcomeRow(outcome: ChallengeOutcome, animateIn: Boolean) {
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(
-                text = "${(oldProgress * 100).roundToInt()}%",
-                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                color = Haze
-            )
-            Text(
-                text = if (isCompleted) "100%" else "${(newProgress * 100).roundToInt()}%",
-                style = MaterialTheme.typography.bodyMedium.copy(
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.Bold
-                ),
-                color = barColor
-            )
-        }
+        FocusInfoRow(
+            label = "PROGRESS",
+            value = if (isCompleted) "100%" else "${(newProgress * 100).roundToInt()}%",
+            valueColor = barColor
+        )
     }
 }
 
