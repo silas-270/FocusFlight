@@ -53,8 +53,12 @@ import androidx.compose.foundation.layout.PaddingValues
 import com.example.focusflight.ui.components.BadgeSize
 import com.example.focusflight.ui.components.BadgeStyle
 import com.example.focusflight.ui.components.BadgeVariant
+import com.example.focusflight.ui.components.ButtonSize
+import com.example.focusflight.ui.components.ButtonStyle
+import com.example.focusflight.ui.components.ButtonVariant
 import com.example.focusflight.ui.components.CardVariant
 import com.example.focusflight.ui.components.FocusBadge
+import com.example.focusflight.ui.components.FocusButton
 import com.example.focusflight.ui.components.FocusCard
 import com.example.focusflight.ui.components.FocusInfoRow
 import com.example.focusflight.ui.components.ChallengeProgressBar
@@ -180,7 +184,7 @@ internal fun ChallengePickerModal(
                     Spacer(modifier = Modifier.width(Spacing.Small))
                     ModalTitle(challengeTypeLabel(currentType))
                 }
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(16.dp))
                 Text(
                     text = challengeTypeDescription(currentType),
                     style = MaterialTheme.typography.bodySmall,
@@ -212,29 +216,16 @@ internal fun ChallengePickerModal(
                                 contentPadding = PaddingValues(Spacing.Medium),
                                 onClick = { viewModel.startCurated(template.catalogId) }
                             ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = template.name,
-                                            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
-                                            color = OffWhite
-                                        )
-                                        Text(
-                                            text = template.description,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = Haze
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.width(Spacing.Small))
-                                    FocusBadge(
-                                        text = challengeTypeLabel(template.type),
-                                        variant = BadgeVariant.Neutral,
-                                        style = BadgeStyle.Translucent,
-                                        size = BadgeSize.Compact
+                                Column(modifier = Modifier.fillMaxWidth()) {
+                                    Text(
+                                        text = template.name,
+                                        style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+                                        color = OffWhite
+                                    )
+                                    Text(
+                                        text = template.description,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Haze
                                     )
                                 }
                             }
@@ -419,7 +410,10 @@ private fun CustomRouteModalForm(
                     color = Haze
                 )
                 Spacer(modifier = Modifier.height(Spacing.Medium))
-                PrimaryActionButton(text = "PICK A DIFFERENT DESTINATION") { pickedDest = null }
+                PrimaryActionButton(
+                    text = "PICK A DIFFERENT DESTINATION",
+                    size = ButtonSize.Compact
+                ) { pickedDest = null }
             }
 
             else -> {
@@ -434,7 +428,10 @@ private fun CustomRouteModalForm(
                     value = "${dest.municipality} (${dest.iataCode})"
                 )
                 Spacer(modifier = Modifier.height(Spacing.Medium))
-                PrimaryActionButton(text = "START CHALLENGE") { onCreate(origin, dest) }
+                PrimaryActionButton(
+                    text = "START CHALLENGE",
+                    size = ButtonSize.Compact
+                ) { onCreate(origin, dest) }
                 Spacer(modifier = Modifier.height(Spacing.Small))
                 Text(
                     text = "Change destination",
@@ -480,6 +477,7 @@ private fun CustomDistanceModalForm(onCreate: (Double) -> Unit) {
         Spacer(modifier = Modifier.height(Spacing.Large))
         PrimaryActionButton(
             text = if (target > 0) "START CHALLENGE (${formatKm(target)})" else "START CHALLENGE",
+            size = ButtonSize.Compact,
             enabled = target > 0
         ) {
             onCreate(target)
@@ -520,6 +518,7 @@ private fun CustomStreakModalForm(onCreate: (Int) -> Unit) {
         Spacer(modifier = Modifier.height(Spacing.Large))
         PrimaryActionButton(
             text = if (target > 0) "START CHALLENGE ($target DAYS)" else "START CHALLENGE",
+            size = ButtonSize.Compact,
             enabled = target > 0
         ) {
             onCreate(target)
@@ -542,33 +541,13 @@ internal fun ChallengeInfoModal(
     onDismiss: () -> Unit
 ) {
     ScrimCardModal(onScrimTap = onDismiss) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            FocusBadge(
-                text = challengeTypeLabel(challenge.type),
-                variant = BadgeVariant.Primary,
-                style = BadgeStyle.Translucent,
-                size = BadgeSize.Standard
-            )
-            FocusBadge(
-                text = if (isFocused) "ACTIVE" else "IN PROGRESS",
-                variant = if (isFocused) BadgeVariant.Success else BadgeVariant.Neutral,
-                style = BadgeStyle.Translucent,
-                size = BadgeSize.Standard
-            )
-        }
-        Spacer(modifier = Modifier.height(Spacing.Small))
-
         Text(
             text = challenge.name,
             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
             color = OffWhite
         )
         if (challenge.description.isNotBlank()) {
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(16.dp))
             Text(
                 text = challenge.description,
                 style = MaterialTheme.typography.bodySmall,
@@ -578,7 +557,7 @@ internal fun ChallengeInfoModal(
 
         Spacer(modifier = Modifier.height(Spacing.Medium))
         ChallengeProgressBar(progress = challenge.progressFraction(), height = 12.dp)
-        Spacer(modifier = Modifier.height(Spacing.Small))
+        Spacer(modifier = Modifier.height(Spacing.Medium))
 
         FocusInfoRow(
             label = "PROGRESS",
@@ -606,43 +585,61 @@ internal fun ChallengeInfoModal(
             RouteLegList(route = route, legIndex = challenge.legIndex)
         }
 
-        Spacer(modifier = Modifier.height(Spacing.Large))
+        Spacer(modifier = Modifier.height(Spacing.Medium))
         if (challenge.type == ChallengeType.ROUTE) {
-            if (isFocused) {
-                PrimaryActionButton(text = "PAUSE CHALLENGE", onClick = onPause)
-            } else {
-                PrimaryActionButton(text = "CONTINUE CHALLENGE", onClick = onContinue)
-            }
+            FocusButton(
+                text = if (isFocused) "PAUSE CHALLENGE" else "CONTINUE CHALLENGE",
+                onClick = if (isFocused) onPause else onContinue,
+                variant = ButtonVariant.Primary,
+                style = ButtonStyle.Filled,
+                size = ButtonSize.Compact
+            )
             Spacer(modifier = Modifier.height(Spacing.Small))
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(Spacing.Small)
             ) {
-                DestructiveActionButton(
+                FocusButton(
                     text = "ABANDON",
+                    onClick = onAbandon,
+                    variant = ButtonVariant.Danger,
+                    style = ButtonStyle.Filled,
+                    size = ButtonSize.Compact,
                     modifier = Modifier.weight(1f),
-                    onClick = onAbandon
+                    fillMaxWidth = false
                 )
-                SecondaryActionButton(
+                FocusButton(
                     text = "CLOSE",
+                    onClick = onDismiss,
+                    variant = ButtonVariant.Secondary,
+                    style = ButtonStyle.Filled,
+                    size = ButtonSize.Compact,
                     modifier = Modifier.weight(1f),
-                    onClick = onDismiss
+                    fillMaxWidth = false
                 )
             }
         } else {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(Spacing.Small)
             ) {
-                DestructiveActionButton(
+                FocusButton(
                     text = "ABANDON",
+                    onClick = onAbandon,
+                    variant = ButtonVariant.Danger,
+                    style = ButtonStyle.Filled,
+                    size = ButtonSize.Compact,
                     modifier = Modifier.weight(1f),
-                    onClick = onAbandon
+                    fillMaxWidth = false
                 )
-                PrimaryActionButton(
+                FocusButton(
                     text = "CLOSE",
+                    onClick = onDismiss,
+                    variant = ButtonVariant.Primary,
+                    style = ButtonStyle.Filled,
+                    size = ButtonSize.Compact,
                     modifier = Modifier.weight(1f),
-                    onClick = onDismiss
+                    fillMaxWidth = false
                 )
             }
         }

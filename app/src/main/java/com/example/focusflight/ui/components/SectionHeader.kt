@@ -10,7 +10,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
-import com.example.focusflight.ui.theme.Amber
+import com.example.focusflight.ui.theme.Accent
 
 /**
  * Standardized section header (Amber, bold, 2sp letter spacing).
@@ -33,7 +33,7 @@ fun SectionHeader(
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 2.sp
             ),
-            color = Amber
+            color = Accent
         )
         if (trailingAction != null) {
             trailingAction()

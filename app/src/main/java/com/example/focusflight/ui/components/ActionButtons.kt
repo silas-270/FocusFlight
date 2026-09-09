@@ -26,23 +26,22 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.focusflight.ui.theme.Amber
+import com.example.focusflight.ui.theme.Accent
 import com.example.focusflight.ui.theme.Border
-import com.example.focusflight.ui.theme.CrimsonRed
+import com.example.focusflight.ui.theme.Container
+import com.example.focusflight.ui.theme.Danger
 import com.example.focusflight.ui.theme.DarkPalette
-import com.example.focusflight.ui.theme.DeepNavy
-import com.example.focusflight.ui.theme.Green
-import com.example.focusflight.ui.theme.Haze
-import com.example.focusflight.ui.theme.OffWhite
 import com.example.focusflight.ui.theme.Radius
-import com.example.focusflight.ui.theme.Slate
 import com.example.focusflight.ui.theme.Spacing
+import com.example.focusflight.ui.theme.Success
+import com.example.focusflight.ui.theme.TextPrimary
+import com.example.focusflight.ui.theme.TextSecondary
 
 enum class ButtonVariant {
-    Primary,     // Amber accent
-    Secondary,   // Slate neutral
-    Danger,      // CrimsonRed destructive
-    Success      // Green emerald accent
+    Primary,     // Accent
+    Secondary,   // Container neutral
+    Danger,      // Danger destructive
+    Success      // Success emerald accent
 }
 
 enum class ButtonStyle {
@@ -81,37 +80,37 @@ fun FocusButton(
     val shape = RoundedCornerShape(Radius.Medium)
 
     val containerColor = when {
-        !enabled -> if (style == ButtonStyle.Filled) Slate.copy(alpha = 0.5f) else Color.Transparent
+        !enabled -> if (style == ButtonStyle.Filled) Container.copy(alpha = 0.5f) else Color.Transparent
         style == ButtonStyle.Outlined -> Color.Transparent
-        variant == ButtonVariant.Primary -> Amber
-        variant == ButtonVariant.Secondary -> Slate
-        variant == ButtonVariant.Danger -> CrimsonRed
-        variant == ButtonVariant.Success -> Green
-        else -> Amber
+        variant == ButtonVariant.Primary -> Accent
+        variant == ButtonVariant.Secondary -> Container
+        variant == ButtonVariant.Danger -> Danger
+        variant == ButtonVariant.Success -> Success
+        else -> Accent
     }
 
     val contentColor = when {
-        !enabled -> Haze
+        !enabled -> TextSecondary
         style == ButtonStyle.Outlined -> when (variant) {
-            ButtonVariant.Primary -> Amber
-            ButtonVariant.Secondary -> OffWhite
-            ButtonVariant.Danger -> CrimsonRed
-            ButtonVariant.Success -> Green
+            ButtonVariant.Primary -> Accent
+            ButtonVariant.Secondary -> TextPrimary
+            ButtonVariant.Danger -> Danger
+            ButtonVariant.Success -> Success
         }
-        variant == ButtonVariant.Primary -> DarkPalette.midnight
-        variant == ButtonVariant.Secondary -> OffWhite
-        variant == ButtonVariant.Danger -> OffWhite
-        variant == ButtonVariant.Success -> DarkPalette.midnight
-        else -> DarkPalette.midnight
+        variant == ButtonVariant.Primary -> DarkPalette.background
+        variant == ButtonVariant.Secondary -> TextPrimary
+        variant == ButtonVariant.Danger -> TextPrimary
+        variant == ButtonVariant.Success -> DarkPalette.background
+        else -> DarkPalette.background
     }
 
     val borderStroke = when {
         style == ButtonStyle.Filled -> null
         !enabled -> BorderStroke(1.dp, Border.copy(alpha = 0.5f))
-        variant == ButtonVariant.Primary -> BorderStroke(1.dp, Amber)
+        variant == ButtonVariant.Primary -> BorderStroke(1.dp, Accent)
         variant == ButtonVariant.Secondary -> BorderStroke(1.dp, Border)
-        variant == ButtonVariant.Danger -> BorderStroke(1.dp, CrimsonRed)
-        variant == ButtonVariant.Success -> BorderStroke(1.dp, Green)
+        variant == ButtonVariant.Danger -> BorderStroke(1.dp, Danger)
+        variant == ButtonVariant.Success -> BorderStroke(1.dp, Success)
         else -> null
     }
 
@@ -162,6 +161,7 @@ fun PrimaryActionButton(
     modifier: Modifier = Modifier,
     icon: ImageVector? = null,
     enabled: Boolean = true,
+    size: ButtonSize = ButtonSize.Standard,
     onClick: () -> Unit
 ) {
     FocusButton(
@@ -170,7 +170,7 @@ fun PrimaryActionButton(
         modifier = modifier,
         variant = ButtonVariant.Primary,
         style = ButtonStyle.Filled,
-        size = ButtonSize.Standard,
+        size = size,
         icon = icon,
         enabled = enabled
     )
@@ -253,6 +253,6 @@ fun ModalTitle(text: String) {
     Text(
         text = text,
         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
-        color = OffWhite
+        color = TextPrimary
     )
 }

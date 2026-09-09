@@ -23,12 +23,12 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.focusflight.ui.theme.Amber
-import com.example.focusflight.ui.theme.Haze
-import com.example.focusflight.ui.theme.OffWhite
+import com.example.focusflight.ui.theme.Accent
+import com.example.focusflight.ui.theme.Container
 import com.example.focusflight.ui.theme.Radius
-import com.example.focusflight.ui.theme.Slate
 import com.example.focusflight.ui.theme.Spacing
+import com.example.focusflight.ui.theme.TextPrimary
+import com.example.focusflight.ui.theme.TextSecondary
 
 /**
  * Centered vertical stat item (e.g. used in Hub sheet and celebration cards).
@@ -39,8 +39,8 @@ fun FocusStatItem(
     label: String,
     modifier: Modifier = Modifier,
     horizontalAlignment: Alignment.Horizontal = Alignment.CenterHorizontally,
-    valueColor: Color = OffWhite,
-    labelColor: Color = Haze
+    valueColor: Color = TextPrimary,
+    labelColor: Color = TextSecondary
 ) {
     Column(
         modifier = modifier,
@@ -72,8 +72,8 @@ fun FocusStatCard(
     label: String,
     icon: ImageVector,
     modifier: Modifier = Modifier,
-    iconTint: Color = Amber,
-    iconBgColor: Color = Slate,
+    iconTint: Color = Accent,
+    iconBgColor: Color = Container,
     variant: CardVariant = CardVariant.Surface,
     shape: Shape = RoundedCornerShape(Radius.Medium)
 ) {
@@ -108,12 +108,12 @@ fun FocusStatCard(
                         fontFamily = FontFamily.Monospace,
                         fontWeight = FontWeight.Bold
                     ),
-                    color = OffWhite
+                    color = TextPrimary
                 )
                 Text(
                     text = label,
                     style = MaterialTheme.typography.labelSmall,
-                    color = Haze,
+                    color = TextSecondary,
                     letterSpacing = 0.5.sp
                 )
             }

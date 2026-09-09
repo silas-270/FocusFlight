@@ -23,8 +23,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.focusflight.ui.theme.Border
-import com.example.focusflight.ui.theme.Haze
-import com.example.focusflight.ui.theme.OffWhite
+import com.example.focusflight.ui.theme.TextPrimary
+import com.example.focusflight.ui.theme.TextSecondary
 
 /**
  * Standardized key-value data row.
@@ -36,8 +36,8 @@ fun FocusInfoRow(
     label: String,
     value: String,
     modifier: Modifier = Modifier,
-    labelColor: Color = Haze,
-    valueColor: Color = OffWhite,
+    labelColor: Color = TextSecondary,
+    valueColor: Color = TextPrimary,
     valueMonospace: Boolean = true,
     valueBold: Boolean = true,
     icon: ImageVector? = null,

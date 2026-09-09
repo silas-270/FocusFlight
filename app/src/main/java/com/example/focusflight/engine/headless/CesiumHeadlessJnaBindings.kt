@@ -68,4 +68,17 @@ interface CesiumHeadlessJnaBindings : Library {
         routesCount: Long,
         outPath: String
     ): Boolean
+
+    fun render_routes_headless_horizon(
+        width: Int,
+        height: Int,
+        routes: HeadlessRoute,
+        routesCount: Long,
+        outPath: String,
+        altitude: Float,
+        backDeg: Float,
+        pitchDeg: Float,
+        headingDeg: Float,
+        rollDeg: Float
+    ): Boolean
 }

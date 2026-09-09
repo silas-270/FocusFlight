@@ -17,10 +17,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.dp
 import com.example.focusflight.ui.theme.Border
-import com.example.focusflight.ui.theme.DeepNavy
+import com.example.focusflight.ui.theme.Container
 import com.example.focusflight.ui.theme.Radius
-import com.example.focusflight.ui.theme.Slate
 import com.example.focusflight.ui.theme.Spacing
+import com.example.focusflight.ui.theme.Surface as ThemeSurface
 
 enum class CardVariant {
     Surface,     // DeepNavy surface
@@ -51,8 +51,8 @@ fun FocusCard(
     content: @Composable ColumnScope.() -> Unit
 ) {
     val containerColor = when (variant) {
-        CardVariant.Surface, CardVariant.Elevated -> DeepNavy
-        CardVariant.Secondary -> Slate
+        CardVariant.Surface, CardVariant.Elevated -> ThemeSurface
+        CardVariant.Secondary -> Container
         CardVariant.Outlined -> Color.Transparent
     }
 

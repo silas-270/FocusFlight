@@ -12,34 +12,34 @@ import com.example.focusflight.data.model.ThemeMode
 
 // The cockpit dark theme - FocusFlight's original and default look.
 private val DarkColorScheme = darkColorScheme(
-    primary = DarkPalette.amber,
-    onPrimary = DarkPalette.midnight,
-    secondary = DarkPalette.haze,
-    onSecondary = DarkPalette.offWhite,
-    background = DarkPalette.midnight,
-    onBackground = DarkPalette.offWhite,
-    surface = DarkPalette.deepNavy,
-    onSurface = DarkPalette.offWhite,
-    surfaceVariant = DarkPalette.slate,
-    onSurfaceVariant = DarkPalette.offWhite,
+    primary = DarkPalette.accent,
+    onPrimary = DarkPalette.background,
+    secondary = DarkPalette.textSecondary,
+    onSecondary = DarkPalette.textPrimary,
+    background = DarkPalette.background,
+    onBackground = DarkPalette.textPrimary,
+    surface = DarkPalette.surface,
+    onSurface = DarkPalette.textPrimary,
+    surfaceVariant = DarkPalette.container,
+    onSurfaceVariant = DarkPalette.textPrimary,
     outline = DarkPalette.border,
-    error = DarkPalette.amber // reuse amber/warm coral if we had it, but amber is primary
+    error = DarkPalette.danger
 )
 
 // The "Sky" light theme - clouds and open sky in place of leather and brass.
 private val LightColorScheme = lightColorScheme(
-    primary = LightSkyPalette.amber,
-    onPrimary = LightSkyPalette.midnight,
-    secondary = LightSkyPalette.haze,
-    onSecondary = LightSkyPalette.offWhite,
-    background = LightSkyPalette.midnight,
-    onBackground = LightSkyPalette.offWhite,
-    surface = LightSkyPalette.deepNavy,
-    onSurface = LightSkyPalette.offWhite,
-    surfaceVariant = LightSkyPalette.slate,
-    onSurfaceVariant = LightSkyPalette.offWhite,
+    primary = LightSkyPalette.accent,
+    onPrimary = LightSkyPalette.background,
+    secondary = LightSkyPalette.textSecondary,
+    onSecondary = LightSkyPalette.textPrimary,
+    background = LightSkyPalette.background,
+    onBackground = LightSkyPalette.textPrimary,
+    surface = LightSkyPalette.surface,
+    onSurface = LightSkyPalette.textPrimary,
+    surfaceVariant = LightSkyPalette.container,
+    onSurfaceVariant = LightSkyPalette.textPrimary,
     outline = LightSkyPalette.border,
-    error = LightSkyPalette.amber // matches the dark scheme's choice above
+    error = LightSkyPalette.danger
 )
 
 object Spacing {

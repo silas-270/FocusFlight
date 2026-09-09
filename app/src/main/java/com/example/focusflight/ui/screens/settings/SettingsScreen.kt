@@ -33,7 +33,6 @@ import com.example.focusflight.data.model.Airport
 import com.example.focusflight.data.model.ThemeMode
 import com.example.focusflight.ui.components.BackTopAppBar
 import com.example.focusflight.ui.components.SectionHeader
-import com.example.focusflight.ui.theme.ActivePalette
 import com.example.focusflight.ui.theme.Midnight
 import com.example.focusflight.ui.theme.Spacing
 import com.example.focusflight.ui.viewmodel.account.AccountViewModel
@@ -122,9 +121,6 @@ fun SettingsScreen(
                     )
                 }
 
-                // ── TEMP: accent color A/B test - throwaway, remove once a pick is made ──
-                item { SectionHeader(title = "ACCENT TEST (TEMP)") }
-                item { AccentColorTestRow() }
 
                 item { SectionHeader(title = "HOME BASE") }
                 item {
@@ -214,48 +210,6 @@ fun SettingsScreen(
     }
 }
 
-/**
- * TEMPORARY, throwaway: tap a swatch to live-preview that accent across the whole app by writing
- * straight into [ActivePalette]. Not persisted, not pretty - just a fast way to A/B the four
- * accent candidates without rebuilding. Delete this whole function (and its call site above) once
- * a color is picked and baked into `Color.kt`'s `LightSkyPalette`.
- */
-@Composable
-private fun AccentColorTestRow() {
-    val candidates = listOf(
-        "A: Coral" to Color(0xFFF2643C),
-        "B: Magenta" to Color(0xFFE8447A),
-        "C: Yellow" to Color(0xFFFDC500),
-        "D: Orange" to Color(0xFFF2762E)
-    )
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(Spacing.Small)
-    ) {
-        candidates.forEach { (label, color) ->
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(64.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(color)
-                    .clickable {
-                        ActivePalette.current = ActivePalette.current.copy(
-                            amber = color,
-                            softAmber = color.copy(alpha = 0.25f)
-                        )
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.White
-                )
-            }
-        }
-    }
-}
 
 /** "MUNICH · GERMANY". [isoCountry] is a 2-letter code, and the app has no code-to-name table -
  *  `Locale` already ships one, and falls back to blank for anything it doesn't recognise. */
