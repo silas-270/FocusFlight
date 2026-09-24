@@ -60,6 +60,9 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
+import coil3.request.allowHardware
+import androidx.compose.ui.platform.LocalContext
 import com.example.focusflight.data.model.Challenge
 import com.example.focusflight.data.model.PausedFlight
 import com.example.focusflight.data.model.progressFraction
@@ -277,8 +280,12 @@ fun HubScreen(
                     .align(Alignment.TopCenter)
             ) {
                 if (routeMapPath != null) {
+                    val context = LocalContext.current
                     AsyncImage(
-                        model = routeMapPath,
+                        model = ImageRequest.Builder(context)
+                            .data(routeMapPath)
+                            .allowHardware(false)
+                            .build(),
                         contentDescription = "Decorative globe routes",
                         modifier = Modifier
                             .fillMaxSize(),

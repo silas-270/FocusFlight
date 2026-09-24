@@ -98,7 +98,8 @@ tasks.register("cargoNdkBuild") {
             "$userHome/CesiumRS"
         }
         val targets = mapOf(
-            "aarch64-linux-android" to "arm64-v8a"
+            "aarch64-linux-android" to "arm64-v8a",
+            "x86_64-linux-android" to "x86_64"
         )
 
         // rustup installs put cargo in ~/.cargo/bin; a system package (e.g. pacman,
