@@ -1,6 +1,11 @@
 package com.example.focusflight.ui.screens.account
 
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
+import androidx.compose.foundation.indication
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -14,16 +19,16 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowDropDown
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -35,22 +40,35 @@ import com.example.focusflight.ui.theme.OffWhite
 import com.example.focusflight.ui.theme.Slate
 import com.example.focusflight.ui.theme.Spacing
 
+/**
+ * The FLIGHT HISTORY header's sort control. It draws as the same 32dp DeepNavy pill it always
+ * was, but the tap is taken by a 48dp-tall box around it, so the touch target meets the minimum
+ * without the pill itself growing. The ripple is drawn on the pill only.
+ */
 @Composable
 internal fun SortOrderButton(
     currentOrder: FlightSortOrder,
     onClick: () -> Unit
 ) {
-    Button(
-        onClick = onClick,
-        colors = ButtonDefaults.buttonColors(
-            containerColor = DeepNavy,
-            contentColor = OffWhite
-        ),
-        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-        shape = RoundedCornerShape(8.dp),
-        modifier = Modifier.height(32.dp)
+    val interactionSource = remember { MutableInteractionSource() }
+    Box(
+        modifier = Modifier
+            .heightIn(min = 48.dp)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                role = Role.Button,
+                onClick = onClick
+            ),
+        contentAlignment = Alignment.Center
     ) {
         Row(
+            modifier = Modifier
+                .height(32.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(DeepNavy)
+                .indication(interactionSource, LocalIndication.current)
+                .padding(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
