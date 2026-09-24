@@ -12,6 +12,8 @@ import com.example.focusflight.data.model.FlightLog
 import com.example.focusflight.data.model.FlightMode
 import com.example.focusflight.data.model.FlightStats
 import com.example.focusflight.data.model.PausedFlight
+import com.example.focusflight.data.network.NetworkMode
+import com.example.focusflight.data.network.OfflineModeController
 import com.example.focusflight.data.repository.AirportRepository
 import com.example.focusflight.data.repository.ChallengeRepository
 import com.example.focusflight.data.repository.FlightLogRepository
@@ -35,8 +37,12 @@ class HubViewModel(
     private val flightLogRepository: FlightLogRepository,
     private val challengeRepository: ChallengeRepository,
     private val pilotProgressRepository: PilotProgressRepository,
+    offlineModeController: OfflineModeController,
     private val cacheDir: File
 ) : ViewModel() {
+
+    /** Drives the header's OFFLINE badge. The globe itself never needs the network. */
+    val networkMode: StateFlow<NetworkMode> = offlineModeController.mode
 
     private val _currentAirport = MutableStateFlow<Airport?>(null)
     val currentAirport: StateFlow<Airport?> = _currentAirport.asStateFlow()
@@ -182,12 +188,13 @@ class HubViewModelFactory(
     private val flightLogRepository: FlightLogRepository,
     private val challengeRepository: ChallengeRepository,
     private val pilotProgressRepository: PilotProgressRepository,
+    private val offlineModeController: OfflineModeController,
     private val cacheDir: File
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(HubViewModel::class.java)) {
-            return HubViewModel(airportRepository, preferencesRepository, userRepository, flightLogRepository, challengeRepository, pilotProgressRepository, cacheDir) as T
+            return HubViewModel(airportRepository, preferencesRepository, userRepository, flightLogRepository, challengeRepository, pilotProgressRepository, offlineModeController, cacheDir) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

@@ -39,6 +39,7 @@ import com.example.focusflight.data.local.airport.AirportRouteSqliteDataSource
 import com.example.focusflight.data.model.ChallengeType
 import com.example.focusflight.data.model.FlightMode
 import com.example.focusflight.data.model.PausedFlight
+import com.example.focusflight.data.network.OfflineModeController
 import com.example.focusflight.data.repository.AchievementsRepository
 import com.example.focusflight.data.repository.AirportRepository
 import com.example.focusflight.data.repository.ChallengeOutcome
@@ -162,6 +163,9 @@ class CesiumGameActivity : GameActivity() {
     private lateinit var achievementsRepository: AchievementsRepository
     private lateinit var pilotProgressRepository: PilotProgressRepository
 
+    /** Process-wide (see OfflineModeController.getInstance): ViewModels can outlive this Activity. */
+    private lateinit var offlineModeController: OfflineModeController
+
     /** Outlives every ViewModel on purpose - it is what keeps the shared derivation warm across
      *  navigation, which is the entire point of PilotProgressRepository. Cancelled in onDestroy. */
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -200,6 +204,7 @@ class CesiumGameActivity : GameActivity() {
         airportRepository = LocalAirportRepository(AirportRouteSqliteDataSource(applicationContext))
         pendingFlightLoader = PendingFlightLoader(airportRepository)
         preferencesRepository = PreferencesRepository(applicationContext)
+        offlineModeController = OfflineModeController.getInstance(applicationContext)
         com.example.focusflight.ui.theme.ThemeModeHolder.current = preferencesRepository.getThemeMode()
 
         // Initialize Room database and repositories
@@ -352,7 +357,7 @@ class CesiumGameActivity : GameActivity() {
                             // ── Hub ──
                             composable(Screen.Hub.route) {
                                 val viewModel: HubViewModel = viewModel(
-                                    factory = HubViewModelFactory(airportRepository, preferencesRepository, userRepository, flightLogRepository, challengeRepository, pilotProgressRepository, cacheDir)
+                                    factory = HubViewModelFactory(airportRepository, preferencesRepository, userRepository, flightLogRepository, challengeRepository, pilotProgressRepository, offlineModeController, cacheDir)
                                 )
                                 val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
                                 com.example.focusflight.ui.screens.hub.HubScreen(
@@ -581,7 +586,7 @@ class CesiumGameActivity : GameActivity() {
                                     ?.takeIf { it >= 0 }
 
                                 val viewModel: InFlightViewModel = viewModel(
-                                    factory = InFlightViewModelFactory(airportRepository, preferencesRepository, flightLogRepository, challengeRepository, landingResultChannel, destinationPhotoChannel, destinationPhotoRepository, cacheDir, flightNo, originIata, destIata, durationMin, mode, challengeId)
+                                    factory = InFlightViewModelFactory(airportRepository, preferencesRepository, flightLogRepository, challengeRepository, landingResultChannel, destinationPhotoChannel, destinationPhotoRepository, offlineModeController, cacheDir, flightNo, originIata, destIata, durationMin, mode, challengeId)
                                 )
 
                                 InFlightScreen(
@@ -714,7 +719,7 @@ class CesiumGameActivity : GameActivity() {
                             // ── Account / Passport ──
                             composable(Screen.Account.route) {
                                 val viewModel: AccountViewModel = viewModel(
-                                    factory = AccountViewModelFactory(applicationContext, userRepository, flightLogRepository, airportRepository, preferencesRepository, pilotProgressRepository, cacheDir)
+                                    factory = AccountViewModelFactory(applicationContext, userRepository, flightLogRepository, airportRepository, preferencesRepository, pilotProgressRepository, offlineModeController, cacheDir)
                                 )
                                 
                                 com.example.focusflight.ui.screens.account.AccountScreen(
@@ -726,7 +731,7 @@ class CesiumGameActivity : GameActivity() {
                             // ── Settings ──
                             composable(Screen.Settings.route) {
                                 val viewModel: AccountViewModel = viewModel(
-                                    factory = AccountViewModelFactory(applicationContext, userRepository, flightLogRepository, airportRepository, preferencesRepository, pilotProgressRepository, cacheDir)
+                                    factory = AccountViewModelFactory(applicationContext, userRepository, flightLogRepository, airportRepository, preferencesRepository, pilotProgressRepository, offlineModeController, cacheDir)
                                 )
 
                                 com.example.focusflight.ui.screens.settings.SettingsScreen(

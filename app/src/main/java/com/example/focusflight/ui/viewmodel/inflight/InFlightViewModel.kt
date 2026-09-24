@@ -9,6 +9,8 @@ import com.example.focusflight.data.model.Challenge
 import com.example.focusflight.data.model.FlightLog
 import com.example.focusflight.data.model.FlightMode
 import com.example.focusflight.data.model.FlightRoute
+import com.example.focusflight.data.network.NetworkMode
+import com.example.focusflight.data.network.OfflineModeController
 import com.example.focusflight.data.repository.AirportRepository
 import com.example.focusflight.data.repository.ChallengeRepository
 import com.example.focusflight.data.repository.DestinationPhotoChannel
@@ -21,14 +23,22 @@ import com.example.focusflight.data.repository.PreferencesRepository
 import com.example.focusflight.data.repository.SessionPausedFlightStore
 import com.example.focusflight.data.repository.processLandingForChallenges
 import com.example.focusflight.data.repository.resolveLandingOutcome
+import com.example.focusflight.domain.EnginePowerModel
+import com.example.focusflight.domain.NetworkNotice
+import com.example.focusflight.domain.networkNoticeFor
+import com.example.focusflight.domain.resolveEffectiveMapStyle
 import com.example.focusflight.domain.loadRouteContext
 import com.example.focusflight.engine.headless.CesiumHeadlessMapRenderer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.CoroutineScope
@@ -68,6 +78,7 @@ class InFlightViewModel(
      *  DestinationPhotoChannel's doc for why this can't just be a nav arg. */
     private val destinationPhotoChannel: DestinationPhotoChannel,
     private val destinationPhotoRepository: DestinationPhotoRepository,
+    private val offlineModeController: OfflineModeController,
     private val cacheDir: java.io.File,
     val flightNumber: String,
     val originIata: String,
@@ -92,6 +103,62 @@ class InFlightViewModel(
 
     private val _uiState = MutableStateFlow(InFlightState())
     val uiState: StateFlow<InFlightState> = _uiState.asStateFlow()
+
+    /** Drives [com.example.focusflight.audio.EngineSoundEngine] - see [EnginePowerModel].
+     *  Kept separate from [uiState] since it's an audio-presentation concern, not core telemetry. */
+    private val enginePowerModel = EnginePowerModel()
+    // Idle, not zero: a turbofan on the stand is still turning, and the flight begins with the
+    // aircraft sitting on the runway rather than with the engines shut down.
+    private val _enginePower = MutableStateFlow(EnginePowerModel.IDLE_N1)
+    val enginePower: StateFlow<Float> = _enginePower.asStateFlow()
+
+    private val _isEngineSoundEnabled = MutableStateFlow(preferencesRepository.getEngineSoundEnabled())
+    val isEngineSoundEnabled: StateFlow<Boolean> = _isEngineSoundEnabled.asStateFlow()
+
+    fun setEngineSoundEnabled(enabled: Boolean) {
+        _isEngineSoundEnabled.value = enabled
+        preferencesRepository.setEngineSoundEnabled(enabled)
+    }
+
+    private val _routeLineMode = MutableStateFlow(preferencesRepository.getRouteLineMode())
+    val routeLineMode: StateFlow<Int> = _routeLineMode.asStateFlow()
+
+    fun setRouteLineMode(mode: Int) {
+        _routeLineMode.value = mode
+        preferencesRepository.setRouteLineMode(mode)
+    }
+
+    /** The pilot's preferred map style, one of the `CesiumLiveJniBridge.MAP_STYLE_*` ids.
+     *  Persisted so the choice carries over to the next flight. While offline the globe shows
+     *  [effectiveMapStyle] instead, and this preference is left untouched. */
+    private val _mapStyle = MutableStateFlow(preferencesRepository.getMapStyle())
+    val mapStyle: StateFlow<Int> = _mapStyle.asStateFlow()
+
+    fun setMapStyle(style: Int) {
+        _mapStyle.value = style
+        preferencesRepository.setMapStyle(style)
+    }
+
+    /** Drives the HUD's OFFLINE badge and locks the network styles in the map picker. */
+    val networkMode: StateFlow<NetworkMode> = offlineModeController.mode
+
+    /** What the live globe actually renders: [mapStyle], or the offline map while offline. */
+    val effectiveMapStyle: StateFlow<Int> = combine(mapStyle, offlineModeController.isOffline, ::resolveEffectiveMapStyle)
+        .stateIn(
+            viewModelScope,
+            SharingStarted.Eagerly,
+            resolveEffectiveMapStyle(_mapStyle.value, offlineModeController.isOffline.value)
+        )
+
+    private val _networkNotice = MutableStateFlow<NetworkNotice?>(null)
+
+    /** Set when the connection change switched the map on its own. The screen shows it briefly,
+     *  then calls [consumeNetworkNotice]. */
+    val networkNotice: StateFlow<NetworkNotice?> = _networkNotice.asStateFlow()
+
+    fun consumeNetworkNotice() {
+        _networkNotice.value = null
+    }
 
     private var timerJob: Job? = null
 
@@ -147,6 +214,14 @@ class InFlightViewModel(
     )
 
     init {
+        viewModelScope.launch {
+            var previous = offlineModeController.mode.value
+            offlineModeController.mode.collect { current ->
+                networkNoticeFor(previous, current, _mapStyle.value)?.let { _networkNotice.value = it }
+                previous = current
+            }
+        }
+
         // A fresh nav entry (new flight, or resuming one) always means a fresh ViewModel
         // instance - clear out whatever the *previous* flight's landing left behind so a stale
         // result can never leak into this flight's own landing sequence.
@@ -183,6 +258,12 @@ class InFlightViewModel(
                     savedCamera.qx, savedCamera.qy, savedCamera.qz, savedCamera.qw
                 )
             }
+
+            com.example.focusflight.engine.live.CesiumLiveJniBridge.nativeSetRouteLineMode(
+                preferencesRepository.getRouteLineMode(),
+                com.example.focusflight.engine.live.CesiumLiveJniBridge.DEFAULT_ROUTE_LINE_BEHIND_NM,
+                com.example.focusflight.engine.live.CesiumLiveJniBridge.DEFAULT_ROUTE_LINE_AHEAD_NM
+            )
         }
     }
 
@@ -220,10 +301,15 @@ class InFlightViewModel(
 
             // Prefetch the arrival screen's destination photo now, well ahead of landing, so the
             // arrival screen itself never has to block on or retry a network call - see
-            // DestinationPhotoChannel's doc.
+            // DestinationPhotoChannel's doc. While offline (no connection, or data saver on) this
+            // waits instead of burning the fetch's 12 s timeout; if the app comes online during
+            // the flight the photo is fetched then, otherwise arrival uses its plain background.
             context.dest?.let { dest ->
-                val photoUrl = destinationPhotoRepository.fetchDestinationPhotoUrl(dest.municipality, dest.isoCountry)
-                destinationPhotoChannel.publish(photoUrl)
+                launch {
+                    offlineModeController.isOffline.first { offline -> !offline }
+                    val photoUrl = destinationPhotoRepository.fetchDestinationPhotoUrl(dest.municipality, dest.isoCountry)
+                    destinationPhotoChannel.publish(photoUrl)
+                }
             }
 
             // Initialize coordinates to origin
@@ -289,6 +375,18 @@ class InFlightViewModel(
                             currentLon = telemetry[2]
                             currentAlt = telemetry[3].toInt()
                             currentSpeed = (telemetry[4] * 3.6).toInt() // Convert m/s to km/h
+
+                            // Deliberately the raw telemetry rather than the rounded copies above:
+                            // EnginePowerModel reads pitch attitude and true airspeed directly, and
+                            // the Int truncation the HUD wants would cost it exactly the precision
+                            // it needs. See its doc.
+                            _enginePower.value = enginePowerModel.update(
+                                progress = telemetry[0].toFloat(),
+                                altitudeMeters = telemetry[3].toFloat(),
+                                speedMetersPerSecond = telemetry[4].toFloat(),
+                                pitchRadians = telemetry[6].toFloat(),
+                                deltaSeconds = deltaMs / 1000f
+                            )
                         }
 
                         state.copy(
@@ -323,6 +421,38 @@ class InFlightViewModel(
         timerJob?.cancel()
         timerJob = null
         _uiState.update { it.copy(isRunning = false) }
+    }
+
+    /**
+     * TEMPORARY debug hook for scrubbing through a flight to audition [enginePower] at any point
+     * without waiting real time - see the debug-only slider in `InFlightScreen`. Bypasses the
+     * timer entirely: drives the native engine's progress directly and re-reads telemetry, same
+     * as a real tick, but without touching [uiState]'s elapsed/remaining time. Caller is expected
+     * to have paused the timer first so this doesn't fight it.
+     */
+    fun scrubProgress(progress: Float) {
+        val clamped = progress.coerceIn(0f, 1f)
+        com.example.focusflight.engine.live.CesiumLiveJniBridge.nativeSetProgress(clamped.toDouble())
+        val telemetry = com.example.focusflight.engine.live.CesiumLiveJniBridge.nativeGetTelemetry()
+        if (telemetry.size < 8) return
+        _uiState.update {
+            it.copy(
+                progress = clamped,
+                currentLat = telemetry[1],
+                currentLon = telemetry[2],
+                altitudeMeters = telemetry[3].toInt(),
+                speedKmh = (telemetry[4] * 3.6).toInt()
+            )
+        }
+        // settleAt rather than update: a scrub jumps to an arbitrary point in the flight, and
+        // spooling there from wherever the last scrub position left the engine would make the
+        // sound describe the drag rather than the destination.
+        _enginePower.value = enginePowerModel.settleAt(
+            progress = telemetry[0].toFloat(),
+            altitudeMeters = telemetry[3].toFloat(),
+            speedMetersPerSecond = telemetry[4].toFloat(),
+            pitchRadians = telemetry[6].toFloat()
+        )
     }
 
     fun skipFlight() {
@@ -538,6 +668,7 @@ class InFlightViewModelFactory(
     private val landingResultChannel: LandingResultChannel,
     private val destinationPhotoChannel: DestinationPhotoChannel,
     private val destinationPhotoRepository: DestinationPhotoRepository,
+    private val offlineModeController: OfflineModeController,
     private val cacheDir: java.io.File,
     private val flightNumber: String,
     private val originIata: String,
@@ -549,7 +680,7 @@ class InFlightViewModelFactory(
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(InFlightViewModel::class.java)) {
-            return InFlightViewModel(airportRepository, preferencesRepository, flightLogRepository, challengeRepository, landingResultChannel, destinationPhotoChannel, destinationPhotoRepository, cacheDir, flightNumber, originIata, destIata, durationMin, mode, challengeId) as T
+            return InFlightViewModel(airportRepository, preferencesRepository, flightLogRepository, challengeRepository, landingResultChannel, destinationPhotoChannel, destinationPhotoRepository, offlineModeController, cacheDir, flightNumber, originIata, destIata, durationMin, mode, challengeId) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

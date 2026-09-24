@@ -17,7 +17,26 @@ object CesiumLiveJniBridge {
 
     external fun nativeSetCameraMode(mode: Int)
 
+    const val MAP_STYLE_STANDARD: Int = 0
+    const val MAP_STYLE_SATELLITE_TERRAIN: Int = 1
+    const val MAP_STYLE_OFFLINE: Int = 2
+
+    /**
+     * Base map and terrain together: [MAP_STYLE_STANDARD] (CARTO dark basemap, flat globe),
+     * [MAP_STYLE_SATELLITE_TERRAIN] (Esri imagery on 3D relief) or [MAP_STYLE_OFFLINE] (the
+     * bundled Natural Earth vector map, rasterized on-device - no network at all, flat globe).
+     * Unknown values fall back to Standard on the Rust side.
+     */
     external fun nativeSetMapStyle(style: Int)
+
+    const val DEFAULT_ROUTE_LINE_BEHIND_NM: Double = 40.0
+    const val DEFAULT_ROUTE_LINE_AHEAD_NM: Double = 150.0
+
+    /**
+     * How much of the route line to draw: 0 = Full (whole route), 1 = Window (around aircraft),
+     * 2 = Hidden (no line). The two distance parameters are in nautical miles and apply to mode 1.
+     */
+    external fun nativeSetRouteLineMode(mode: Int, behindNm: Double, aheadNm: Double)
 
     external fun nativeGetTelemetry(): DoubleArray
 
@@ -43,6 +62,10 @@ object CesiumLiveJniBridge {
     external fun nativeDestroyEngine()
 
     external fun nativeLoadPendingFlight()
+
+    /** Field elevations of the next flight's two airports, in metres. Optional - without it
+     *  the flight is planned at sea level. Consumed by the next [nativeLoadPendingFlight]. */
+    external fun nativeSetFieldElevations(depElevationM: Double, arrElevationM: Double)
 
     /** Debug-only performance-testing hook (see tools/run_perf_scenario.sh at the repo
      *  root): tags a captured Perfetto trace with [scenarioId] and switches camera mode

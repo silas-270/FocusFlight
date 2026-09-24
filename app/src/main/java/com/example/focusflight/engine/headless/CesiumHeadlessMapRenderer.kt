@@ -8,7 +8,7 @@ import com.example.focusflight.data.repository.AirportRepository
 import java.io.File
 
 /**
- * Renders the "hub_route_map_{IATA}.png" preview image used on the Hub,
+ * Renders the route map preview image (see [MapImageCache.fileNameFor]) used on the Hub,
  * Onboarding, and post-flight destination screens. Single owner of the
  * fetch-routes -> render -> cache-prune sequence so it only needs fixing
  * in one place.
@@ -49,7 +49,7 @@ class CesiumHeadlessMapRenderer(private val cacheDir: File) {
         outboundRoutes: List<FlightRoute>,
         reuseCachedFile: Boolean = false
     ): Result {
-        val outFile = File(cacheDir, "hub_route_map_$centerIata.png")
+        val outFile = File(cacheDir, MapImageCache.fileNameFor(centerIata))
 
         if (reuseCachedFile && outFile.exists() && outFile.length() > 0) {
             Log.d(TAG, "Cached route map found for $centerIata. Reusing: ${outFile.absolutePath}")

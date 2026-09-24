@@ -65,10 +65,11 @@ not theoretical.
 
 **Loading a flight** — always through `PendingFlightLoader`, never by calling the bridge
 directly. It looks up both airports, picks each one's longest runway, and pushes runways
-then route then load, in that order:
+then field elevations, then route, then load, in that order:
 
 ```
 nativeSetRunways(...)      → geometry for the departure and arrival runways
+nativeSetFieldElevations(depElevationM, arrElevationM)
 nativeSetPendingFlight(depLon, depLat, arrLon, arrLat, durationMs)
 nativeLoadPendingFlight()
 ```
@@ -92,8 +93,23 @@ position and quaternion across a pause/resume, so a paused flight comes back to 
 it was left in. Set the mode *before* setting the pose, so the mode is already correct
 when the pose lands.
 
-**Map style** — `nativeSetMapStyle(style)` where `0` is the CARTO dark basemap and `1` is
-Esri satellite imagery.
+**Map style** — `nativeSetMapStyle(style)`:
+
+| Id | Constant | Source | Network |
+|---|---|---|---|
+| `0` | `MAP_STYLE_STANDARD` | CARTO dark basemap, flat globe | yes |
+| `1` | `MAP_STYLE_SATELLITE_TERRAIN` | Esri imagery on Terrarium 3D relief | yes |
+| `2` | `MAP_STYLE_OFFLINE` | Natural Earth vector map built into the `.so`, rasterized on the CPU, flat | none |
+
+Unknown ids fall back to Standard on the Rust side. The screen never pushes the pilot's
+stored choice directly. It pushes `InFlightViewModel.effectiveMapStyle`, which is `2`
+whenever `OfflineModeController` reports the app is offline (see
+[architecture.md](architecture.md#network)). The stored choice stays put and comes back
+once the app is online again.
+
+**Route line** — `nativeSetRouteLineMode(mode, behindNm, aheadNm)` where `0 = Full` (entire route,
+default), `1 = Window` (fading window around the aircraft, default 40 NM behind / 150 NM ahead),
+and `2 = Hidden` (no route line drawn).
 
 ### Adding a native call
 
@@ -115,6 +131,12 @@ render_routes_headless(width, height, routes: *const HeadlessRoute, count, outPa
 is declared with `@Structure.FieldOrder` and **must match the Rust struct exactly** —
 a mismatch is silent memory corruption, not a compile error.
 
+Every headless render uses the bundled offline vector map (`headless_tile_config()` in
+CesiumRS's `src/headless/api.rs`), online or not. The globes on the Hub, Onboarding,
+Account and arrival screens therefore never need the network. Because the source is SVG,
+light and dark palettes can be added later without a new tile set. The C signature is
+unchanged, so a palette would arrive as a new parameter there.
+
 `CesiumHeadlessMapRenderer` wraps it and owns the whole fetch-routes → render →
 prune-cache sequence. Callers never touch the JNA bindings directly. It returns a sealed
 `Result` (`Success(path, fromCache)` / `Failure(message)`) rather than throwing, because
@@ -129,8 +151,10 @@ Three screens use it, and the `reuseCachedFile` flag is what distinguishes them:
 | `OnboardingViewModel.preRenderMap()` | `false` | Warms the cache for a freshly chosen home base |
 | `InFlightViewModel.preRenderDestinationMap()` | `false` | Runs at landing so the destination's map is ready by the time the arrival sequence ends |
 
-Output files are named `hub_route_map_<IATA>.png` in the cache directory.
-`MapImageCache.pruneMapCache` keeps the five most recently modified, **plus** any pinned
+Output files are named `MapImageCache.fileNameFor(iata)`, i.e.
+`hub_route_map_v<RENDER_VERSION>_<IATA>.png`, in the cache directory. Bump
+`RENDER_VERSION` whenever the look of headless renders changes. `pruneMapCache` deletes
+every file from an older version outright, then keeps the five most recently modified, **plus** any pinned
 IATA — the home base is pinned, because return-home is on a 7-day cooldown and would
 otherwise always find a cold cache.
 

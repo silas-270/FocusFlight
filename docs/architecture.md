@@ -23,8 +23,9 @@ Two properties are load-bearing and constrain most design decisions:
    `PredefinedRouteCatalogTest` checks each one leg by leg. That test is what stands
    between an authoring typo and a challenge nobody can fly.
 
-Single-player, fully offline apart from one optional destination-photo fetch. There is
-no account, no sync, and no server.
+Single-player, with no account, no sync, and no server. The network is only used for
+live-globe map tiles and one optional destination-photo fetch, and the app works fully
+without it (see [Network](#network)).
 
 ## Stack
 
@@ -56,6 +57,8 @@ CesiumGameActivity          composition root · NavHost · engine lifecycle
         ├── ui/viewmodel/   one ViewModel per screen, StateFlow-exposed
         │
         ├── domain/         pure orchestration over repositories, no Android deps
+        │
+        ├── audio/          real-time engine-sound synthesis — see [engine-sound.md](engine-sound.md)
         │
         ├── data/repository/  interface + Local* implementation per concern
         ├── data/model/       entities, enums, catalogs, pure progress math
@@ -91,6 +94,7 @@ standalone function instead: `processLandingForChallenges`, `resolveLandingOutco
 | Everything derived from history | `data/repository/PilotProgressRepository.kt` |
 | Persisted-value ownership | [state.md](state.md) |
 | Native engine | `engine/live/`, `engine/headless/` — see [engine.md](engine.md) |
+| Engine sound | `domain/EnginePowerModel.kt` (telemetry → fan speed), `audio/` (fan speed → PCM) — see [engine-sound.md](engine-sound.md) |
 
 ## The two databases
 
@@ -130,10 +134,33 @@ a broken migration reaching a device.
 
 ## Network
 
-Exactly one outbound call exists: `PexelsDestinationPhotoRepository` fetches a photo of
-the destination city for the arrival screen. The API key comes from `local.properties`
-via a `buildConfigField`, so it never enters the repo. A failure is silent and the
-arrival screen renders without a photo. Everything else works with the radio off.
+Two things go outbound:
+
+- **Live-globe tiles.** The in-flight map styles Standard (CARTO) and Satellite + Terrain
+  (Esri imagery, Terrarium heights) stream tiles from inside CesiumRS. The Offline style
+  and every headless render use the vector map built into the `.so` and need nothing.
+- **Destination photo.** `PexelsDestinationPhotoRepository` fetches a photo of the
+  destination city for the arrival screen. The API key comes from `local.properties` via a
+  `buildConfigField`, so it never enters the repo. A failure is silent and the arrival
+  screen renders without a photo.
+
+**Offline mode.** `OfflineModeController` (`data/network/`) is the single source of truth.
+It combines two inputs:
+
+- `ConnectivityMonitor`: a default-network callback. The device counts as connected only
+  when the network is INTERNET-capable *and* VALIDATED.
+- The **Offline maps** switch in Settings (`PreferencesRepository.isOfflineDataSaverEnabled`),
+  which forces offline mode to save data.
+
+The result is a `NetworkMode`: `ONLINE`, `OFFLINE_NO_CONNECTION` or `OFFLINE_DATA_SAVER`.
+The controller is process-wide (`getInstance`), because ViewModels can outlive a recreated
+Activity. While offline:
+
+- the Hub header and the in-flight HUD show an OFFLINE badge (`OfflineBadge`);
+- the live globe switches to the Offline style, and the network styles are locked in the
+  map picker. The pilot's stored style is kept and restored when the app is back online,
+  with a short notice pill in both directions;
+- the destination-photo prefetch waits for the app to be online instead of timing out.
 
 ## Build
 
@@ -162,6 +189,13 @@ weakened:
   pass against a DAO that could not exist.
 - `MigrationTest` (instrumented) validates every migration against its committed schema
   JSON.
+- `EngineSoundSynthTest` renders the synthesised engine audio and measures it, so its
+  spectral shape is a check rather than a listening session. Two of its assertions pin
+  that shape and should not be weakened — see [engine-sound.md](engine-sound.md).
+
+The same seam argument applies to audio: `EngineSoundSynth` is split from
+`EngineSoundEngine` precisely so the DSP carries no Android type and can be rendered on the
+JVM, leaving only the `AudioTrack` and its thread untested.
 
 `InFlightViewModel` has no unit test — it loads the native engine on first touch. That
 is why its concurrency rule lives in `SessionPausedFlightStore`, a JVM-testable seam,
