@@ -16,9 +16,9 @@
         android:enableOnBackInvokedCallback="true">
         <activity
             android:name=".CesiumGameActivity"
-            android:theme="@style/Theme.FocusFlight.Starting"
-            android:configChanges="orientation|screenSize|keyboardHidden"
-            android:screenOrientation="fullSensor"
+            android:theme="@style/Theme.CesiumTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:screenOrientation="portrait"
             android:exported="true">
             <meta-data
                 android:name="android.app.lib_name"

@@ -34,6 +34,9 @@ import com.example.focusflight.ui.components.FocusButton
 import com.example.focusflight.ui.components.FocusInfoRow
 import com.example.focusflight.ui.theme.*
 import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
+import coil3.request.allowHardware
+import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -107,8 +110,12 @@ fun ArrivalCelebrationScreen(
     ) {
         // Fullscreen Destination Landmark Photo (bleeds edge-to-edge behind system bars)
         if (destPhotoUrl != null) {
+            val context = LocalContext.current
             AsyncImage(
-                model = destPhotoUrl,
+                model = ImageRequest.Builder(context)
+                    .data(destPhotoUrl)
+                    .allowHardware(false)
+                    .build(),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.matchParentSize()
