@@ -212,14 +212,11 @@ class CesiumGameActivity : GameActivity() {
     // dependency to construct, unlike the repositories above.
     private val destinationPhotoChannel = DestinationPhotoChannel()
     private val destinationPhotoRepository: DestinationPhotoRepository = PexelsDestinationPhotoRepository()
+    private var activeNavController: NavHostController? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        // Must run before super.onCreate() - it's what swaps the manifest's
-        // Theme.FocusFlight.Starting (the branded splash) over to Theme.CesiumTheme (postSplashScreenTheme)
-        // once the window is ready. GameActivity extends AppCompatActivity, so this ComponentActivity
-        // extension applies the same as any other activity.
-        val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
+        mSurfaceView.visibility = android.view.View.GONE
 
         // Immersive mode
         WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -279,27 +276,23 @@ class CesiumGameActivity : GameActivity() {
             com.example.focusflight.ui.map.WorldMapParser.warm(applicationContext)
         }
 
+        val hasProfile = kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
+            val profileExists = userRepository.getProfile() != null
+            if (!profileExists && preferencesRepository.isOnboardingCompleted()) {
+                preferencesRepository.setOnboardingCompleted(false)
+            }
+            profileExists
+        }
+
         val composeView = ComposeView(this).apply {
             setContent {
                 val themeMode = com.example.focusflight.ui.theme.ThemeModeHolder.current
                 FocusFlightTheme(mode = themeMode) {
-                    // Resolve the profile-exists check off the main thread instead of blocking
-                    // onCreate with runBlocking - the splash screen stays up (via
-                    // setKeepOnScreenCondition) until this resolves, so there's no flash of the
-                    // wrong start destination.
-                    val hasProfile by androidx.compose.runtime.produceState<Boolean?>(initialValue = null) {
-                        val profileExists = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                            userRepository.getProfile() != null
-                        }
-                        if (!profileExists && preferencesRepository.isOnboardingCompleted()) {
-                            preferencesRepository.setOnboardingCompleted(false)
-                        }
-                        value = profileExists
-                    }
-                    splashScreen.setKeepOnScreenCondition { hasProfile == null }
-                    if (hasProfile == null) return@FocusFlightTheme
-
                     val navController = rememberNavController()
+                    androidx.compose.runtime.DisposableEffect(navController) {
+                        activeNavController = navController
+                        onDispose { activeNavController = null }
+                    }
                     val startDestination = if (preferencesRepository.isOnboardingCompleted() && hasProfile == true) {
                         Screen.Hub.route
                     } else {
@@ -316,6 +309,11 @@ class CesiumGameActivity : GameActivity() {
                     // Suspend/resume (winit sleep/wake) is lifecycle-scoped via CesiumEngineManager.
                     LaunchedEffect(shouldRender) {
                         CesiumLiveJniBridge.nativeSetRenderingEnabled(shouldRender)
+                        mSurfaceView.visibility = if (shouldRender) {
+                            android.view.View.VISIBLE
+                        } else {
+                            android.view.View.GONE
+                        }
                     }
 
                     // Keep the screen awake for the flight session (check-in + in-flight) only.
@@ -822,10 +820,102 @@ class CesiumGameActivity : GameActivity() {
             }
         }
 
-        addContentView(composeView, ViewGroup.LayoutParams(
+        val rootLayout = android.widget.FrameLayout(this).apply {
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        }
+        (mSurfaceView.parent as? ViewGroup)?.removeView(mSurfaceView)
+        rootLayout.addView(mSurfaceView, ViewGroup.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT
         ))
+        rootLayout.addView(composeView, ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT
+        ))
+        setContentView(rootLayout)
+
+        if (BuildConfig.DEBUG) {
+            val filter = android.content.IntentFilter().apply {
+                addAction("com.example.focusflight.CONTROL")
+                addAction("com.example.focusflight.CAPTURE_SCREEN")
+            }
+            registerReceiver(object : android.content.BroadcastReceiver() {
+                override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
+                    if (intent == null) return
+                    val navTarget = intent.getStringExtra("navigate")
+                    if (!navTarget.isNullOrBlank()) {
+                        Log.i("CesiumGameActivity", "Received broadcast to navigate to $navTarget")
+                        try {
+                            if (navTarget.startsWith("challenge_outcome") && landingResultChannel.result.value !is LandingResult.ChallengesAffected) {
+                                landingResultChannel.publish(
+                                    LandingResult.ChallengesAffected(
+                                        listOf(
+                                            ChallengeOutcome.Completed(
+                                                challengeId = 1,
+                                                name = "First Cross-Country",
+                                                type = com.example.focusflight.data.model.ChallengeType.DISTANCE,
+                                                oldProgress = 0.5f,
+                                                iconName = "trophy"
+                                            ),
+                                            ChallengeOutcome.Advanced(
+                                                challengeId = 2,
+                                                name = "European Explorer",
+                                                type = com.example.focusflight.data.model.ChallengeType.ROUTE,
+                                                oldProgress = 0.25f,
+                                                newProgress = 0.50f,
+                                                iconName = "globe"
+                                            )
+                                        )
+                                    )
+                                )
+                            }
+                            activeNavController?.navigate(navTarget)
+                        } catch (e: Exception) {
+                            Log.e("CesiumGameActivity", "Failed to navigate to $navTarget", e)
+                        }
+                    }
+                    val path = intent.getStringExtra("path")
+                    if (!path.isNullOrBlank()) {
+                        try {
+                            val w = window.decorView.width.coerceAtLeast(1)
+                            val h = window.decorView.height.coerceAtLeast(1)
+                            val bitmap = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
+
+                            val saveBitmap = {
+                                val file = java.io.File(path)
+                                file.parentFile?.mkdirs()
+                                file.outputStream().use { out ->
+                                    bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
+                                }
+                                java.io.File("${path}.done").createNewFile()
+                                Log.i("CesiumGameActivity", "Captured screen to $path (${bitmap.width}x${bitmap.height})")
+                            }
+
+                            if (mSurfaceView.visibility == android.view.View.VISIBLE && mSurfaceView.holder.surface.isValid) {
+                                android.view.PixelCopy.request(mSurfaceView, bitmap, { copyResult ->
+                                    try {
+                                        val canvas = android.graphics.Canvas(bitmap)
+                                        composeView.draw(canvas)
+                                    } catch (e: Exception) {
+                                        Log.w("CesiumGameActivity", "Overlay draw error", e)
+                                    }
+                                    saveBitmap()
+                                }, android.os.Handler(android.os.Looper.getMainLooper()))
+                            } else {
+                                val canvas = android.graphics.Canvas(bitmap)
+                                window.decorView.draw(canvas)
+                                saveBitmap()
+                            }
+                        } catch (e: Exception) {
+                            Log.e("CesiumGameActivity", "Failed to capture screen to $path", e)
+                        }
+                    }
+                }
+            }, filter)
+        }
     }
 
     override fun onDestroy() {
