@@ -100,9 +100,11 @@ standalone function instead: `processLandingForChallenges`, `resolveLandingOutco
 
 They are unrelated and must not be confused.
 
-**`flights.db`** — bundled in `assets/`, copied to the databases directory on first run
-by `AirportRepository.ensureDatabaseCopied()`, then opened read-only through
-`AirportRouteSqliteDataSource`. It is reference data, not user data.
+**`flights.db`** — bundled in `assets/`, copied to the databases directory by
+`AirportRepository.ensureDatabaseCopied()` on first run *and again after every install or
+update* (keyed on the package's `lastUpdateTime` in a `flights.db.stamp` sidecar), then opened
+read-only through `AirportRouteSqliteDataSource`. It is reference data, not user data. The copy
+goes through a temp file and a rename, so an interrupted copy never leaves a truncated database.
 
 | Table | Rows | Contents |
 |---|---|---|

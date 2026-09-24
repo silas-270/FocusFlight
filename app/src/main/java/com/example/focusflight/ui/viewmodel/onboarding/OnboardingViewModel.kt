@@ -1,5 +1,6 @@
 package com.example.focusflight.ui.viewmodel.onboarding
 
+import kotlinx.coroutines.sync.withLock
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -87,7 +88,13 @@ class OnboardingViewModel(
      * see [com.example.focusflight.domain.resolveHomeAirportIata] for why that duplication had to
      * end.
      */
-    suspend fun saveHomeAirport(): Boolean {
+    // Serialises saveHomeAirport(): a double-tapped CTA would otherwise run two check-then-insert
+    // sequences concurrently, both see no profile, and insert two rows.
+    private val saveMutex = kotlinx.coroutines.sync.Mutex()
+
+    suspend fun saveHomeAirport(): Boolean = saveMutex.withLock { saveHomeAirportLocked() }
+
+    private suspend fun saveHomeAirportLocked(): Boolean {
         val airport = _selectedAirport.value ?: return false
 
         val profileWritten = withContext(Dispatchers.IO) {

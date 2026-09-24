@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -31,7 +32,9 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
+import androidx.navigation.NavOptionsBuilder
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.focusflight.data.local.AppDatabase
@@ -94,19 +97,44 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
+/**
+ * True only while [entry] is the settled, visible destination. Every tap-driven navigation below
+ * goes through this: once the first tap navigates, the outgoing entry drops below RESUMED at once,
+ * so a second tap (or a coroutine finishing late) is ignored instead of pushing a duplicate
+ * destination - or, for a double-tapped back arrow, popping the Hub itself and leaving the
+ * NavHost blank.
+ */
+private fun NavBackStackEntry.isSettled(): Boolean =
+    lifecycle.currentState == Lifecycle.State.RESUMED
+
+private fun NavHostController.navigateFrom(
+    from: NavBackStackEntry,
+    route: String,
+    builder: NavOptionsBuilder.() -> Unit = {}
+) {
+    if (from.isSettled()) navigate(route, builder)
+}
+
+private fun NavHostController.popBackStackFrom(from: NavBackStackEntry) {
+    if (from.isSettled()) popBackStack()
+}
+
 /** Loads a paused flight's pending-flight data and navigates straight into InFlight with it -
  *  the shared body behind both the Hub's "RESUME FLIGHT" button and the Challenges screen's
  *  "resume this challenge's in-progress leg" action, since [PausedFlight] already carries
  *  everything either call site needs (origin/dest/duration/flight number/mode/challengeId). */
 private suspend fun resumeFlight(
     navController: NavHostController,
+    from: NavBackStackEntry,
     pendingFlightLoader: PendingFlightLoader,
     flight: PausedFlight
 ) {
+    if (!from.isSettled()) return
     withContext(Dispatchers.IO) {
         pendingFlightLoader.loadPendingFlight(flight.originIata, flight.destIata, flight.durationMin)
     }
-    navController.navigate(
+    navController.navigateFrom(
+        from,
         Screen.InFlight.createRoute(flight.originIata, flight.flightNumber, flight.destIata, flight.durationMin, flight.mode, flight.challengeId)
     )
 }
@@ -125,22 +153,25 @@ private suspend fun resumeFlight(
  */
 private suspend fun continueRouteChallenge(
     navController: NavHostController,
+    from: NavBackStackEntry,
     pendingFlightLoader: PendingFlightLoader,
     challengeRepository: ChallengeRepository,
     airportRepository: AirportRepository,
     challengeId: Int
 ) {
+    if (!from.isSettled()) return
     val leg = withContext(Dispatchers.IO) {
         resolveNextLeg(challengeRepository, airportRepository, challengeId)
     }
     if (leg == null) {
-        navController.navigate(Screen.FlightSearch.createRoute(FlightMode.CHALLENGE, challengeId))
+        navController.navigateFrom(from, Screen.FlightSearch.createRoute(FlightMode.CHALLENGE, challengeId))
         return
     }
     withContext(Dispatchers.IO) {
         pendingFlightLoader.loadPendingFlight(leg.originIata, leg.destIata, leg.durationMin)
     }
-    navController.navigate(
+    navController.navigateFrom(
+        from,
         Screen.CheckIn.createRoute(leg.originIata, leg.flightNumber, leg.destIata, leg.durationMin, FlightMode.CHALLENGE, challengeId)
     )
 }
@@ -189,9 +220,6 @@ class CesiumGameActivity : GameActivity() {
         // extension applies the same as any other activity.
         val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
-
-        // Keep screen on during flight
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         // Immersive mode
         WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -290,6 +318,17 @@ class CesiumGameActivity : GameActivity() {
                         CesiumLiveJniBridge.nativeSetRenderingEnabled(shouldRender)
                     }
 
+                    // Keep the screen awake for the flight session (check-in + in-flight) only.
+                    // Route-scoped like rendering, so no screen can clear it for another - the Hub,
+                    // Passport and Settings sleep normally.
+                    LaunchedEffect(shouldRender) {
+                        if (shouldRender) {
+                            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                        } else {
+                            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                        }
+                    }
+
                     // Portrait everywhere except InFlight, which allows free rotation.
                     val isInFlight = currentRoute?.startsWith("in_flight/") == true
                     LaunchedEffect(isInFlight) {
@@ -340,14 +379,14 @@ class CesiumGameActivity : GameActivity() {
                             }
                         ) {
                             // ── Onboarding ──
-                            composable(Screen.Onboarding.route) {
+                            composable(Screen.Onboarding.route) { entry ->
                                 val viewModel: OnboardingViewModel = viewModel(
                                     factory = OnboardingViewModelFactory(airportRepository, preferencesRepository, userRepository, cacheDir)
                                 )
                                 OnboardingScreen(
                                     viewModel = viewModel,
                                     onOnboardingComplete = {
-                                        navController.navigate(Screen.Hub.route) {
+                                        navController.navigateFrom(entry, Screen.Hub.route) {
                                             popUpTo(Screen.Onboarding.route) { inclusive = true }
                                         }
                                     }
@@ -355,7 +394,7 @@ class CesiumGameActivity : GameActivity() {
                             }
 
                             // ── Hub ──
-                            composable(Screen.Hub.route) {
+                            composable(Screen.Hub.route) { entry ->
                                 val viewModel: HubViewModel = viewModel(
                                     factory = HubViewModelFactory(airportRepository, preferencesRepository, userRepository, flightLogRepository, challengeRepository, pilotProgressRepository, offlineModeController, cacheDir)
                                 )
@@ -363,45 +402,45 @@ class CesiumGameActivity : GameActivity() {
                                 com.example.focusflight.ui.screens.hub.HubScreen(
                                     viewModel = viewModel,
                                     onBookFlightClick = {
-                                        navController.navigate(Screen.FlightSearch.createRoute())
+                                        navController.navigateFrom(entry, Screen.FlightSearch.createRoute())
                                     },
                                     onChallengesClick = {
-                                        navController.navigate(Screen.Challenges.route)
+                                        navController.navigateFrom(entry, Screen.Challenges.route)
                                     },
                                     onResumeFlightClick = { flight ->
-                                        coroutineScope.launch { resumeFlight(navController, pendingFlightLoader, flight) }
+                                        coroutineScope.launch { resumeFlight(navController, entry, pendingFlightLoader, flight) }
                                     },
                                     onPassportClick = {
-                                        navController.navigate(Screen.Account.route)
+                                        navController.navigateFrom(entry, Screen.Account.route)
                                     },
                                     onSettingsClick = {
-                                        navController.navigate(Screen.Settings.route)
+                                        navController.navigateFrom(entry, Screen.Settings.route)
                                     },
                                     onContinueChallengeClick = { challengeId ->
                                         coroutineScope.launch {
-                                            continueRouteChallenge(navController, pendingFlightLoader, challengeRepository, airportRepository, challengeId)
+                                            continueRouteChallenge(navController, entry, pendingFlightLoader, challengeRepository, airportRepository, challengeId)
                                         }
                                     }
                                 )
                             }
 
                             // ── Challenges (modes/goals surface) ──
-                            composable(Screen.Challenges.route) {
+                            composable(Screen.Challenges.route) { entry ->
                                 val challengesViewModel: ChallengesViewModel = viewModel(
                                     factory = ChallengesViewModelFactory(challengeRepository, airportRepository, pilotProgressRepository, preferencesRepository)
                                 )
                                 val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
                                 com.example.focusflight.ui.screens.challenges.ChallengesScreen(
                                     viewModel = challengesViewModel,
-                                    onBackClick = { navController.popBackStack() },
+                                    onBackClick = { navController.popBackStackFrom(entry) },
                                     onFreeModeClick = {
-                                        navController.navigate(Screen.FlightSearch.createRoute(FlightMode.FREE))
+                                        navController.navigateFrom(entry, Screen.FlightSearch.createRoute(FlightMode.FREE))
                                     },
                                     onResumeFreeFlight = { flight ->
                                         // The Story/Free slot already has a Free Mode flight paused - resume
                                         // it directly instead of routing through a fresh booking, same as
                                         // Hub's onResumeFlightClick and onResumeRouteChallenge below.
-                                        coroutineScope.launch { resumeFlight(navController, pendingFlightLoader, flight) }
+                                        coroutineScope.launch { resumeFlight(navController, entry, pendingFlightLoader, flight) }
                                     },
                                     onContinueRouteChallenge = { challengeId ->
                                         // Free-form: the same booking flow Story Mode's "Book a flight" uses,
@@ -409,7 +448,7 @@ class CesiumGameActivity : GameActivity() {
                                         // pointer. Predefined itinerary: straight to the boarding card with
                                         // the authored next leg already filled in. See continueRouteChallenge.
                                         coroutineScope.launch {
-                                            continueRouteChallenge(navController, pendingFlightLoader, challengeRepository, airportRepository, challengeId)
+                                            continueRouteChallenge(navController, entry, pendingFlightLoader, challengeRepository, airportRepository, challengeId)
                                         }
                                     },
                                     onResumeRouteChallenge = { challenge ->
@@ -419,13 +458,13 @@ class CesiumGameActivity : GameActivity() {
                                         // onResumeFlightClick above.
                                         val flight = challenge.pausedFlight
                                         if (flight != null) {
-                                            coroutineScope.launch { resumeFlight(navController, pendingFlightLoader, flight) }
+                                            coroutineScope.launch { resumeFlight(navController, entry, pendingFlightLoader, flight) }
                                         }
                                     },
                                     onChallengeStarted = {
                                         // A Route challenge just took over Hub focus - drop straight back
                                         // there instead of lingering on the Challenges screen.
-                                        navController.navigate(Screen.Hub.route) {
+                                        navController.navigateFrom(entry, Screen.Hub.route) {
                                             popUpTo(Screen.Hub.route) { inclusive = true }
                                         }
                                     }
@@ -461,10 +500,10 @@ class CesiumGameActivity : GameActivity() {
                                     viewModel = viewModel,
                                     mode = mode,
                                     onBackClick = {
-                                        navController.popBackStack()
+                                        navController.popBackStackFrom(backStackEntry)
                                     },
                                     onRouteConfirm = { route ->
-                                        coroutineScope.launch {
+                                        if (backStackEntry.isSettled()) coroutineScope.launch {
                                             // `route.originIata` is whatever origin FlightSearchViewModel resolved
                                             // for this session - `currentAirport` for STORY (unchanged), the
                                             // player's picked airport for FREE, that Route challenge's own position
@@ -478,7 +517,7 @@ class CesiumGameActivity : GameActivity() {
                                             withContext(Dispatchers.IO) {
                                                 pendingFlightLoader.loadPendingFlight(originIata, route.destIata, durationMin)
                                             }
-                                            navController.navigate(Screen.CheckIn.createRoute(originIata, flightNo, route.destIata, durationMin, mode, challengeId))
+                                            navController.navigateFrom(backStackEntry, Screen.CheckIn.createRoute(originIata, flightNo, route.destIata, durationMin, mode, challengeId))
                                         }
                                     }
                                 )
@@ -511,6 +550,13 @@ class CesiumGameActivity : GameActivity() {
                                 val challengeId = backStackEntry.arguments?.getInt("challengeId")
                                     ?.takeIf { it >= 0 }
 
+                                // No-op on the normal path; reloads the engine after process death.
+                                LaunchedEffect(originIata, destIata, durationMin) {
+                                    withContext(Dispatchers.IO) {
+                                        pendingFlightLoader.ensureLoaded(originIata, destIata, durationMin)
+                                    }
+                                }
+
                                 val viewModel: CheckInViewModel = viewModel(
                                     factory = CheckInViewModelFactory(airportRepository, originIata, destIata, flightNo)
                                 )
@@ -519,7 +565,7 @@ class CesiumGameActivity : GameActivity() {
                                 CheckInScreen(
                                     viewModel = viewModel,
                                     onBackClick = {
-                                        navController.popBackStack()
+                                        navController.popBackStackFrom(backStackEntry)
                                     },
                                     onStartFlight = { fn, di, dm ->
                                         // A fresh PausedFlight (elapsedMs/camera both null) is the reset -
@@ -548,9 +594,9 @@ class CesiumGameActivity : GameActivity() {
                                         // Ordering it this way removes the race rather than widening
                                         // it: nothing pops this screen until the write returns, so
                                         // the scope cannot be torn down underneath it.
-                                        coroutineScope.launch {
+                                        if (backStackEntry.isSettled()) coroutineScope.launch {
                                             store.save(flight)
-                                            navController.navigate(Screen.InFlight.createRoute(originIata, fn, di, dm, mode, challengeId)) {
+                                            navController.navigateFrom(backStackEntry, Screen.InFlight.createRoute(originIata, fn, di, dm, mode, challengeId)) {
                                                 popUpTo(Screen.CheckIn.route) { inclusive = true }
                                             }
                                         }
@@ -585,6 +631,13 @@ class CesiumGameActivity : GameActivity() {
                                 val challengeId = backStackEntry.arguments?.getInt("challengeId")
                                     ?.takeIf { it >= 0 }
 
+                                // No-op on the normal path; reloads the engine after process death.
+                                LaunchedEffect(originIata, destIata, durationMin) {
+                                    withContext(Dispatchers.IO) {
+                                        pendingFlightLoader.ensureLoaded(originIata, destIata, durationMin)
+                                    }
+                                }
+
                                 val viewModel: InFlightViewModel = viewModel(
                                     factory = InFlightViewModelFactory(airportRepository, preferencesRepository, flightLogRepository, challengeRepository, landingResultChannel, destinationPhotoChannel, destinationPhotoRepository, offlineModeController, cacheDir, flightNo, originIata, destIata, durationMin, mode, challengeId)
                                 )
@@ -600,7 +653,7 @@ class CesiumGameActivity : GameActivity() {
                                         }
                                     },
                                     onExitFlight = {
-                                        navController.navigate(Screen.Hub.route) {
+                                        navController.navigateFrom(backStackEntry, Screen.Hub.route) {
                                             popUpTo(Screen.Hub.route) { inclusive = true }
                                         }
                                     }
@@ -656,7 +709,10 @@ class CesiumGameActivity : GameActivity() {
                                             // every path, so this is the second lock on the same door
                                             // rather than the only one; the timeout being reached at all
                                             // means something upstream is broken, so it is logged.
-                                            val outcome = withTimeoutOrNull(LANDING_RESULT_TIMEOUT_MS) {
+                                            // Restored after process death: no landing ran in this
+                                            // process, so no result can ever arrive - go straight on.
+                                            val outcome = if (!landingResultChannel.isArmed) LandingResult.None
+                                            else withTimeoutOrNull(LANDING_RESULT_TIMEOUT_MS) {
                                                 landingResultChannel.result.first { it != LandingResult.Pending }
                                             } ?: run {
                                                 Log.w(
@@ -675,12 +731,12 @@ class CesiumGameActivity : GameActivity() {
                                                         .filter { it.type == ChallengeType.ROUTE }
                                                         .forEach { preferencesRepository.clearFocusedRouteChallengeId() }
 
-                                                    navController.navigate(Screen.ChallengeOutcome.route) {
+                                                    navController.navigateFrom(backStackEntry, Screen.ChallengeOutcome.route) {
                                                         popUpTo(Screen.ArrivalCelebration.route) { inclusive = true }
                                                     }
                                                 }
                                                 LandingResult.None, LandingResult.Pending ->
-                                                    navController.navigate(Screen.Hub.route) {
+                                                    navController.navigateFrom(backStackEntry, Screen.Hub.route) {
                                                         popUpTo(Screen.Hub.route) { inclusive = true }
                                                     }
                                             }
@@ -690,9 +746,22 @@ class CesiumGameActivity : GameActivity() {
                             }
 
                             // ── Challenge outcome (per-leg tick-up and/or completion) ──
-                            composable(Screen.ChallengeOutcome.route) {
+                            composable(Screen.ChallengeOutcome.route) { entry ->
                                 val outcomes = (landingResultChannel.result.value as? LandingResult.ChallengesAffected)
                                     ?.outcomes.orEmpty()
+                                if (outcomes.isEmpty()) {
+                                    // Only reachable when Navigation restores this screen after
+                                    // process death: the in-memory result is gone, so there is
+                                    // nothing to show. Completions still surface on Challenges via
+                                    // the database-driven celebration queue.
+                                    LaunchedEffect(Unit) {
+                                        entry.lifecycle.currentStateFlow.first { it == Lifecycle.State.RESUMED }
+                                        navController.navigateFrom(entry, Screen.Hub.route) {
+                                            popUpTo(Screen.Hub.route) { inclusive = true }
+                                        }
+                                    }
+                                    return@composable
+                                }
                                 ChallengeOutcomeScreen(
                                     outcomes = outcomes,
                                     onContinue = {
@@ -704,11 +773,11 @@ class CesiumGameActivity : GameActivity() {
                                         // stack down to Hub the same way the plain-Hub branch
                                         // below does, just with Challenges pushed on top of it.
                                         if (outcomes.any { it is ChallengeOutcome.Completed }) {
-                                            navController.navigate(Screen.Challenges.route) {
+                                            navController.navigateFrom(entry, Screen.Challenges.route) {
                                                 popUpTo(Screen.Hub.route) { inclusive = false }
                                             }
                                         } else {
-                                            navController.navigate(Screen.Hub.route) {
+                                            navController.navigateFrom(entry, Screen.Hub.route) {
                                                 popUpTo(Screen.Hub.route) { inclusive = true }
                                             }
                                         }
@@ -717,31 +786,31 @@ class CesiumGameActivity : GameActivity() {
                             }
 
                             // ── Account / Passport ──
-                            composable(Screen.Account.route) {
+                            composable(Screen.Account.route) { entry ->
                                 val viewModel: AccountViewModel = viewModel(
                                     factory = AccountViewModelFactory(applicationContext, userRepository, flightLogRepository, airportRepository, preferencesRepository, pilotProgressRepository, offlineModeController, cacheDir)
                                 )
                                 
                                 com.example.focusflight.ui.screens.account.AccountScreen(
                                     viewModel = viewModel,
-                                    onBackClick = { navController.popBackStack() }
+                                    onBackClick = { navController.popBackStackFrom(entry) }
                                 )
                             }
 
                             // ── Settings ──
-                            composable(Screen.Settings.route) {
+                            composable(Screen.Settings.route) { entry ->
                                 val viewModel: AccountViewModel = viewModel(
                                     factory = AccountViewModelFactory(applicationContext, userRepository, flightLogRepository, airportRepository, preferencesRepository, pilotProgressRepository, offlineModeController, cacheDir)
                                 )
 
                                 com.example.focusflight.ui.screens.settings.SettingsScreen(
                                     viewModel = viewModel,
-                                    onBackClick = { navController.popBackStack() },
+                                    onBackClick = { navController.popBackStackFrom(entry) },
                                     // The home-base celebrations end their flow at the Hub rather
                                     // than dropping back onto Settings - same collapse-the-stack
                                     // pattern every other "done, go home" hand-off uses.
                                     onNavigateHome = {
-                                        navController.navigate(Screen.Hub.route) {
+                                        navController.navigateFrom(entry, Screen.Hub.route) {
                                             popUpTo(Screen.Hub.route) { inclusive = true }
                                         }
                                     }
@@ -757,6 +826,11 @@ class CesiumGameActivity : GameActivity() {
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT
         ))
+    }
+
+    override fun onDestroy() {
+        appScope.cancel()
+        super.onDestroy()
     }
 
 }

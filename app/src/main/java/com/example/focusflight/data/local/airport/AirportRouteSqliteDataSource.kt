@@ -18,25 +18,48 @@ class AirportRouteSqliteDataSource(private val context: Context) {
 
     private val dbPath = context.getDatabasePath(DATABASE_NAME)
 
+    /**
+     * Copies the bundled `flights.db` into the databases directory when it is missing *or* stale.
+     *
+     * Stale means the app was installed or updated since the last copy (tracked by the package's
+     * `lastUpdateTime` in a sidecar stamp file). Checking only for existence used to leave every
+     * upgraded install - and every backup restore - on whatever reference data it first copied,
+     * so fixes to the asset never reached existing pilots.
+     *
+     * The copy goes to a temp file that is renamed into place only once complete, so a process
+     * death mid-copy can never leave a truncated database behind that later launches would trust.
+     * A failed refresh keeps the previous copy; only a failure with no usable copy at all throws.
+     */
     @Synchronized
     fun ensureDatabaseCopied() {
-        if (!dbPath.exists()) {
-            dbPath.parentFile?.mkdirs()
-            try {
-                context.assets.open(DATABASE_NAME).use { inputStream ->
-                    FileOutputStream(dbPath).use { outputStream ->
-                        val buffer = ByteArray(8192)
-                        var length: Int
-                        while (inputStream.read(buffer).also { length = it } > 0) {
-                            outputStream.write(buffer, 0, length)
-                        }
-                    }
+        val stampFile = java.io.File(dbPath.parentFile, "$DATABASE_NAME.stamp")
+        val installStamp = runCatching {
+            context.packageManager.getPackageInfo(context.packageName, 0).lastUpdateTime.toString()
+        }.getOrDefault("")
+        val isCurrent = dbPath.exists() && installStamp.isNotEmpty() &&
+            runCatching { stampFile.readText() }.getOrNull() == installStamp
+        if (isCurrent) return
+
+        dbPath.parentFile?.mkdirs()
+        val tmpFile = java.io.File(dbPath.parentFile, "$DATABASE_NAME.tmp")
+        try {
+            context.assets.open(DATABASE_NAME).use { inputStream ->
+                FileOutputStream(tmpFile).use { outputStream ->
+                    inputStream.copyTo(outputStream, bufferSize = 8192)
+                    outputStream.fd.sync()
                 }
-                Log.d(TAG, "Database successfully copied to ${dbPath.absolutePath}")
-            } catch (e: IOException) {
-                Log.e(TAG, "Error copying database from assets", e)
-                throw RuntimeException("Failed to copy database asset", e)
             }
+            for (suffix in listOf("-journal", "-wal", "-shm")) {
+                java.io.File(dbPath.path + suffix).delete()
+            }
+            if (!tmpFile.renameTo(dbPath)) throw IOException("Could not move $tmpFile into place")
+            stampFile.writeText(installStamp)
+            Log.d(TAG, "Database copied to ${dbPath.absolutePath}")
+        } catch (e: IOException) {
+            tmpFile.delete()
+            Log.e(TAG, "Error copying database from assets", e)
+            // An older complete copy is still better than no reference data at all.
+            if (!dbPath.exists()) throw RuntimeException("Failed to copy database asset", e)
         }
     }
 
