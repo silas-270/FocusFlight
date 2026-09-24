@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -389,6 +390,11 @@ fun ChallengesScreen(
  * resume it directly - without this, starting a fresh Free flight would silently overwrite that
  * slot (same "fresh PausedFlight is the reset" behavior Story Mode's CheckIn already has),
  * stranding the paused one with no way back to it.
+ *
+ * With a flight paused, the top row relabels itself as the *new*-flight action and says what it
+ * costs, because that is what tapping it now does: it goes through a discard confirmation rather
+ * than straight to the Free Mode notice. It used to read "Free Mode" either way, so the only way to
+ * learn the difference was to be asked whether to throw a flight away.
  */
 @Composable
 private fun FreeModeRow(pausedFlight: PausedFlight?, onClick: () -> Unit, onResumeClick: () -> Unit) {
@@ -412,12 +418,27 @@ private fun FreeModeRow(pausedFlight: PausedFlight?, onClick: () -> Unit, onResu
                 modifier = Modifier.size(20.dp)
             )
             Spacer(modifier = Modifier.width(Spacing.Small))
-            Text(
-                text = "Free Mode",
-                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
-                color = OffWhite,
-                modifier = Modifier.weight(1f)
-            )
+            if (pausedFlight == null) {
+                Text(
+                    text = "Free Mode",
+                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+                    color = OffWhite,
+                    modifier = Modifier.weight(1f)
+                )
+            } else {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "New Free Flight",
+                        style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+                        color = OffWhite
+                    )
+                    Text(
+                        text = "Discards the paused flight below",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Haze
+                    )
+                }
+            }
             Icon(
                 imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
                 contentDescription = null,
@@ -470,11 +491,15 @@ private fun TabSwitcher(selected: ChallengesTab, onSelect: (ChallengesTab) -> Un
     Row(modifier = Modifier.fillMaxWidth()) {
         ChallengesTab.entries.forEach { entry ->
             val active = entry == selected
+            // heightIn keeps the whole tab a 48dp touch target; Bottom keeps the underline where
+            // it was, so the extra height only adds room above the label.
             Column(
                 modifier = Modifier
                     .weight(1f)
+                    .heightIn(min = 48.dp)
                     .clickable { onSelect(entry) }
                     .padding(vertical = Spacing.Small),
+                verticalArrangement = Arrangement.Bottom,
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(

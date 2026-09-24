@@ -140,7 +140,8 @@ Any landing that completes at least one challenge sends CONTINUE (from the Chall
 screen) to the Challenges screen instead of Hub — see [navigation.md](navigation.md). There, each
 uncelebrated completion plays a short animation, left to right in slot order: the card duplicates
 from its slot and grows to center stage with a confetti burst while the slot row immediately
-compacts to slide remaining challenges left and reveal the newly opened empty slot, then — on tap —
+compacts to slide remaining challenges left and reveal the newly opened empty slot, then — on tap
+or system back —
 flies up and vanishes into a new entry at the top of the log, at which point
 `LocalChallengeRepository.markCelebrated` finally flips the flag. `ChallengesViewModel.celebrationQueue`
 is computed **once**, from the database, when the ViewModel is constructed — not kept live — so a
