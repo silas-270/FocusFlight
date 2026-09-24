@@ -1,5 +1,6 @@
 package com.example.focusflight.ui.screens.challenges
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -136,7 +137,13 @@ internal fun ChallengeCompletionOverlay(
         val density = LocalDensity.current
         val centerXPx = with(density) { (maxWidth / 2).toPx() }
         val centerYPx = with(density) { (maxHeight / 2).toPx() }
-        val baseSlotWidthPx = slotRect?.width ?: with(density) { ((maxWidth - (Spacing.Large * 2)) / 3).toPx() }
+        // The divisor for every "how much bigger than its slot is the card now" scale below. A slot
+        // measured mid-layout can report a zero width, and x / 0f is Infinity (or NaN for 0 / 0),
+        // which `coerceAtLeast(1f)` lets straight through - so both sources are floored at 1px.
+        val baseSlotWidthPx = (
+            slotRect?.width?.takeIf { it > 0f }
+                ?: with(density) { ((maxWidth - (Spacing.Large * 2)) / 3).toPx() }
+            ).coerceAtLeast(1f)
 
         // Middle size between previous card size (CardSizeDp = 220.dp) and typical modal width (maxWidth - 48.dp)
         val buttonHeightPx = with(density) { 50.dp.toPx() }
@@ -306,17 +313,34 @@ internal fun ChallengeCompletionOverlay(
             }
         }
 
+        // Only while the scrim is actually visible. During INITIAL_DELAY it is fully transparent,
+        // and after IMPACT it has faded out again - intercepting taps then swallowed every touch
+        // on the screen (the app bar's back arrow included) with nothing on screen to explain why.
+        val interceptsInput = phase != CelebrationPhase.INITIAL_DELAY && phase != CelebrationPhase.IMPACT
+
+        // System back does what a scrim tap does: once presented it smashes the card into the log,
+        // and mid-animation it is swallowed. Without this, back fell through to whatever was
+        // underneath - an open modal, or the screen itself - while the celebration kept playing.
+        BackHandler(enabled = interceptsInput) { startClosingAnimation() }
+
         // Scrim - intercepts taps and initiates the smash into the log
+        val scrimInteractionSource = remember { MutableInteractionSource() }
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Midnight.copy(alpha = scrimAlpha))
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null
-                ) {
-                    startClosingAnimation()
-                }
+                .then(
+                    if (interceptsInput) {
+                        Modifier.clickable(
+                            interactionSource = scrimInteractionSource,
+                            indication = null
+                        ) {
+                            startClosingAnimation()
+                        }
+                    } else {
+                        Modifier
+                    }
+                )
         )
 
         // ── Accent Glow around centered card (Square shape with rounded corners matching the card, native blur) ──

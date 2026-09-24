@@ -1,7 +1,11 @@
 package com.example.focusflight.ui.screens.challenges
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.indication
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,6 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -111,10 +116,28 @@ internal fun ChallengePickerModal(
 ) {
     var step by remember { mutableStateOf<PickerStep>(PickerStep.TypeGrid) }
 
+    // One level up the wizard - what the in-card back arrows do, and (below) what system back does.
+    fun stepBack() {
+        when (val current = step) {
+            PickerStep.TypeGrid -> Unit
+            is PickerStep.CuratedList -> step = PickerStep.TypeGrid
+            is PickerStep.CreateCustom -> {
+                viewModel.clearRouteSearch()
+                step = PickerStep.CuratedList(current.type)
+            }
+        }
+    }
+
+    // A scrim tap still closes the whole picker, the same as every other ScrimCardModal: tapping
+    // outside the card is an explicit "not now". System back is different - it has to agree with the
+    // back arrow on screen, which steps back one level, so it only closes from the first step.
     ScrimCardModal(onScrimTap = {
         viewModel.clearRouteSearch()
         onDismiss()
     }) {
+        // Composed after ScrimCardModal's own BackHandler, so it takes priority while enabled.
+        BackHandler(enabled = step != PickerStep.TypeGrid) { stepBack() }
+
         when (val current = step) {
             PickerStep.TypeGrid -> {
                 ModalTitle("START A CHALLENGE")
@@ -167,21 +190,7 @@ internal fun ChallengePickerModal(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(32.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable { step = PickerStep.TypeGrid },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
-                            contentDescription = "Back to types",
-                            tint = Amber,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(Spacing.Small))
+                    PickerBackButton(contentDescription = "Back to types", onClick = { stepBack() })
                     ModalTitle(challengeTypeLabel(currentType))
                 }
                 Spacer(modifier = Modifier.height(16.dp))
@@ -269,24 +278,7 @@ internal fun ChallengePickerModal(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(32.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable {
-                                viewModel.clearRouteSearch()
-                                step = PickerStep.CuratedList(currentType)
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
-                            contentDescription = "Back to list",
-                            tint = Amber,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(Spacing.Small))
+                    PickerBackButton(contentDescription = "Back to list", onClick = { stepBack() })
                     ModalTitle("CUSTOM ${challengeTypeLabel(currentType)}")
                 }
                 Spacer(modifier = Modifier.height(Spacing.Medium))
@@ -305,6 +297,43 @@ internal fun ChallengePickerModal(
                     ChallengeType.SET_COMPLETION -> Unit
                 }
             }
+        }
+    }
+}
+
+/**
+ * The picker's in-card back arrow. 48dp to touch, but the pressed highlight stays the old 32dp
+ * rounded square. The 48dp box is pulled 8dp left (into the card's padding) and reports 8dp less
+ * width, so the arrow and the title after it sit exactly where they did with the old 32dp box and
+ * its 8dp spacer.
+ */
+@Composable
+private fun PickerBackButton(contentDescription: String, onClick: () -> Unit) {
+    val interactionSource = remember { MutableInteractionSource() }
+    Box(
+        modifier = Modifier
+            .layout { measurable, constraints ->
+                val placeable = measurable.measure(constraints)
+                val pullPx = 8.dp.roundToPx()
+                layout(placeable.width - pullPx, placeable.height) { placeable.place(-pullPx, 0) }
+            }
+            .size(48.dp)
+            .clickable(interactionSource = interactionSource, indication = null, onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(32.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .indication(interactionSource, LocalIndication.current),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
+                contentDescription = contentDescription,
+                tint = Amber,
+                modifier = Modifier.size(20.dp)
+            )
         }
     }
 }
@@ -433,11 +462,16 @@ private fun CustomRouteModalForm(
                     size = ButtonSize.Compact
                 ) { onCreate(origin, dest) }
                 Spacer(modifier = Modifier.height(Spacing.Small))
+                // Styled like "Create your own…" - bold Amber is this picker's inline-link look.
+                // In Haze it read as one more caption, not something you could tap.
                 Text(
                     text = "Change destination",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Haze,
-                    modifier = Modifier.clickable { pickedDest = null }
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                    color = Amber,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { pickedDest = null }
+                        .padding(vertical = Spacing.Small)
                 )
             }
         }
@@ -587,8 +621,14 @@ internal fun ChallengeInfoModal(
 
         Spacer(modifier = Modifier.height(Spacing.Medium))
         if (challenge.type == ChallengeType.ROUTE) {
+            // onContinue resumes the paused leg when there is one and books a fresh leg otherwise,
+            // so the label says which of the two is about to happen.
             FocusButton(
-                text = if (isFocused) "PAUSE CHALLENGE" else "CONTINUE CHALLENGE",
+                text = when {
+                    isFocused -> "PAUSE CHALLENGE"
+                    challenge.pausedFlight != null -> "RESUME CHALLENGE"
+                    else -> "CONTINUE CHALLENGE"
+                },
                 onClick = if (isFocused) onPause else onContinue,
                 variant = ButtonVariant.Primary,
                 style = ButtonStyle.Filled,
