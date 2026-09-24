@@ -3,6 +3,7 @@ package com.example.focusflight.data.repository
 import android.content.Context
 import android.content.SharedPreferences
 import com.example.focusflight.data.model.FlightMode
+import com.example.focusflight.data.model.FlightSortOrder
 import com.example.focusflight.data.model.PausedFlight
 import com.example.focusflight.data.model.ThemeMode
 
@@ -27,6 +28,7 @@ class PreferencesRepository(private val prefs: SharedPreferences) {
         private const val KEY_ROUTE_LINE_MODE = "route_line_mode"
         private const val KEY_MAP_STYLE = "map_style"
         private const val KEY_OFFLINE_DATA_SAVER = "offline_data_saver"
+        private const val KEY_LOGBOOK_SORT_ORDER = "logbook_sort_order"
 
         // docs/modes.md's two distinct home-base cooldowns (see HomeBaseCooldown) -
         // deliberately two separate keys, not one, since the two actions' cooldowns reset
@@ -76,6 +78,18 @@ class PreferencesRepository(private val prefs: SharedPreferences) {
 
     fun setOfflineDataSaverEnabled(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_OFFLINE_DATA_SAVER, enabled).apply()
+    }
+
+    /** The Passport logbook's sort order, so it survives the screen being reopened (its
+     *  ViewModel does not). Defaults to [FlightSortOrder.DATE_DESC], and an unknown stored name -
+     *  a since-removed enum entry - falls back to it rather than throwing. */
+    fun getLogbookSortOrder(): FlightSortOrder {
+        val raw = prefs.getString(KEY_LOGBOOK_SORT_ORDER, null) ?: return FlightSortOrder.DATE_DESC
+        return runCatching { FlightSortOrder.valueOf(raw) }.getOrDefault(FlightSortOrder.DATE_DESC)
+    }
+
+    fun setLogbookSortOrder(order: FlightSortOrder) {
+        prefs.edit().putString(KEY_LOGBOOK_SORT_ORDER, order.name).apply()
     }
 
     fun isOnboardingCompleted(): Boolean {
