@@ -11,6 +11,21 @@ import com.example.focusflight.data.repository.AirportRepository
  */
 class PendingFlightLoader(private val airportRepository: AirportRepository) {
 
+    /** The flight this loader last pushed to the engine in this process, or null if none yet. */
+    @Volatile
+    private var loadedFlightKey: String? = null
+
+    /**
+     * Loads the flight only if it isn't already the one in the engine. Check-In and In-Flight call
+     * this on entry: normally the booking/resume path has already loaded it and this is a no-op,
+     * but when Navigation restores either screen after process death the fresh engine is empty
+     * (no aircraft, no route, zeroed telemetry) and nothing else would ever load it.
+     */
+    suspend fun ensureLoaded(originIata: String, destIata: String, durationMin: Int): Boolean {
+        if (loadedFlightKey == keyOf(originIata, destIata, durationMin)) return true
+        return loadPendingFlight(originIata, destIata, durationMin)
+    }
+
     suspend fun loadPendingFlight(originIata: String, destIata: String, durationMin: Int): Boolean {
         val origin = airportRepository.getAirportByIata(originIata) ?: return false
         val dest = airportRepository.getAirportByIata(destIata) ?: return false
@@ -39,10 +54,12 @@ class PendingFlightLoader(private val airportRepository: AirportRepository) {
             origin.lon, origin.lat, dest.lon, dest.lat, (durationMin * 60 * 1000).toLong()
         )
         CesiumLiveJniBridge.nativeLoadPendingFlight()
+        loadedFlightKey = keyOf(originIata, destIata, durationMin)
         return true
     }
 
     private companion object {
         const val FEET_TO_METERS = 0.3048
+        fun keyOf(originIata: String, destIata: String, durationMin: Int) = "$originIata-$destIata-$durationMin"
     }
 }

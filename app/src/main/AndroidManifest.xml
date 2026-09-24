@@ -18,7 +18,7 @@
         <activity
             android:name=".CesiumGameActivity"
             android:theme="@style/Theme.FocusFlight.Starting"
-            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|fontScale|density|locale|layoutDirection|colorMode|fontWeightAdjustment"
             android:screenOrientation="fullSensor"
             android:exported="true">
             <meta-data

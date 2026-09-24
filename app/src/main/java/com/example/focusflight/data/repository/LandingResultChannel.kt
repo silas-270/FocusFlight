@@ -128,7 +128,17 @@ class LandingResultChannel {
 
     /** Call at the start of every new flight (`InFlightViewModel.init`) so a stale result from a
      *  previous flight can never leak into this one's landing sequence. */
+    /**
+     * False until a flight in *this process* has reset the channel for its landing. A fresh
+     * channel after process death is `Pending` forever - nothing will ever publish to it - so the
+     * arrival screen reads this to skip waiting on a result that cannot arrive.
+     */
+    @Volatile
+    var isArmed: Boolean = false
+        private set
+
     fun reset() {
+        isArmed = true
         _result.value = LandingResult.Pending
     }
 

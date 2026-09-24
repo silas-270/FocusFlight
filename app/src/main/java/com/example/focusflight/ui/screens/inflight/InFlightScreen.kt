@@ -205,15 +205,8 @@ fun InFlightScreen(
         viewModel.enginePower.collect { engineSoundEngine.setEnginePower(it) }
     }
 
-    // --- Screen Wake Lock ---
+    // Screen wake lock: owned by CesiumGameActivity, scoped to the flight-session routes.
     val context = LocalContext.current
-    DisposableEffect(Unit) {
-        val activity = context as? android.app.Activity
-        activity?.window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        onDispose {
-            activity?.window?.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        }
-    }
 
 
     // --- Lifecycle Focus Observer ---
@@ -221,6 +214,9 @@ fun InFlightScreen(
     // rememberUpdatedState so the observer below (created once per lifecycleOwner, not per
     // recomposition) always reads the latest toggle instead of whatever it was when first attached.
     val currentEngineSoundEnabled by rememberUpdatedState(engineSoundEnabled)
+    // The leave-flight modal pauses the timer on purpose; returning from the background must not
+    // silently restart it behind that modal. Only RESUME ends a user-initiated pause.
+    val currentShowExitConfirm by rememberUpdatedState(showExitConfirm)
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_STOP) {
@@ -228,7 +224,7 @@ fun InFlightScreen(
                 viewModel.saveCameraState()
                 engineSoundEngine.stop()
             } else if (event == Lifecycle.Event.ON_START) {
-                viewModel.startTimer()
+                if (!currentShowExitConfirm) viewModel.startTimer()
                 if (currentEngineSoundEnabled) {
                     engineSoundEngine.start()
                 }
