@@ -198,7 +198,9 @@ fun SettingsScreen(
                     showWelcomeHome = false
                     onNavigateHome()
                 },
-                inlineHero = { HomeBaseSetHero() }
+                // The aircraft settling in above the code - this is an arrival, not a new base,
+                // so it no longer borrows the change-home-base tower mark.
+                hero = { ReturnHomeHero() }
             )
         }
 
