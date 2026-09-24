@@ -4,7 +4,7 @@ import com.example.focusflight.data.repository.AirportRepository
 
 /**
  * Looks up the origin/destination airports and their longest runways, then
- * pushes them across the JNI bridge as the flight the Rust engine should
+ * pushes them (with the field elevations) across the JNI bridge as the flight the Rust engine should
  * load next. Single owner of that lookup-and-push sequence so the two
  * navigation call sites (resuming a flight from the Hub, confirming a route
  * in Flight Search) can't drift from each other.
@@ -30,10 +30,19 @@ class PendingFlightLoader(private val airportRepository: AirportRepository) {
             allRunways.map { it.heLat }.toDoubleArray(),
             allRunways.map { it.heLon }.toDoubleArray()
         )
+        // The engine fits the aircraft onto whatever ground it draws near each airport, so
+        // the real elevations are right in every map style, flat or with relief.
+        CesiumLiveJniBridge.nativeSetFieldElevations(
+            origin.elevationFt * FEET_TO_METERS, dest.elevationFt * FEET_TO_METERS
+        )
         CesiumLiveJniBridge.nativeSetPendingFlight(
             origin.lon, origin.lat, dest.lon, dest.lat, (durationMin * 60 * 1000).toLong()
         )
         CesiumLiveJniBridge.nativeLoadPendingFlight()
         return true
+    }
+
+    private companion object {
+        const val FEET_TO_METERS = 0.3048
     }
 }

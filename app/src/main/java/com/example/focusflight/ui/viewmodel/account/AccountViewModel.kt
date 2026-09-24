@@ -10,6 +10,8 @@ import com.example.focusflight.data.model.FlightSortOrder
 import com.example.focusflight.data.model.FlightStats
 import com.example.focusflight.data.model.Tour
 import com.example.focusflight.data.model.HomeBaseCooldown
+import com.example.focusflight.data.network.NetworkMode
+import com.example.focusflight.data.network.OfflineModeController
 import com.example.focusflight.data.repository.PilotProgressRepository
 import com.example.focusflight.data.repository.AirportRepository
 import com.example.focusflight.data.repository.FlightLogRepository
@@ -121,6 +123,7 @@ class AccountViewModel(
     private val airportRepository: AirportRepository,
     private val preferencesRepository: PreferencesRepository,
     private val pilotProgressRepository: PilotProgressRepository,
+    private val offlineModeController: OfflineModeController,
     private val cacheDir: java.io.File
 ) : ViewModel() {
 
@@ -215,6 +218,14 @@ class AccountViewModel(
         _themeMode.value = mode
         com.example.focusflight.ui.theme.ThemeModeHolder.current = mode
         preferencesRepository.setThemeMode(mode)
+    }
+
+    /** Current offline state, for the Settings "Offline maps" row's subtitle. */
+    val networkMode: StateFlow<NetworkMode> = offlineModeController.mode
+    val offlineDataSaverEnabled: StateFlow<Boolean> = offlineModeController.dataSaverEnabled
+
+    fun setOfflineDataSaverEnabled(enabled: Boolean) {
+        offlineModeController.setDataSaverEnabled(enabled)
     }
 
     // The logbook used to render from a Pager here while its headers were computed from
@@ -445,12 +456,13 @@ class AccountViewModelFactory(
     private val airportRepository: AirportRepository,
     private val preferencesRepository: PreferencesRepository,
     private val pilotProgressRepository: PilotProgressRepository,
+    private val offlineModeController: OfflineModeController,
     private val cacheDir: java.io.File
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(AccountViewModel::class.java)) {
-            return AccountViewModel(context, userRepository, flightLogRepository, airportRepository, preferencesRepository, pilotProgressRepository, cacheDir) as T
+            return AccountViewModel(context, userRepository, flightLogRepository, airportRepository, preferencesRepository, pilotProgressRepository, offlineModeController, cacheDir) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

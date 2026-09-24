@@ -73,6 +73,7 @@ import com.example.focusflight.ui.components.DiscardFlightConfirmModal
 import com.example.focusflight.ui.components.FocusButton
 import com.example.focusflight.ui.components.FocusCard
 import com.example.focusflight.ui.components.FocusStatItem
+import com.example.focusflight.ui.components.OfflineBadge
 import com.example.focusflight.ui.components.PrimaryActionButton
 import com.example.focusflight.ui.components.challengeTypeLabel
 import com.example.focusflight.ui.components.icon
@@ -103,6 +104,7 @@ fun HubScreen(
     val stats by viewModel.flightStats.collectAsState()
     val recentFlights by viewModel.recentFlights.collectAsState()
     val routeMapPath by viewModel.routeMapPath.collectAsState()
+    val networkMode by viewModel.networkMode.collectAsState()
 
     // Hub's ViewModel (and its data) is loaded once in init, but the Hub's own back-stack entry
     // survives a popBackStack() from Account/Passport - so returning from there after using
@@ -350,6 +352,12 @@ fun HubScreen(
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Only visible while offline (no connection, or data saver on in Settings).
+                    if (networkMode.isOffline) {
+                        OfflineBadge(mode = networkMode)
+                        Spacer(modifier = Modifier.width(Spacing.Small))
+                    }
+
                     // Challenges: Free Mode entry, the challenge slots, and achievements
                     Box(
                         modifier = Modifier

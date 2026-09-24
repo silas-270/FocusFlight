@@ -4,6 +4,17 @@ import android.util.Log
 import java.io.File
 
 object MapImageCache {
+    private const val PREFIX = "hub_route_map_"
+
+    /**
+     * Bumped whenever the look of headless renders changes, so stale PNGs are never reused.
+     * v2: globes are drawn from the bundled offline vector map instead of CARTO tiles.
+     */
+    const val RENDER_VERSION = 2
+
+    /** Cache file name for the route map centred on [iata]. */
+    fun fileNameFor(iata: String): String = "${PREFIX}v${RENDER_VERSION}_$iata.png"
+
     /**
      * IATA codes whose rendered map must survive pruning regardless of age.
      *
@@ -27,16 +38,25 @@ object MapImageCache {
      * [pinnedIatas] are excluded from both the count and the deletion candidates: they are kept
      * *in addition to* [maxFiles], not out of that budget, so pinning can never squeeze the
      * normal cache down to nothing.
+     *
+     * Renders from an older [RENDER_VERSION] are deleted outright first; they would never be
+     * reused anyway.
      */
     fun pruneMapCache(cacheDir: File, maxFiles: Int = 5) {
         try {
-            val pinnedFileNames = pinnedIatas.map { "hub_route_map_$it.png" }.toSet()
-            val mapFiles = cacheDir.listFiles { file ->
-                file.isFile &&
-                    file.name.startsWith("hub_route_map_") &&
-                    file.name.endsWith(".png") &&
-                    file.name !in pinnedFileNames
+            val currentPrefix = "${PREFIX}v${RENDER_VERSION}_"
+            val allMapFiles = cacheDir.listFiles { file ->
+                file.isFile && file.name.startsWith(PREFIX) && file.name.endsWith(".png")
             } ?: return
+
+            val (currentFiles, staleFiles) = allMapFiles.partition { it.name.startsWith(currentPrefix) }
+            for (stale in staleFiles) {
+                val deleted = stale.delete()
+                Log.d("MapImageCache", "Removed outdated route map render: ${stale.name} (success: $deleted)")
+            }
+
+            val pinnedFileNames = pinnedIatas.map(::fileNameFor).toSet()
+            val mapFiles = currentFiles.filter { it.name !in pinnedFileNames }
 
             if (mapFiles.size > maxFiles) {
                 // Sort by lastModified in ascending order (oldest first)

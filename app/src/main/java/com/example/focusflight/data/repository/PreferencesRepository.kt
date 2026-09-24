@@ -23,6 +23,10 @@ class PreferencesRepository(private val prefs: SharedPreferences) {
         private const val KEY_PAUSED_FLIGHT = "paused_flight"
         private const val KEY_PAUSED_FREE_FLIGHT = "paused_free_flight"
         private const val KEY_THEME_MODE = "theme_mode"
+        private const val KEY_ENGINE_SOUND_ENABLED = "engine_sound_enabled"
+        private const val KEY_ROUTE_LINE_MODE = "route_line_mode"
+        private const val KEY_MAP_STYLE = "map_style"
+        private const val KEY_OFFLINE_DATA_SAVER = "offline_data_saver"
 
         // docs/modes.md's two distinct home-base cooldowns (see HomeBaseCooldown) -
         // deliberately two separate keys, not one, since the two actions' cooldowns reset
@@ -40,6 +44,38 @@ class PreferencesRepository(private val prefs: SharedPreferences) {
 
     fun setThemeMode(mode: ThemeMode) {
         prefs.edit().putString(KEY_THEME_MODE, mode.name).apply()
+    }
+
+    /** Defaults to false - synthesized jet-engine noise during an active flight is opt-in until
+     *  the pilot enables it in Flight Settings. */
+    fun getEngineSoundEnabled(): Boolean = prefs.getBoolean(KEY_ENGINE_SOUND_ENABLED, false)
+
+    fun setEngineSoundEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_ENGINE_SOUND_ENABLED, enabled).apply()
+    }
+
+    /** Defaults to 0 (Full) - the complete route line is drawn across the globe until the pilot
+     *  chooses Window (1) or Hidden (2) in Flight Settings. */
+    fun getRouteLineMode(): Int = prefs.getInt(KEY_ROUTE_LINE_MODE, 0)
+
+    fun setRouteLineMode(mode: Int) {
+        prefs.edit().putInt(KEY_ROUTE_LINE_MODE, mode).apply()
+    }
+
+    /** Defaults to 0 (Standard) - the dark basemap on the flat globe, until the pilot chooses
+     *  Satellite + Terrain (1) or Offline (2) in Flight Settings. */
+    fun getMapStyle(): Int = prefs.getInt(KEY_MAP_STYLE, 0)
+
+    fun setMapStyle(style: Int) {
+        prefs.edit().putInt(KEY_MAP_STYLE, style).apply()
+    }
+
+    /** Defaults to false - the app goes offline on its own only when there is no connection,
+     *  until the pilot turns on "Offline maps" in Settings to save data even while connected. */
+    fun isOfflineDataSaverEnabled(): Boolean = prefs.getBoolean(KEY_OFFLINE_DATA_SAVER, false)
+
+    fun setOfflineDataSaverEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_OFFLINE_DATA_SAVER, enabled).apply()
     }
 
     fun isOnboardingCompleted(): Boolean {

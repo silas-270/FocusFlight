@@ -22,6 +22,7 @@ change wrong. There is no changelog here; git is the changelog.
 |---|---|
 | [architecture.md](architecture.md) | You need the shape of the whole thing: what the app does, its layers, its build, where a given concept lives |
 | [engine.md](engine.md) | You are touching CesiumRS, the JNI/JNA bridges, the native build, or map rendering |
+| [engine-sound.md](engine-sound.md) | You are touching the synthesised engine noise, the thrust schedule it follows, or anything that reads flight telemetry for audio |
 | [navigation.md](navigation.md) | You are adding a screen, changing a route, or threading an argument between screens |
 | [core-loop.md](core-loop.md) | You are touching the book → check-in → fly → land session, or the post-landing pipeline |
 | [modes.md](modes.md) | You are touching Story/Free/Challenge behaviour, the isolation rules, or the home base |

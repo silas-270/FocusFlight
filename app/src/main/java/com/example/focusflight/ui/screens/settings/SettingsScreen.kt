@@ -55,6 +55,8 @@ fun SettingsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val themeMode by viewModel.themeMode.collectAsState()
+    val networkMode by viewModel.networkMode.collectAsState()
+    val offlineDataSaverEnabled by viewModel.offlineDataSaverEnabled.collectAsState()
     val systemInDarkTheme = isSystemInDarkTheme()
     val isLightMode = when (themeMode) {
         ThemeMode.LIGHT -> true
@@ -120,7 +122,13 @@ fun SettingsScreen(
                         }
                     )
                 }
-
+                item {
+                    OfflineMapsPreferenceRow(
+                        dataSaverEnabled = offlineDataSaverEnabled,
+                        networkMode = networkMode,
+                        onToggle = viewModel::setOfflineDataSaverEnabled
+                    )
+                }
 
                 item { SectionHeader(title = "HOME BASE") }
                 item {

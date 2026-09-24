@@ -33,12 +33,17 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.AirplanemodeActive
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Cloud
+import androidx.compose.material.icons.outlined.CloudOff
+import androidx.compose.material.icons.outlined.DataSaverOn
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.outlined.Flight
+import androidx.compose.material.icons.outlined.LinearScale
+import androidx.compose.material.icons.outlined.Route
 import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material.icons.outlined.Height
 import androidx.compose.material.icons.outlined.Schedule
@@ -85,10 +90,13 @@ import androidx.lifecycle.LifecycleEventObserver
 import com.example.focusflight.R
 import com.example.focusflight.data.model.Airport
 import com.example.focusflight.ui.components.CaptionLabel
+import com.example.focusflight.ui.components.OfflineBadge
 import com.example.focusflight.ui.components.ModalButtonRow
 import com.example.focusflight.ui.components.ModalTitle
 import com.example.focusflight.ui.components.ScrimCardModal
 import com.example.focusflight.ui.components.SpeedMotionLayer
+import com.example.focusflight.data.network.NetworkMode
+import com.example.focusflight.domain.NetworkNotice
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -109,67 +117,10 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import android.content.res.Configuration
-import android.media.AudioFormat
-import android.media.AudioManager
-import android.media.AudioTrack
 import androidx.compose.ui.graphics.asAndroidPath
+import com.example.focusflight.audio.EngineSoundEngine
+import com.example.focusflight.engine.live.CesiumLiveJniBridge
 import kotlin.math.roundToInt
-import kotlin.math.sin
-
-// --- Helper class for programmatically generated low-frequency cabin noise ---
-class EngineSoundManager {
-    private var audioTrack: AudioTrack? = null
-    private var isPlaying = false
-
-    fun start() {
-        if (isPlaying) return
-        isPlaying = true
-        Thread {
-            val sampleRate = 44100
-            val numSamples = 44100
-            val generatedSnd = ByteArray(2 * numSamples)
-            
-            // Mix 80Hz + 40Hz sub-carrier waves with white noise for realistic cabin rumble
-            for (i in 0 until numSamples) {
-                val t = i.toDouble() / sampleRate
-                val angle1 = 2.0 * Math.PI * 80.0 * t
-                val angle2 = 2.0 * Math.PI * 40.0 * t
-                val sampleValue = (sin(angle1) * 0.7 + sin(angle2) * 0.2 + (Math.random() - 0.5) * 0.1)
-                
-                val valInt = (sampleValue * 32767).toInt().toShort()
-                generatedSnd[2 * i] = (valInt.toInt() and 0x00ff).toByte()
-                generatedSnd[2 * i + 1] = ((valInt.toInt() and 0xff00) ushr 8).toByte()
-            }
-
-            try {
-                audioTrack = AudioTrack(
-                    AudioManager.STREAM_MUSIC,
-                    sampleRate,
-                    AudioFormat.CHANNEL_OUT_MONO,
-                    AudioFormat.ENCODING_PCM_16BIT,
-                    generatedSnd.size,
-                    AudioTrack.MODE_STATIC
-                )
-                audioTrack?.write(generatedSnd, 0, generatedSnd.size)
-                audioTrack?.setLoopPoints(0, numSamples, -1)
-                audioTrack?.play()
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }.start()
-    }
-
-    fun stop() {
-        isPlaying = false
-        try {
-            audioTrack?.stop()
-            audioTrack?.release()
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-        audioTrack = null
-    }
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -182,6 +133,7 @@ fun InFlightScreen(
     val destAirport by viewModel.destAirport.collectAsState()
     val routeDetails by viewModel.routeDetails.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
+    val engineSoundEnabled by viewModel.isEngineSoundEnabled.collectAsState()
 
     var showSettings by remember { mutableStateOf(false) }
     var showExitConfirm by remember { mutableStateOf(false) }
@@ -202,32 +154,55 @@ fun InFlightScreen(
     }
 
     var sheetExpanded by remember { mutableStateOf(false) }
-    var soundEnabled by remember { mutableStateOf(false) }
     // Defaults to Chase for a brand-new flight; seeded from the restored mode when resuming
     // one that was previously saved with a camera pose (see InFlightViewModel.init).
     var selectedCamera by rememberSaveable { mutableStateOf(uiState.restoredCameraMode ?: 1) }
-    var selectedMapStyle by rememberSaveable { mutableStateOf(0) } // Default to STANDARD
+    val selectedMapStyle by viewModel.mapStyle.collectAsState()
+    // What the globe really shows: the pilot's choice, or the offline map while offline.
+    val effectiveMapStyle by viewModel.effectiveMapStyle.collectAsState()
+    val networkMode by viewModel.networkMode.collectAsState()
+    val networkNotice by viewModel.networkNotice.collectAsState()
 
     LaunchedEffect(selectedCamera) {
         com.example.focusflight.engine.live.CesiumLiveJniBridge.nativeSetCameraMode(selectedCamera)
     }
 
-    LaunchedEffect(selectedMapStyle) {
-        com.example.focusflight.engine.live.CesiumLiveJniBridge.nativeSetMapStyle(selectedMapStyle)
+    LaunchedEffect(effectiveMapStyle) {
+        com.example.focusflight.engine.live.CesiumLiveJniBridge.nativeSetMapStyle(effectiveMapStyle)
     }
 
-    val soundManager = remember { EngineSoundManager() }
+    val routeLineMode by viewModel.routeLineMode.collectAsState()
 
-    // --- Audio Hum Control ---
-    DisposableEffect(soundEnabled) {
-        if (soundEnabled) {
-            soundManager.start()
+    LaunchedEffect(routeLineMode) {
+        com.example.focusflight.engine.live.CesiumLiveJniBridge.nativeSetRouteLineMode(
+            mode = routeLineMode,
+            behindNm = com.example.focusflight.engine.live.CesiumLiveJniBridge.DEFAULT_ROUTE_LINE_BEHIND_NM,
+            aheadNm = com.example.focusflight.engine.live.CesiumLiveJniBridge.DEFAULT_ROUTE_LINE_AHEAD_NM
+        )
+    }
+
+    val engineSoundEngine = remember { EngineSoundEngine() }
+
+    // --- Engine Sound Control ---
+    // Foreground-only, like the wake lock below: stopped/restarted by the lifecycle observer on
+    // ON_STOP/ON_START, not kept alive in the background (no foreground Service exists for that).
+    DisposableEffect(engineSoundEnabled) {
+        if (engineSoundEnabled) {
+            engineSoundEngine.start()
         } else {
-            soundManager.stop()
+            engineSoundEngine.stop()
         }
         onDispose {
-            soundManager.stop()
+            engineSoundEngine.stop()
         }
+    }
+
+    // Collected rather than read as state: engine power changes on every 33 ms tick, so keying a
+    // LaunchedEffect on it would start a fresh coroutine 30 times a second, and collecting it into
+    // Compose state would drag the whole screen into recomposing at that rate for a value nothing
+    // on screen draws. Handing it straight to the audio thread costs neither.
+    LaunchedEffect(engineSoundEngine) {
+        viewModel.enginePower.collect { engineSoundEngine.setEnginePower(it) }
     }
 
     // --- Screen Wake Lock ---
@@ -243,13 +218,20 @@ fun InFlightScreen(
 
     // --- Lifecycle Focus Observer ---
     val lifecycleOwner = LocalLifecycleOwner.current
+    // rememberUpdatedState so the observer below (created once per lifecycleOwner, not per
+    // recomposition) always reads the latest toggle instead of whatever it was when first attached.
+    val currentEngineSoundEnabled by rememberUpdatedState(engineSoundEnabled)
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_STOP) {
                 viewModel.pauseTimer()
                 viewModel.saveCameraState()
+                engineSoundEngine.stop()
             } else if (event == Lifecycle.Event.ON_START) {
                 viewModel.startTimer()
+                if (currentEngineSoundEnabled) {
+                    engineSoundEngine.start()
+                }
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -544,6 +526,16 @@ fun InFlightScreen(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // Only while offline. Scenic mode keeps just the icon, on glass like the
+                    // settings button, so the cleared-down HUD stays uncluttered.
+                    if (networkMode.isOffline) {
+                        if (scenicMode) {
+                            ScenicOfflineIndicator(networkMode)
+                        } else {
+                            OfflineBadge(mode = networkMode)
+                        }
+                    }
+
                     // Debug: jump straight to landing. Still scaffolding - see
                     // DEV_FEATURES_TO_REVERT.md. Restored because the challenge
                     // advance/completion beats are otherwise only reachable by sitting
@@ -592,6 +584,12 @@ fun InFlightScreen(
                     }
                 }
             }
+
+            // --- Network notice: says why the map just switched on its own ---
+            NetworkNoticePill(
+                notice = networkNotice,
+                onShown = viewModel::consumeNetworkNotice
+            )
 
             // --- Scenic mode: timer-only glass pill replacing the bottom sheet ---
             if (scenicMode) {
@@ -658,15 +656,26 @@ fun InFlightScreen(
     FlightSettingsOverlay(
         visible = showSettings,
         selectedCamera = selectedCamera,
-        selectedMapStyle = selectedMapStyle,
+        mapStyle = MapStylePickerState(
+            preferred = selectedMapStyle,
+            effective = effectiveMapStyle,
+            networkMode = networkMode
+        ),
+        selectedRouteLineMode = routeLineMode,
+        engineSoundEnabled = engineSoundEnabled,
         onCameraSelected = {
             selectedCamera = it
             showSettings = false
         },
         onMapStyleSelected = {
-            selectedMapStyle = it
+            viewModel.setMapStyle(it)
             showSettings = false
         },
+        onRouteLineModeSelected = {
+            viewModel.setRouteLineMode(it)
+            showSettings = false
+        },
+        onEngineSoundToggled = viewModel::setEngineSoundEnabled,
         onDismiss = { showSettings = false },
         onPauseRequested = {
             showSettings = false
@@ -674,6 +683,23 @@ fun InFlightScreen(
             showExitConfirm = true
         }
     )
+
+    // --- TEMPORARY debug-only engine sound scrubber ---
+    // Lets you drag through the whole flight instantly to audition enginePower/altitude/speed
+    // at any point without waiting real time. BuildConfig.DEBUG-gated so it can never ship, and
+    // meant to be deleted once the engine sound tuning is done.
+    if (com.example.focusflight.BuildConfig.DEBUG) {
+        EngineSoundDebugScrubber(
+            progress = uiState.progress,
+            altitudeMeters = uiState.altitudeMeters,
+            speedKmh = uiState.speedKmh,
+            enginePower = viewModel.enginePower,
+            onScrub = { progress ->
+                viewModel.pauseTimer()
+                viewModel.scrubProgress(progress)
+            }
+        )
+    }
 
     // --- Layer 2 Exit/Pause confirmation Dialog overlay ---
     if (showExitConfirm) {
@@ -747,17 +773,192 @@ private fun cameraViewOptions(): List<CameraOption> = listOf(
     CameraOption("COCKPIT", 2, Icons.Outlined.Flight)
 )
 
-// Label to the map-style id understood by nativeSetMapStyle(): 0 is the CARTO
-// dark basemap, 1 is the Esri satellite imagery layer.
-private val MapStyleOptions = listOf("MAP" to 0, "SATELLITE" to 1)
+private data class RouteLineOption(val label: String, val mode: Int, val icon: ImageVector)
+
+private fun routeLineOptions(): List<RouteLineOption> = listOf(
+    RouteLineOption("FULL", 0, Icons.Outlined.Route),
+    RouteLineOption("WINDOW", 1, Icons.Outlined.LinearScale),
+    RouteLineOption("HIDDEN", 2, Icons.Outlined.VisibilityOff)
+)
+
+// Label to the map-style id understood by nativeSetMapStyle(): the CARTO dark basemap,
+// Esri imagery on 3D relief, and the bundled vector map that needs no network.
+private val MapStyleOptions = listOf(
+    "OFFLINE" to CesiumLiveJniBridge.MAP_STYLE_OFFLINE,
+    "MAP" to CesiumLiveJniBridge.MAP_STYLE_STANDARD,
+    "SAT+3D" to CesiumLiveJniBridge.MAP_STYLE_SATELLITE_TERRAIN
+)
+
+private fun mapStyleLabel(style: Int): String =
+    MapStyleOptions.firstOrNull { it.second == style }?.first ?: "MAP"
+
+// How dimmed a settings option is while it can't be picked (network map styles offline).
+private const val DisabledOptionAlpha = 0.4f
+
+/** What the map-style picker shows. [effective] is highlighted, since that is what the globe
+ *  really renders. While offline only the offline map can be picked; [preferred] is the
+ *  pilot's own choice that returns once the app is online again. */
+private data class MapStylePickerState(
+    val preferred: Int,
+    val effective: Int,
+    val networkMode: NetworkMode
+) {
+    fun isActive(style: Int): Boolean = effective == style
+
+    fun isAvailable(style: Int): Boolean =
+        !networkMode.isOffline || style == CesiumLiveJniBridge.MAP_STYLE_OFFLINE
+
+    /** One line under the picker explaining the lock, or null when online. */
+    val offlineHint: String?
+        get() = when (networkMode) {
+            NetworkMode.ONLINE -> null
+            NetworkMode.OFFLINE_DATA_SAVER -> "Offline maps is on in Settings"
+            NetworkMode.OFFLINE_NO_CONNECTION ->
+                if (preferred == CesiumLiveJniBridge.MAP_STYLE_OFFLINE) "No connection"
+                else "No connection · ${mapStyleLabel(preferred)} returns when back online"
+        }
+}
+
+@Composable
+private fun MapStyleOfflineHint(text: String) {
+    Text(
+        text = text,
+        color = Haze,
+        fontSize = 11.sp,
+        fontFamily = FontFamily.Monospace
+    )
+}
+
+/** Scenic mode's OFFLINE marker: just the icon, on the same glass as the settings button. */
+@Composable
+private fun ScenicOfflineIndicator(mode: NetworkMode) {
+    Box(
+        modifier = Modifier
+            .size(40.dp)
+            .glassSurface(RoundedCornerShape(12.dp)),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = if (mode == NetworkMode.OFFLINE_DATA_SAVER) Icons.Outlined.DataSaverOn else Icons.Outlined.CloudOff,
+            contentDescription = if (mode == NetworkMode.OFFLINE_DATA_SAVER) "Offline: data saver on" else "Offline: no connection",
+            tint = Silver,
+            modifier = Modifier.size(20.dp)
+        )
+    }
+}
+
+private const val NetworkNoticeDurationMs = 3_000L
+
+/** A short glass pill under the HUD top bar saying the map just switched on its own. It shows
+ *  for [NetworkNoticeDurationMs] and then calls [onShown]. */
+@Composable
+private fun NetworkNoticePill(notice: NetworkNotice?, onShown: () -> Unit) {
+    // Kept after [notice] is consumed so the text doesn't vanish mid-fade.
+    var lastNotice by remember { mutableStateOf<NetworkNotice?>(null) }
+    LaunchedEffect(notice) {
+        if (notice != null) {
+            lastNotice = notice
+            delay(NetworkNoticeDurationMs)
+            onShown()
+        }
+    }
+    val shown = notice ?: lastNotice ?: return
+    val text = when (shown) {
+        is NetworkNotice.SwitchedToOffline ->
+            if (shown.dataSaver) "Data saver on · offline map" else "No connection · offline map"
+        is NetworkNotice.RestoredMap -> "Back online · ${mapStyleLabel(shown.restoredStyle)} restored"
+    }
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .windowInsetsPadding(WindowInsets.statusBars)
+            // Clears the 40dp top-bar buttons and their padding.
+            .padding(top = Spacing.Large + 40.dp + Spacing.Medium),
+        contentAlignment = Alignment.TopCenter
+    ) {
+        AnimatedVisibility(
+            visible = notice != null,
+            enter = fadeIn(tween(180)),
+            exit = fadeOut(tween(240))
+        ) {
+            Row(
+                modifier = Modifier
+                    .glassSurface(RoundedCornerShape(50))
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = if (shown is NetworkNotice.RestoredMap) Icons.Outlined.Cloud else Icons.Outlined.CloudOff,
+                    contentDescription = null,
+                    tint = Silver,
+                    modifier = Modifier.size(16.dp)
+                )
+                Text(
+                    text = text,
+                    color = Silver,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace
+                )
+            }
+        }
+    }
+}
+
+// --- TEMPORARY: engine sound debug scrubber, see its call site above. Delete this whole
+// composable along with the call site once engine sound tuning is done. ---
+@Composable
+private fun EngineSoundDebugScrubber(
+    progress: Float,
+    altitudeMeters: Int,
+    speedKmh: Int,
+    enginePower: kotlinx.coroutines.flow.StateFlow<Float>,
+    onScrub: (Float) -> Unit
+) {
+    // Collected here rather than by the caller, so the 30 Hz readout only recomposes this overlay.
+    val power by enginePower.collectAsState()
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .windowInsetsPadding(WindowInsets.systemBars)
+            .padding(horizontal = Spacing.Large, vertical = 8.dp),
+        contentAlignment = Alignment.TopCenter
+    ) {
+        Column(
+            modifier = Modifier
+                .widthIn(max = 420.dp)
+                .fillMaxWidth()
+                .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(12.dp))
+                .padding(12.dp)
+        ) {
+            Text(
+                text = "DEBUG progress=${"%.3f".format(progress)}  alt=${altitudeMeters}m  " +
+                    "spd=${speedKmh}km/h  N1=${"%.2f".format(power)}",
+                color = Color.White,
+                fontSize = 11.sp,
+                fontFamily = FontFamily.Monospace
+            )
+            Slider(
+                value = progress,
+                onValueChange = onScrub,
+                valueRange = 0f..1f
+            )
+        }
+    }
+}
 
 @Composable
 private fun FlightSettingsOverlay(
     visible: Boolean,
     selectedCamera: Int,
-    selectedMapStyle: Int,
+    mapStyle: MapStylePickerState,
+    selectedRouteLineMode: Int,
+    engineSoundEnabled: Boolean,
     onCameraSelected: (Int) -> Unit,
     onMapStyleSelected: (Int) -> Unit,
+    onRouteLineModeSelected: (Int) -> Unit,
+    onEngineSoundToggled: (Boolean) -> Unit,
     onDismiss: () -> Unit,
     onPauseRequested: () -> Unit
 ) {
@@ -798,18 +999,26 @@ private fun FlightSettingsOverlay(
             if (isLandscape) {
                 LandscapeFlightSettingsPanel(
                     selectedCamera = selectedCamera,
-                    selectedMapStyle = selectedMapStyle,
+                    mapStyle = mapStyle,
+                    selectedRouteLineMode = selectedRouteLineMode,
+                    engineSoundEnabled = engineSoundEnabled,
                     onCameraSelected = onCameraSelected,
                     onMapStyleSelected = onMapStyleSelected,
+                    onRouteLineModeSelected = onRouteLineModeSelected,
+                    onEngineSoundToggled = onEngineSoundToggled,
                     onDismiss = onDismiss,
                     onPauseRequested = onPauseRequested
                 )
             } else {
                 PortraitFlightSettingsCard(
                     selectedCamera = selectedCamera,
-                    selectedMapStyle = selectedMapStyle,
+                    mapStyle = mapStyle,
+                    selectedRouteLineMode = selectedRouteLineMode,
+                    engineSoundEnabled = engineSoundEnabled,
                     onCameraSelected = onCameraSelected,
                     onMapStyleSelected = onMapStyleSelected,
+                    onRouteLineModeSelected = onRouteLineModeSelected,
+                    onEngineSoundToggled = onEngineSoundToggled,
                     onPauseRequested = onPauseRequested
                 )
             }
@@ -822,9 +1031,13 @@ private fun FlightSettingsOverlay(
 @Composable
 private fun PortraitFlightSettingsCard(
     selectedCamera: Int,
-    selectedMapStyle: Int,
+    mapStyle: MapStylePickerState,
+    selectedRouteLineMode: Int,
+    engineSoundEnabled: Boolean,
     onCameraSelected: (Int) -> Unit,
     onMapStyleSelected: (Int) -> Unit,
+    onRouteLineModeSelected: (Int) -> Unit,
+    onEngineSoundToggled: (Boolean) -> Unit,
     onPauseRequested: () -> Unit
 ) {
     Column(
@@ -838,6 +1051,7 @@ private fun PortraitFlightSettingsCard(
             .padding(horizontal = Spacing.Large)
             .background(DeepNavy, RoundedCornerShape(20.dp))
             .border(1.dp, Border, RoundedCornerShape(20.dp))
+            .verticalScroll(rememberScrollState())
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
@@ -873,21 +1087,55 @@ private fun PortraitFlightSettingsCard(
 
         HorizontalDivider(color = Border, thickness = 1.dp)
 
+        CaptionLabel("ROUTE LINE")
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            routeLineOptions().forEach { option ->
+                val isActive = selectedRouteLineMode == option.mode
+                SettingsTile(
+                    isActive = isActive,
+                    onClick = { onRouteLineModeSelected(option.mode) },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(
+                        imageVector = option.icon,
+                        contentDescription = option.label,
+                        tint = if (isActive) Amber else OffWhite,
+                        modifier = Modifier.size(28.dp)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = option.label,
+                        color = if (isActive) Amber else OffWhite,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+            }
+        }
+
+        HorizontalDivider(color = Border, thickness = 1.dp)
+
         CaptionLabel("MAP STYLE")
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally)
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             MapStyleOptions.forEach { (styleName, styleMode) ->
-                val isActive = selectedMapStyle == styleMode
+                val isActive = mapStyle.isActive(styleMode)
+                val available = mapStyle.isAvailable(styleMode)
                 SettingsTile(
                     isActive = isActive,
                     onClick = { onMapStyleSelected(styleMode) },
+                    enabled = available,
                     chrome = TileChrome.None,
                     contentPadding = PaddingValues(0.dp),
-                    modifier = Modifier.width(100.dp)
+                    modifier = Modifier.weight(1f)
                 ) {
-                    MapStyleThumbnail(style = styleMode, isActive = isActive)
+                    MapStyleThumbnail(style = styleMode, isActive = isActive, unavailable = !available)
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = styleName,
@@ -898,6 +1146,31 @@ private fun PortraitFlightSettingsCard(
                     )
                 }
             }
+        }
+        mapStyle.offlineHint?.let { MapStyleOfflineHint(it) }
+
+        HorizontalDivider(color = Border, thickness = 1.dp)
+
+        CaptionLabel("ENGINE SOUND")
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = "Jet engine noise",
+                color = OffWhite,
+                fontSize = 13.sp,
+                fontFamily = FontFamily.Monospace
+            )
+            Switch(
+                checked = engineSoundEnabled,
+                onCheckedChange = onEngineSoundToggled,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = Amber,
+                    checkedTrackColor = Amber.copy(alpha = 0.4f)
+                )
+            )
         }
 
         SlideToPauseControl(onSlideCompleted = onPauseRequested)
@@ -912,9 +1185,13 @@ private fun PortraitFlightSettingsCard(
 @Composable
 private fun LandscapeFlightSettingsPanel(
     selectedCamera: Int,
-    selectedMapStyle: Int,
+    mapStyle: MapStylePickerState,
+    selectedRouteLineMode: Int,
+    engineSoundEnabled: Boolean,
     onCameraSelected: (Int) -> Unit,
     onMapStyleSelected: (Int) -> Unit,
+    onRouteLineModeSelected: (Int) -> Unit,
+    onEngineSoundToggled: (Boolean) -> Unit,
     onDismiss: () -> Unit,
     onPauseRequested: () -> Unit
 ) {
@@ -978,7 +1255,7 @@ private fun LandscapeFlightSettingsPanel(
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Column(
-                modifier = Modifier.weight(0.9f),
+                modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 CaptionLabel("CAMERA VIEW")
@@ -1006,27 +1283,98 @@ private fun LandscapeFlightSettingsPanel(
             )
 
             Column(
-                // Slightly wider than the camera column: its rows carry a map preview
-                // plus the longer "SATELLITE" label.
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                CaptionLabel("ROUTE LINE")
+                routeLineOptions().forEach { option ->
+                    SettingsOptionRow(
+                        label = option.label,
+                        isActive = selectedRouteLineMode == option.mode,
+                        onClick = { onRouteLineModeSelected(option.mode) }
+                    ) { isActive ->
+                        Icon(
+                            imageVector = option.icon,
+                            contentDescription = null,
+                            tint = if (isActive) Amber else OffWhite,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        HorizontalDivider(color = Border, thickness = 1.dp)
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(IntrinsicSize.Min),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Column(
                 modifier = Modifier.weight(1.1f),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 CaptionLabel("MAP STYLE")
                 MapStyleOptions.forEach { (styleName, styleMode) ->
+                    val available = mapStyle.isAvailable(styleMode)
                     SettingsOptionRow(
                         label = styleName,
-                        isActive = selectedMapStyle == styleMode,
+                        isActive = mapStyle.isActive(styleMode),
                         onClick = { onMapStyleSelected(styleMode) },
+                        enabled = available,
                         contentPadding = PaddingValues(6.dp),
                         spacing = 10.dp
                     ) { isActive ->
                         MapStyleThumbnail(
                             style = styleMode,
                             isActive = isActive,
+                            unavailable = !available,
                             width = 64.dp,
                             height = 42.dp
                         )
                     }
+                }
+                mapStyle.offlineHint?.let { MapStyleOfflineHint(it) }
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .width(1.dp)
+                    .background(Border)
+            )
+
+            Column(
+                modifier = Modifier.weight(0.9f),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                CaptionLabel("ENGINE SOUND")
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Slate)
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "NOISE",
+                        color = OffWhite,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    Switch(
+                        checked = engineSoundEnabled,
+                        onCheckedChange = onEngineSoundToggled,
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Amber,
+                            checkedTrackColor = Amber.copy(alpha = 0.4f)
+                        )
+                    )
                 }
             }
         }
@@ -1046,6 +1394,7 @@ private fun SettingsOptionRow(
     isActive: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
     contentPadding: PaddingValues = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
     spacing: Dp = 12.dp,
     leading: @Composable (isActive: Boolean) -> Unit
@@ -1066,7 +1415,8 @@ private fun SettingsOptionRow(
             .clip(shape)
             .background(background)
             .border(1.dp, borderColor, shape)
-            .clickable(onClick = onClick)
+            .clickable(enabled = enabled, onClick = onClick)
+            .alpha(if (enabled) 1f else DisabledOptionAlpha)
             .padding(contentPadding),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(spacing)
@@ -1095,6 +1445,7 @@ private fun SettingsTile(
     isActive: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
     chrome: TileChrome = TileChrome.Fill,
     contentPadding: PaddingValues = PaddingValues(vertical = 16.dp),
     content: @Composable ColumnScope.() -> Unit
@@ -1121,7 +1472,8 @@ private fun SettingsTile(
                     Modifier
                 }
             )
-            .clickable(onClick = onClick)
+            .clickable(enabled = enabled, onClick = onClick)
+            .alpha(if (enabled) 1f else DisabledOptionAlpha)
             .padding(contentPadding),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
@@ -1130,19 +1482,22 @@ private fun SettingsTile(
 }
 
 // --- Map style preview: a real crop of each basemap the engine actually renders,
-// framed identically over the same stretch of coastline so the two thumbnails read
-// as one place in two styles. The artwork is a static crop of the same tile sources
-// the globe streams at runtime - CARTO dark_nolabels (map style 0) and Esri World
-// Imagery (map style 1) - so the preview cannot drift from what selecting it gives
-// you. The active thumbnail gets an amber ring; the inactive one keeps a neutral
+// all over Hong Kong so the thumbnails read as one place in three styles. The artwork
+// is a static crop of the same sources the globe draws at runtime - CARTO dark_nolabels
+// (Standard), Esri World Imagery (Satellite + Terrain) and CesiumRS's bundled
+// world_vector_dark.svg (Offline, drawn at a wider zoom since it is 1:10m data) - so the
+// preview cannot drift from what selecting it gives you. The active thumbnail gets an amber ring; the inactive one keeps a neutral
 // hairline so both read as framed previews rather than one floating image. ---
 @Composable
 private fun MapStyleThumbnail(
     style: Int,
     isActive: Boolean,
     modifier: Modifier = Modifier,
-    width: Dp = 100.dp,
-    height: Dp = 66.dp
+    // Marks a network style that can't be picked while offline.
+    unavailable: Boolean = false,
+    // Unspecified fills the available width at the artwork's own 400x264 aspect ratio.
+    width: Dp = Dp.Unspecified,
+    height: Dp = Dp.Unspecified
 ) {
     val borderWidth by animateDpAsState(
         targetValue = if (isActive) 2.dp else 1.dp,
@@ -1154,18 +1509,41 @@ private fun MapStyleThumbnail(
     )
     val thumbnailShape = RoundedCornerShape(10.dp)
 
-    Image(
-        painter = painterResource(
-            id = if (style == 1) R.drawable.map_preview_satellite else R.drawable.map_preview_standard
-        ),
-        contentDescription = null,
-        contentScale = ContentScale.Crop,
+    Box(
         modifier = modifier
-            .size(width = width, height = height)
+            .then(
+                if (width == Dp.Unspecified) {
+                    Modifier.fillMaxWidth().aspectRatio(400f / 264f)
+                } else {
+                    Modifier.size(width = width, height = height)
+                }
+            )
             .clip(thumbnailShape)
             .background(Midnight)
-            .border(borderWidth, borderColor, thumbnailShape)
-    )
+            .border(borderWidth, borderColor, thumbnailShape),
+        contentAlignment = Alignment.Center
+    ) {
+        Image(
+            painter = painterResource(
+                id = when (style) {
+                    CesiumLiveJniBridge.MAP_STYLE_SATELLITE_TERRAIN -> R.drawable.map_preview_satellite
+                    CesiumLiveJniBridge.MAP_STYLE_OFFLINE -> R.drawable.map_preview_offline
+                    else -> R.drawable.map_preview_standard
+                }
+            ),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize()
+        )
+        if (unavailable) {
+            Icon(
+                imageVector = Icons.Outlined.CloudOff,
+                contentDescription = "Needs a connection",
+                tint = OffWhite,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+    }
 }
 
 @Composable
