@@ -45,6 +45,7 @@ import com.example.focusflight.R
 import androidx.compose.ui.text.font.FontWeight
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
+import coil3.request.allowHardware
 import coil3.svg.SvgDecoder
 import androidx.compose.ui.platform.LocalContext
 import coil3.ImageLoader
@@ -204,6 +205,7 @@ private fun OnboardingBackground() {
         AsyncImage(
             model = ImageRequest.Builder(context)
                 .data(R.raw.globe)
+                .allowHardware(false)
                 .build(),
             imageLoader = imageLoader,
             contentDescription = "Globe background",
