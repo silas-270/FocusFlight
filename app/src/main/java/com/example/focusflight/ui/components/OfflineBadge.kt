@@ -13,7 +13,7 @@ import androidx.compose.ui.unit.dp
 import com.example.focusflight.data.network.NetworkMode
 
 /**
- * "OFFLINE" status chip shown in the Hub header and the in-flight HUD. It draws nothing while
+ * "OFFLINE" status chip shown in the Hub header (the in-flight HUD draws its own non-button status pill). It draws nothing while
  * [mode] is ONLINE. The icon tells the pilot which kind of offline this is: a cloud for a lost
  * connection, the data-saver symbol when they switched Offline maps on in Settings.
  *
