@@ -244,9 +244,21 @@ fun FlightSearchScreen(
                                     .fillMaxWidth()
                                     .padding(horizontal = Spacing.Large)
                             )
+                            // The ticks are 10-minute buckets, not exact times - say so, so a
+                            // 55-minute route under "50m" doesn't look like a mismatch.
+                            Spacer(modifier = Modifier.height(Spacing.Small))
+                            Text(
+                                text = "${filteredRoutes.size} ${if (filteredRoutes.size == 1) "route" else "routes"} · " +
+                                    "$selectedInterval–${selectedInterval + 9} min",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Haze,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Spacer(modifier = Modifier.height(Spacing.Medium))
+                        } else {
+                            Spacer(modifier = Modifier.height(Spacing.Large))
                         }
-
-                        Spacer(modifier = Modifier.height(Spacing.Large))
 
                         // 4. Carousel / Cards (or Empty State)
                         if (filteredRoutes.isNotEmpty()) {

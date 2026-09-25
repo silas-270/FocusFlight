@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.EditLocationAlt
 import androidx.compose.material.icons.outlined.FlightLand
 import androidx.compose.material3.Icon
@@ -52,7 +53,7 @@ internal fun HomeBaseActions(state: AccountUiState, onReturnHomeClick: () -> Uni
     Column(modifier = Modifier.fillMaxWidth()) {
         HomeBaseActionRow(
             icon = Icons.Outlined.FlightLand,
-            title = "RETURN HOME",
+            title = "Return home",
             subtitle = if (state.returnHomeEligible) {
                 "Teleport instantly to ${state.homeAirportIata.ifBlank { "your home base" }}"
             } else {
@@ -64,7 +65,7 @@ internal fun HomeBaseActions(state: AccountUiState, onReturnHomeClick: () -> Uni
         Spacer(modifier = Modifier.height(Spacing.Small))
         HomeBaseActionRow(
             icon = Icons.Outlined.EditLocationAlt,
-            title = "CHANGE HOME BASE",
+            title = "Change home base",
             subtitle = if (state.changeHomeBaseEligible) {
                 "Pick a new home base airport"
             } else {
@@ -98,45 +99,19 @@ private fun HomeBaseActionRow(
     enabled: Boolean,
     onClick: () -> Unit
 ) {
-    val contentAlpha = if (enabled) 1f else 0.45f
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(Slate.copy(alpha = 0.4f))
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(Spacing.Medium),
-        verticalAlignment = Alignment.CenterVertically
+    SettingsRow(
+        icon = icon,
+        title = title,
+        subtitle = subtitle,
+        interaction = Modifier.clickable(enabled = enabled, onClick = onClick),
+        enabled = enabled
     ) {
-        Box(
-            modifier = Modifier
-                .size(36.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(Midnight),
-            contentAlignment = Alignment.Center
-        ) {
+        // Says "this opens something" - and is left out while the action is on cooldown.
+        if (enabled) {
             Icon(
-                imageVector = icon,
+                imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
                 contentDescription = null,
-                tint = Amber.copy(alpha = contentAlpha),
-                modifier = Modifier.size(18.dp)
-            )
-        }
-        Spacer(modifier = Modifier.width(Spacing.Medium))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.labelLarge.copy(
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp
-                ),
-                color = OffWhite.copy(alpha = contentAlpha)
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = Haze.copy(alpha = contentAlpha)
+                tint = Haze
             )
         }
     }

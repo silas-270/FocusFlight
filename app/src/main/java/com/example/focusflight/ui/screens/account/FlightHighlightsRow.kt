@@ -168,11 +168,15 @@ private fun EquatorProgressCard(ratio: Double, modifier: Modifier = Modifier) {
     WidgetCard(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally, containerColor = DeepNavy) {
         Text(
             text = "EQUATOR PROGRESS",
+            // Tighter tracking than the other highlight labels: at 1sp this one wrapped to two
+            // lines in the half-width card.
             style = MaterialTheme.typography.labelSmall.copy(
                 fontWeight = FontWeight.Bold,
-                letterSpacing = 1.sp
+                letterSpacing = 0.5.sp
             ),
-            color = Haze
+            color = Haze,
+            maxLines = 1,
+            softWrap = false
         )
 
         val safeRatio = ratio.coerceAtLeast(0.0)
@@ -241,6 +245,18 @@ private fun EquatorProgressCard(ratio: Double, modifier: Modifier = Modifier) {
                     color = OffWhite
                 )
             }
+        }
+        // Past 100 % the ring starts a new lap in a new colour; without this line nothing
+        // explained why a 220 % ring was only a fifth drawn.
+        if (lapIndex > 0) {
+            // Floor, not round: 99.6 % must not read as a finished lap while the ring is still open.
+            val lapPercent = (fraction * 100).toInt()
+            val lapsText = "$lapIndex ${if (lapIndex == 1) "lap" else "laps"}"
+            Text(
+                text = "$lapsText + $lapPercent %",
+                style = MaterialTheme.typography.labelSmall,
+                color = Haze
+            )
         }
     }
 }

@@ -1,5 +1,7 @@
 package com.example.focusflight.ui.screens.settings
 
+import com.example.focusflight.ui.theme.ScreenGutter
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -94,21 +96,23 @@ fun SettingsScreen(
         }
     }
 
+    val listState = rememberLazyListState()
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
             topBar = {
-                BackTopAppBar(title = "SETTINGS", onBackClick = onBackClick)
+                BackTopAppBar(title = "SETTINGS", onBackClick = onBackClick, scrolled = listState.canScrollBackward)
             },
             containerColor = Midnight
         ) { paddingValues ->
             LazyColumn(
+                state = listState,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues),
                 verticalArrangement = Arrangement.spacedBy(20.dp),
                 contentPadding = PaddingValues(
-                    start = Spacing.Medium,
-                    end = Spacing.Medium,
+                    start = ScreenGutter,
+                    end = ScreenGutter,
                     top = Spacing.Small,
                     bottom = Spacing.ExtraLarge
                 )

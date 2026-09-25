@@ -182,6 +182,17 @@ fun OnboardingScreen(
                             .fillMaxWidth()
                             .padding(bottom = Spacing.Small)
                     )
+                } else if (selectedAirport == null) {
+                    // Says why the button below is greyed out.
+                    Text(
+                        text = "Pick an airport to continue",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Haze,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = Spacing.Small)
+                    )
                 }
 
                 // ── CTA Button ──────────────────────────────────────────

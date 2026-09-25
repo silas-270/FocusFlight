@@ -27,7 +27,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.Explore
+import androidx.compose.material.icons.outlined.EmojiEvents
 import androidx.compose.material.icons.outlined.FlightTakeoff
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Person
@@ -47,6 +47,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.ui.graphics.graphicsLayer
+import com.example.focusflight.ui.components.SheetHandle
+import com.example.focusflight.ui.components.toggle
+import com.example.focusflight.util.formatDuration
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -140,6 +147,19 @@ fun HubScreen(
     val pausedFlight by viewModel.pausedFlight.collectAsState()
     var showDiscardFlightConfirm by remember { mutableStateOf(false) }
 
+    // "Book from here": the sheet's BOOK NEW FLIGHT button and a tap on the globe. A paused
+    // flight has to be discarded first; a focused challenge books its next leg.
+    val onBookNewFlight: () -> Unit = {
+        if (pausedFlight != null) {
+            showDiscardFlightConfirm = true
+        } else if (focusedChallenge != null) {
+            onContinueChallengeClick(focusedChallenge!!.id)
+        } else {
+            onBookFlightClick()
+        }
+    }
+    val sheetScope = rememberCoroutineScope()
+
     androidx.compose.material3.Scaffold(
         bottomBar = {
             Box(
@@ -191,12 +211,10 @@ fun HubScreen(
             sheetContainerColor = DeepNavy,
             sheetShape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
             sheetDragHandle = {
-                Box(
-                    modifier = Modifier
-                        .padding(top = 12.dp, bottom = 38.dp)
-                        .width(80.dp)
-                        .height(4.dp)
-                        .background(Border, RoundedCornerShape(2.dp))
+                SheetHandle(
+                    sheetState = scaffoldState.bottomSheetState,
+                    topPadding = 12.dp,
+                    bottomPadding = 38.dp
                 )
             },
             sheetPeekHeight = 191.dp,
@@ -208,6 +226,17 @@ fun HubScreen(
                     .padding(horizontal = Spacing.Large)
                     .padding(bottom = Spacing.Small)
             ) {
+              // The peek block toggles the sheet on tap, like the handle above it - the stats
+              // below it were otherwise only reachable by a swipe nothing hinted at.
+              Column(
+                  modifier = Modifier
+                      .fillMaxWidth()
+                      .clickable(
+                          interactionSource = remember { MutableInteractionSource() },
+                          indication = null,
+                          onClickLabel = if (isExpanded) "Collapse" else "Show stats"
+                      ) { sheetScope.toggle(scaffoldState.bottomSheetState) }
+              ) {
                 // The pilot's own (generated, renameable) name rather than a rank - ranks are
                 // earned per flight on arrival, so a fixed "Captain" here contradicted them.
                 Text(
@@ -234,6 +263,7 @@ fun HubScreen(
                     style = MaterialTheme.typography.bodyLarge,
                     color = Haze
                 )
+              }
 
                 Spacer(modifier = Modifier.height(30.dp))
                 HorizontalDivider(color = Border, thickness = 1.dp)
@@ -244,9 +274,7 @@ fun HubScreen(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     FocusStatItem(value = stats.totalFlights.toString(), label = "FLIGHTS")
-                    val hoursInt = stats.totalMinutes / 60
-                    val minutesInt = stats.totalMinutes % 60
-                    FocusStatItem(value = String.format(java.util.Locale.US, "%02d:%02d", hoursInt, minutesInt), label = "HOURS")
+                    FocusStatItem(value = formatDuration(stats.totalMinutes), label = "FLIGHT TIME")
                     FocusStatItem(value = stats.airportsVisited.toString(), label = "AIRPORTS")
                 }
 
@@ -255,15 +283,7 @@ fun HubScreen(
                     Spacer(modifier = Modifier.height(30.dp))
                     FocusButton(
                         text = "BOOK NEW FLIGHT",
-                        onClick = {
-                            if (pausedFlight != null) {
-                                showDiscardFlightConfirm = true
-                            } else if (focusedChallenge != null) {
-                                onContinueChallengeClick(focusedChallenge!!.id)
-                            } else {
-                                onBookFlightClick()
-                            }
-                        },
+                        onClick = onBookNewFlight,
                         variant = ButtonVariant.Primary,
                         style = ButtonStyle.Outlined,
                         modifier = Modifier.fillMaxWidth()
@@ -283,12 +303,30 @@ fun HubScreen(
             // off a shrinking container recentered the crop of this fixed-aspect image, reading
             // as the globe getting cut off at the top the moment a challenge is focused.
             val screenHeightDp = LocalDesignScreenSize.current.height
+            // Tapping the globe books from here - the arcs are this airport's destinations - so
+            // the picture isn't a dead end for anyone who expects a globe to respond. A press
+            // shrinks it slightly; no ripple across a photo-like image.
+            val globeInteraction = remember { MutableInteractionSource() }
+            val globePressed by globeInteraction.collectIsPressedAsState()
+            val globeScale by animateFloatAsState(if (globePressed) 0.98f else 1f, label = "globePress")
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(screenHeightDp * 0.775f)
                     .padding(top = 48.dp)
                     .align(Alignment.TopCenter)
+                    .then(
+                        if (routeMapPath != null) {
+                            Modifier.clickable(
+                                interactionSource = globeInteraction,
+                                indication = null,
+                                onClickLabel = "Book a flight from here",
+                                onClick = onBookNewFlight
+                            )
+                        } else {
+                            Modifier
+                        }
+                    )
             ) {
                 if (routeMapPath != null) {
                     val context = LocalContext.current
@@ -297,9 +335,17 @@ fun HubScreen(
                             .data(routeMapPath)
                             .allowHardware(false)
                             .build(),
-                        contentDescription = "Decorative globe routes",
+                        contentDescription = "Routes from your airport",
                         modifier = Modifier
-                            .fillMaxSize(),
+                            .fillMaxSize()
+                            .graphicsLayer {
+                                scaleX = globeScale
+                                scaleY = globeScale
+                                // The render leaves ~24 % empty space above the horizon; lifting
+                                // it puts the horizon just under the header buttons instead of
+                                // a dark band. Tied to the render framing - see RENDER_HEIGHT.
+                                translationY = -GlobeLiftFraction * size.height
+                            },
                         contentScale = ContentScale.Crop,
                         alignment = Alignment.Center
                     )
@@ -375,7 +421,7 @@ fun HubScreen(
 
                     // Challenges: Free Mode entry, the challenge slots, and achievements
                     HubHeaderIconButton(
-                        icon = Icons.Outlined.Explore,
+                        icon = Icons.Outlined.EmojiEvents,
                         contentDescription = "Challenges",
                         onClick = onChallengesClick
                     )
@@ -407,6 +453,9 @@ fun HubScreen(
         )
     }
 }
+
+/** Share of the globe image's height it is lifted by (see the globe's graphicsLayer). */
+private const val GlobeLiftFraction = 0.12f
 
 /** How far each side of a [HubHeaderIconButton]'s 48dp touch area extends past its 40dp tile. */
 private val HeaderTouchInset = 4.dp

@@ -35,11 +35,16 @@ import com.example.focusflight.ui.theme.Spacing
  * is routed to it as well: without that the back gesture passes straight through an open modal and
  * pops the whole nav destination underneath it, which on the Challenges screen meant tapping back
  * to close the challenge picker instead threw you out to the Hub.
+ *
+ * [onClose] adds a visible ✕ in the card's top-right corner. Info-only modals (no action
+ * buttons) pass it, since scrim tap and back are invisible ways out; modals whose buttons
+ * already close them leave it null.
  */
 @Composable
 fun ScrimCardModal(
     onScrimTap: () -> Unit,
     modifier: Modifier = Modifier,
+    onClose: (() -> Unit)? = null,
     content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit
 ) {
     BackHandler(onBack = onScrimTap)
@@ -54,7 +59,7 @@ fun ScrimCardModal(
                     onClick = onScrimTap
                 )
         )
-        Column(
+        Box(
             modifier = Modifier
                 .align(Alignment.Center)
                 // Centre the card in the space above the keyboard, not the whole screen - the
@@ -69,9 +74,23 @@ fun ScrimCardModal(
                 // card's rounded corners instead of spilling out over the scrim.
                 .clip(RoundedCornerShape(20.dp))
                 .background(DeepNavy)
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            content = content
-        )
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                content = content
+            )
+            if (onClose != null) {
+                CloseSquareButton(
+                    onClick = onClose,
+                    contentDescription = "Close",
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 4.dp, end = 12.dp)
+                )
+            }
+        }
     }
 }

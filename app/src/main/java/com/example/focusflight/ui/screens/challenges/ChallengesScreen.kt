@@ -1,5 +1,7 @@
 package com.example.focusflight.ui.screens.challenges
 
+import com.example.focusflight.ui.theme.ScreenGutter
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -161,23 +163,26 @@ fun ChallengesScreen(
         }
     }
 
+    val listState = rememberLazyListState()
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
             containerColor = Midnight,
             topBar = {
                 BackTopAppBar(
                     title = "CHALLENGES",
-                    onBackClick = onBackClick
+                    onBackClick = onBackClick,
+                    scrolled = listState.canScrollBackward
                 )
             }
         ) { padding ->
             LazyColumn(
+                state = listState,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding),
                 contentPadding = PaddingValues(
-                    start = Spacing.Medium,
-                    end = Spacing.Medium,
+                    start = ScreenGutter,
+                    end = ScreenGutter,
                     top = Spacing.Small,
                     bottom = Spacing.ExtraLarge
                 ),

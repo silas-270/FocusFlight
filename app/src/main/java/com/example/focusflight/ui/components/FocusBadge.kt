@@ -18,6 +18,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -48,7 +49,8 @@ enum class BadgeVariant {
 enum class BadgeStyle {
     Filled,       // Solid opaque fill
     Translucent,  // Tinted translucent fill (e.g. SoftAmber, Green 20%)
-    Outlined      // Transparent fill with colored border
+    Outlined,     // Transparent fill with colored border
+    Stamp         // Inked rubber stamp: square corners, slight tilt, faded ink - reads as printed, not pressable
 }
 
 enum class BadgeSize {
@@ -89,7 +91,7 @@ fun FocusBadge(
             BadgeVariant.Neutral -> Container.copy(alpha = 0.7f)
             BadgeVariant.Muted -> TextSecondary.copy(alpha = 0.15f)
         }
-        BadgeStyle.Outlined -> Color.Transparent
+        BadgeStyle.Outlined, BadgeStyle.Stamp -> Color.Transparent
     }
 
     val contentColor = when (style) {
@@ -100,18 +102,19 @@ fun FocusBadge(
             BadgeVariant.Neutral -> TextPrimary
             BadgeVariant.Muted -> TextSecondary
         }
-        BadgeStyle.Translucent, BadgeStyle.Outlined -> when (variant) {
+        BadgeStyle.Translucent, BadgeStyle.Outlined, BadgeStyle.Stamp -> when (variant) {
             BadgeVariant.Primary -> Accent
             BadgeVariant.Success -> Success
             BadgeVariant.Danger -> Danger
             BadgeVariant.Neutral -> TextPrimary
             BadgeVariant.Muted -> TextSecondary
         }
-    }
+    }.let { if (style == BadgeStyle.Stamp) it.copy(alpha = StampInkAlpha) else it }
 
     val borderStroke = when (style) {
         BadgeStyle.Filled -> null
         BadgeStyle.Translucent -> null
+        BadgeStyle.Stamp -> BorderStroke(1.dp, contentColor)
         BadgeStyle.Outlined -> when (variant) {
             BadgeVariant.Primary -> BorderStroke(1.dp, Accent)
             BadgeVariant.Success -> BorderStroke(1.dp, Success)
@@ -126,11 +129,15 @@ fun FocusBadge(
     val fontSize = if (size == BadgeSize.Compact) 10.sp else 11.sp
     val iconSize = if (size == BadgeSize.Compact) 12.dp else 14.dp
 
-    val borderModifier = if (borderStroke != null) Modifier.border(borderStroke, shape) else Modifier
+    // A stamp ignores the caller's shape: its square corners are part of what sets it apart from
+    // the rounded, pressable-looking badges.
+    val badgeShape = if (style == BadgeStyle.Stamp) RoundedCornerShape(2.dp) else shape
+    val borderModifier = if (borderStroke != null) Modifier.border(borderStroke, badgeShape) else Modifier
 
     Box(
         modifier = modifier
-            .clip(shape)
+            .then(if (style == BadgeStyle.Stamp) Modifier.rotate(StampTiltDegrees) else Modifier)
+            .clip(badgeShape)
             .then(borderModifier)
             .background(containerColor)
             .padding(horizontal = paddingH, vertical = paddingV),
@@ -162,3 +169,6 @@ fun FocusBadge(
         }
     }
 }
+
+private const val StampInkAlpha = 0.85f
+private const val StampTiltDegrees = -4f

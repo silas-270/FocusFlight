@@ -1,5 +1,6 @@
 package com.example.focusflight.ui.screens.account
 
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -49,12 +50,12 @@ internal fun TravelMapCard(
     state: AccountUiState,
     onClick: () -> Unit
 ) {
-    Box(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
             .background(DeepNavy)
-            .clickable(onClick = onClick)
+            .clickable(onClickLabel = "Show visited countries", onClick = onClick)
             .padding(Spacing.Medium)
     ) {
         InteractiveWorldMap(
@@ -66,6 +67,32 @@ internal fun TravelMapCard(
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(12.dp))
         )
+        // Says the card opens something, and what: the map alone looked exactly like the
+        // non-tappable one on Flight Search.
+        Spacer(modifier = Modifier.height(12.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            val visited = state.allVisitedCountries.size
+            Text(
+                text = "$visited ${if (visited == 1) "country" else "countries"} visited",
+                style = MaterialTheme.typography.labelMedium,
+                color = Haze,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                text = "DETAILS",
+                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
+                color = Amber
+            )
+            Icon(
+                imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                contentDescription = null,
+                tint = Amber,
+                modifier = Modifier.size(18.dp)
+            )
+        }
     }
 }
 
@@ -90,7 +117,7 @@ internal fun TravelMapDetailModal(
             .sorted()
     }
 
-    ScrimCardModal(onScrimTap = onDismiss) {
+    ScrimCardModal(onScrimTap = onDismiss, onClose = onDismiss) {
         Text(
             text = "WORLD EXPLORATION",
             style = MaterialTheme.typography.labelMedium.copy(
@@ -130,7 +157,7 @@ internal fun TravelMapDetailModal(
 
         val pct = if (totalCountriesCount > 0) (visitedCountriesCount.toFloat() / totalCountriesCount * 100) else 0f
         Text(
-            text = "${"%.1f".format(pct)}% of all countries visited",
+            text = "${String.format(Locale.US, "%.1f", pct)}% of all countries visited",
             style = MaterialTheme.typography.bodyMedium,
             color = OffWhite,
             textAlign = TextAlign.Center
