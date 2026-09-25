@@ -98,7 +98,8 @@ internal fun ChallengeCompletionEntry(challenge: Challenge, entryNumber: Int) {
                 overflow = TextOverflow.Ellipsis
             )
 
-            // Row 3: SOURCE (curated/custom) | TYPE
+            // Row 3: SOURCE (curated/custom). There used to be a TYPE cell beside it, repeating
+            // the stamp in row 1 word for word.
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
@@ -106,12 +107,6 @@ internal fun ChallengeCompletionEntry(challenge: Challenge, entryNumber: Int) {
                 LogbookDataCell(
                     label = "SOURCE",
                     value = if (challenge.source == ChallengeSource.CURATED) "CURATED" else "CUSTOM",
-                    labelColor = inkFaint,
-                    valueColor = inkMid
-                )
-                LogbookDataCell(
-                    label = "TYPE",
-                    value = challengeTypeLabel(challenge.type),
                     labelColor = inkFaint,
                     valueColor = inkMid
                 )

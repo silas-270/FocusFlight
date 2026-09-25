@@ -57,11 +57,13 @@ private fun nextStop(challenge: Challenge): String? =
 
 /**
  * Shown before a Free Mode flight, since the flight looks exactly like a Story Mode one from the
- * cockpit, but none of it is recorded against
- * your progress. Free Mode is filtered out of achievement evaluation (see
- * `AchievementProgress`, which keeps to STORY-tagged flights), is a no-op for challenge crediting
- * (`processLandingForChallenges`), and never moves your position - so landing somewhere new does
- * not become your home airport. Better said here than discovered after an hour in the air.
+ * cockpit but is only partly recorded (docs/modes.md's isolation matrix). It *is* logged: it shows
+ * in the logbook and counts toward the mode-blind totals, tours and highlights. It is filtered out
+ * of achievement evaluation (`AchievementProgress` keeps to STORY-tagged flights) and of the
+ * visited-countries map, is a no-op for challenge crediting (`processLandingForChallenges`), and
+ * never moves `current_airport_iata` - the pilot is still where they were once it lands. (The old
+ * copy said it "won't be counted" and that the landing wouldn't become the *home* airport, which no
+ * flight in any mode ever changes.) Better said here than discovered after an hour in the air.
  */
 @Composable
 internal fun FreeModeNoticeModal(onConfirm: () -> Unit, onDismiss: () -> Unit) {
@@ -69,8 +71,9 @@ internal fun FreeModeNoticeModal(onConfirm: () -> Unit, onDismiss: () -> Unit) {
         ModalTitle("FREE MODE")
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "This flight won't be counted. It earns no progress toward challenges or " +
-                "achievements, and where you land won't become your home airport.",
+            text = "Fly anywhere you like. This flight goes in your logbook and counts toward " +
+                "your totals, tours and highlights - but not toward achievements, challenges or " +
+                "your map, and you'll still be at your current airport afterwards.",
             style = MaterialTheme.typography.bodyMedium,
             color = Haze
         )

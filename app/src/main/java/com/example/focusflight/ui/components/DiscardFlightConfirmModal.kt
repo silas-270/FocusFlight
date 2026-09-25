@@ -75,7 +75,9 @@ fun DiscardFlightConfirmModal(
 
         ModalButtonRow(
             dismissText = "CANCEL",
-            confirmText = "CONTINUE",
+            // Names the loss rather than "CONTINUE", which everywhere else in the app is the safe,
+            // non-destructive choice. Kept to one word: two Compact buttons share a 360dp-wide card.
+            confirmText = "DISCARD",
             onDismiss = onDismiss,
             onConfirm = onConfirm,
             isDestructive = true
