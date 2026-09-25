@@ -17,7 +17,7 @@ higher bar than "it was convenient".
 
 ---
 
-## SharedPreferences — `focus_flight_prefs`
+## SharedPreferences — `blocktime_prefs`
 
 Owns short-lived, fast-changing, per-device session state. Nothing derived lives here.
 

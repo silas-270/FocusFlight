@@ -17,11 +17,11 @@ val localProperties = Properties().apply {
 }
 
 android {
-    namespace = "com.example.focusflight"
+    namespace = "com.silas270.blocktime"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.example.focusflight"
+        applicationId = "com.silas270.blocktime"
         minSdk = 26
         targetSdk = 36
         versionCode = 1

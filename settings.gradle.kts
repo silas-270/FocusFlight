@@ -22,5 +22,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "FocusFlight"
+rootProject.name = "Blocktime"
 include(":app")

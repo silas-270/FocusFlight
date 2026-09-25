@@ -1,4 +1,4 @@
-# FocusFlight documentation
+# Blocktime documentation
 
 The app explained without reading the code. If a change makes something here wrong,
 the change is not finished until this is fixed too.

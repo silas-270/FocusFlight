@@ -22,7 +22,7 @@ set -euo pipefail
 
 SCENARIO_ID="${1:?usage: run_perf_scenario.sh <scenario_id> [duration_seconds]}"
 DURATION_S="${2:-30}"
-PACKAGE="com.example.focusflight"
+PACKAGE="com.silas270.blocktime"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CESIUM_RS_HOME="${CESIUM_RS_HOME:-$HOME/CesiumRS}"
 OUT_DIR="$REPO_ROOT/perf_runs/scenario_${SCENARIO_ID}_$(date +%Y%m%d_%H%M%S)"

@@ -171,7 +171,7 @@ def counters(tp, trace, window):
             from counter c
             join process_counter_track t on c.track_id = t.id
             join process p using(upid)
-            where t.name = 'mem.rss' and p.name glob '*focusflight*'
+            where t.name = 'mem.rss' and p.name glob '*blocktime*'
               and c.ts >= {window['start_ts']} and c.ts < {window['end_ts']}
             order by c.ts;""",
     )
