@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Automated screen navigation and high-fidelity screenshot capture for FocusFlight.
+# Automated screen navigation and high-fidelity screenshot capture for Blocktime.
 #
-# Programmatically drives FocusFlight through all core screens using Android
+# Programmatically drives Blocktime through all core screens using Android
 # broadcasts, captures pixel-perfect composited screenshots, and pulls them
 # to the host filesystem.
 #
@@ -10,10 +10,10 @@
 #
 # Requirements:
 #   - adb on PATH (or ANDROID_HOME set)
-#   - An online Android emulator or device with FocusFlight installed.
+#   - An online Android emulator or device with Blocktime installed.
 set -euo pipefail
 
-PACKAGE="com.example.focusflight"
+PACKAGE="com.silas270.blocktime"
 MAIN_ACTIVITY="$PACKAGE/.CesiumGameActivity"
 OUT_DIR="${1:-./screenshots}"
 CACHE_DIR="/data/data/$PACKAGE/cache"
@@ -40,7 +40,7 @@ if ! adb get-state &>/dev/null; then
 fi
 
 echo "=========================================================="
-echo "FocusFlight Automated Screen Tour & Capture"
+echo "Blocktime Automated Screen Tour & Capture"
 echo "Target directory: $OUT_DIR"
 echo "Device: $(adb get-serialno)"
 echo "=========================================================="

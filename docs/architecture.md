@@ -1,6 +1,6 @@
 # Architecture
 
-## What FocusFlight is
+## What Blocktime is
 
 A focus timer shaped like a flight simulator. The pilot books a real scheduled route
 between two real airports, and the flight's duration *is* the study session. While the
@@ -192,6 +192,15 @@ stays sharp.
   clocks (the In-Flight countdown and its elapsed/total readout) use `hh:mm:ss`.
 - Distances, altitudes and speeds go through `formatMiles` / `formatFeet` / `formatMph` in the
   same file.
+
+## Debug-only code
+
+Debug tooling lives in the `app/src/debug/` source set, so it is never compiled into a release
+APK. When main code has to call it, `app/src/release/` provides a same-signature stand-in that
+does nothing - e.g. the In-Flight debug menu (`FlightDebugMenu`: seek, flight speed,
+pause/resume, skip to landing). The ViewModel hooks it drives (`debugSeek`,
+`setDebugTimeScale`, `skipFlight`) stay in main but are only ever called from there, so
+release flights always run at 1x real time.
 
 ## Build
 

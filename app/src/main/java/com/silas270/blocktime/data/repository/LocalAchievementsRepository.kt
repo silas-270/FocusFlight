@@ -1,0 +1,77 @@
+package com.silas270.blocktime.data.repository
+
+import com.silas270.blocktime.data.local.AchievementUnlockDao
+import com.silas270.blocktime.data.local.UserProfileDao
+import com.silas270.blocktime.data.local.requireProfileId
+import com.silas270.blocktime.data.model.AchievementBoard
+import com.silas270.blocktime.data.model.AchievementProgress
+import com.silas270.blocktime.data.model.AchievementStatus
+import com.silas270.blocktime.data.model.AchievementUnlock
+import com.silas270.blocktime.data.model.FlightLog
+import com.silas270.blocktime.data.model.VisitedGeography
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+
+/**
+ * Stamps unlock timestamps onto an otherwise purely-computed [AchievementBoard].
+ *
+ * Deliberately a *read-path* write ("lazy upsert"), not a landing-pipeline one: achievements stay
+ * fully re-derivable from flight history, so there is exactly one place that can record an unlock
+ * rather than two that must agree. This also makes it self-healing across upgrades - a user who
+ * earned achievements before the `achievement_unlocks` table existed gets them stamped the first
+ * time they open an achievements surface, with no separate backfill migration.
+ *
+ * The trade-off, accepted knowingly: those pre-existing unlocks carry a stamp of "first opened
+ * after updating" rather than the true historical moment. Nothing in the flight log can recover
+ * the real one, and no UI claims otherwise - the timestamp is only ever used to order badges.
+ */
+class LocalAchievementsRepository(
+    private val achievementUnlockDao: AchievementUnlockDao,
+    private val userProfileDao: UserProfileDao,
+    private val airportRepository: AirportRepository,
+    private val flightLogRepository: FlightLogRepository,
+    /** Injectable for tests; production always reads the wall clock. */
+    private val now: () -> Long = System::currentTimeMillis
+) : AchievementsRepository {
+
+    override suspend fun evaluateBoard(
+        geo: VisitedGeography,
+        history: List<FlightLog>
+    ): AchievementBoard {
+        val board = AchievementProgress.evaluateAll(geo, history)
+        val userId = userProfileDao.requireProfileId()
+        val stampedAt = now()
+
+        // Record anything newly unlocked. IGNORE-on-conflict means an already-stamped achievement
+        // keeps its original time, so this is safe to run on every single board read.
+        (board.geographic + board.distance + board.behavioral)
+            .filter { it.isUnlocked }
+            .forEach { achievementUnlockDao.insertIfAbsent(AchievementUnlock(userId, it.id, stampedAt)) }
+
+        val unlockTimes = achievementUnlockDao.getAllForUser(userId)
+            .associate { it.achievementId to it.unlockedAt }
+
+        fun merge(list: List<AchievementStatus>): List<AchievementStatus> =
+            list.map { it.copy(unlockedAt = unlockTimes[it.id]) }
+
+        return AchievementBoard(
+            geographic = merge(board.geographic),
+            distance = merge(board.distance),
+            behavioral = merge(board.behavioral)
+        )
+    }
+
+    override suspend fun loadBoard(): AchievementBoard = withContext(Dispatchers.IO) {
+        val history = flightLogRepository.getFlightHistory()
+        val homeIata = userProfileDao.getProfile()?.homeAirportIata
+        // getVisitedGeography is a plain (non-suspend) function that hits the airport SQLite DB,
+        // so it carries no dispatcher of its own - hence the explicit IO here rather than trusting
+        // callers to remember. AccountViewModel already wraps its own call site; this makes the
+        // repository safe from a main-thread caller too.
+        //
+        // It filters to STORY internally, as do evaluateDistance/evaluateBehavioral - so passing
+        // the raw all-modes history is correct, matching AccountViewModel.
+        val geo = airportRepository.getVisitedGeography(history, homeIata)
+        evaluateBoard(geo, history)
+    }
+}

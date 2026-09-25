@@ -1,0 +1,256 @@
+package com.silas270.blocktime.ui.viewmodel.challenges
+
+import android.util.Log
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
+import com.silas270.blocktime.data.model.AchievementStatus
+import com.silas270.blocktime.data.model.Airport
+import com.silas270.blocktime.data.model.Challenge
+import com.silas270.blocktime.data.model.ChallengeStatus
+import com.silas270.blocktime.data.model.ChallengeType
+import com.silas270.blocktime.data.model.PausedFlight
+import com.silas270.blocktime.data.local.airport.AirportDataException
+import com.silas270.blocktime.data.repository.PilotProgressRepository
+import com.silas270.blocktime.data.repository.AirportRepository
+import com.silas270.blocktime.data.repository.ChallengeRepository
+import com.silas270.blocktime.data.repository.PreferencesRepository
+import com.silas270.blocktime.data.repository.StartChallengeResult
+import com.silas270.blocktime.domain.AirportSearchController
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+
+/**
+ * Backs the Challenges screen (docs/challenges.md#entry--management-surface): the three
+ * active-challenge slots, the completed-challenges log beneath them, the Achievements tab's
+ * still-unearned list, and the start/abandon/custom-create flows. One instance is created per
+ * composition of that screen - cheap, since it holds no flight/engine state.
+ */
+class ChallengesViewModel(
+    private val challengeRepository: ChallengeRepository,
+    private val airportRepository: AirportRepository,
+    private val pilotProgressRepository: PilotProgressRepository,
+    private val preferencesRepository: PreferencesRepository
+) : ViewModel() {
+
+    /** What the three slots actually render: ACTIVE challenges, plus any COMPLETED-but-not-yet-
+     *  celebrated one (docs/challenges.md) - so a just-finished challenge keeps its slot until its
+     *  completion-presentation animation has shown it. `WhileSubscribed` rather than `Eagerly`
+     *  since this is only ever collected while the Challenges screen is actually open. */
+    val slotChallenges: StateFlow<List<Challenge>> =
+        challengeRepository.listSlotDisplayChallengesFlow()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** Completed challenges, newest-first (the DAO orders by `completed_at DESC`) - the logbook-
+     *  style list below the slots. Refreshed off [slotChallenges] rather than its own Flow:
+     *  a challenge can only ever leave [slotChallenges] by being celebrated, so that emission is
+     *  an exact signal, not an approximation. Only *celebrated* completions ever appear here -
+     *  see [ChallengeRepository.listCompletedChallenges]. */
+    private val _completedChallenges = MutableStateFlow<List<Challenge>>(emptyList())
+    val completedChallenges: StateFlow<List<Challenge>> = _completedChallenges.asStateFlow()
+
+    /** Which completed-but-uncelebrated challenges to run the completion-presentation animation
+     *  for this session, in slot order (left to right) - see docs/challenges.md. Computed **once**
+     *  from the current snapshot rather than kept live off [slotChallenges], so a challenge that's
+     *  already mid-animation is never re-queued by a later, unrelated emission (e.g. another
+     *  challenge's own celebration finishing). This is also what makes the feature resilient to
+     *  the app being killed mid-celebration: the queue is reconstructed fresh from the database -
+     *  `status = COMPLETED AND celebrated = false` - every time this ViewModel (and therefore this
+     *  screen) is created, regardless of how the player got here or when they left last time. */
+    private val _celebrationQueue = MutableStateFlow<List<Challenge>>(emptyList())
+    val celebrationQueue: StateFlow<List<Challenge>> = _celebrationQueue.asStateFlow()
+
+    /** Still-unearned achievements, flat and ungrouped (no category headers by design), ordered
+     *  closest-to-done first so the next reachable goal is always on top. Earned ones are
+     *  deliberately absent - they live on the Passport as badges. */
+    private val _unfinishedAchievements = MutableStateFlow<List<AchievementStatus>>(emptyList())
+    val unfinishedAchievements: StateFlow<List<AchievementStatus>> = _unfinishedAchievements.asStateFlow()
+
+    /** Free Mode's own paused-flight slot (fully separate from Story Mode's, see
+     *  PreferencesRepository.pausedFreeFlightStore) - lets the Free Mode row offer "RESUME"
+     *  instead of always dropping into a fresh booking. Loaded once at construction (this VM is
+     *  recreated per screen visit, same as [focusedChallengeId] below).
+     *
+     *  Declared *above* the init block on purpose. Kotlin runs property initialisers and init
+     *  blocks strictly in declaration order, and init's loader below writes this flow from a
+     *  `viewModelScope.launch { }` with no dispatcher - which is `Dispatchers.Main.immediate`, so
+     *  on the main thread the body runs synchronously, inline, before the constructor has moved
+     *  on. With this property declared further down the file it was still null at that point and
+     *  opening the Challenges screen died on a NullPointerException every time. */
+    private val _pausedFreeFlight = MutableStateFlow<PausedFlight?>(null)
+    val pausedFreeFlight: StateFlow<PausedFlight?> = _pausedFreeFlight.asStateFlow()
+
+    init {
+        viewModelScope.launch(Dispatchers.IO) {
+            // The completed-challenge log still keys off the slot-display set - a challenge can
+            // only reach the log by leaving that one (being celebrated), so the emission is an
+            // exact signal.
+            slotChallenges.collect { _completedChallenges.value = challengeRepository.listCompletedChallenges() }
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            // One-shot, not a live collect - see celebrationQueue's own doc for why. Reads the
+            // repository directly rather than slotChallenges' own StateFlow, since that one only
+            // starts collecting once something subscribes to it (WhileSubscribed) and has no
+            // value yet this early in construction.
+            _celebrationQueue.value = challengeRepository.listSlotDisplayChallengesFlow().first()
+                .filter { it.status == ChallengeStatus.COMPLETED && !it.celebrated }
+        }
+        viewModelScope.launch {
+            // The achievement board is no longer re-derived here. It used to call loadBoard() on
+            // every activeChallenges emission - re-reading the entire flight history and
+            // re-scanning the airports DB - which duplicated, exactly, the work the Passport was
+            // doing separately. Both now read one shared derivation that is already warm.
+            pilotProgressRepository.progress.collect { progress ->
+                val board = progress?.achievements ?: return@collect
+                _unfinishedAchievements.value = (board.geographic + board.distance + board.behavioral)
+                    .filterNot { it.isUnlocked }
+                    .sortedByDescending { it.progress }
+            }
+        }
+        viewModelScope.launch {
+            _pausedFreeFlight.value = preferencesRepository.pausedFreeFlightStore.get()
+        }
+    }
+
+    /** Result of the most recent start attempt (curated or custom) - surfaced once (e.g. a
+     *  [StartChallengeResult.CapReached] message) then cleared via [clearStartResult] so it
+     *  doesn't reappear on an unrelated recomposition. Null means "nothing to show". */
+    private val _startResult = MutableStateFlow<StartChallengeResult?>(null)
+    val startResult: StateFlow<StartChallengeResult?> = _startResult.asStateFlow()
+
+    /** The Route challenge currently focused on the Hub, if any - lets the info modal offer
+     *  "PAUSE" instead of "CONTINUE" for that one. Seeded from the pref and kept in sync by every
+     *  method here that changes it, since this screen can stay open across a pause/focus change
+     *  (unlike Hub, which re-reads the pref fresh on every [PreferencesRepository] read). */
+    private val _focusedChallengeId = MutableStateFlow(preferencesRepository.getFocusedRouteChallengeId())
+    val focusedChallengeId: StateFlow<Int?> = _focusedChallengeId.asStateFlow()
+
+    // ── Custom Route creation: origin/destination airport search ────────────────────────
+    // Shares AirportSearchController with FlightSearchViewModel's Free-Mode origin picker -
+    // one instance per endpoint, since a custom Route challenge needs both ends picked rather
+    // than one fixed + one browsed.
+    private val originSearch = AirportSearchController(airportRepository, viewModelScope)
+    val originQuery: StateFlow<String> = originSearch.query
+    val originResults: StateFlow<List<Airport>> = originSearch.results
+
+    private val destSearch = AirportSearchController(airportRepository, viewModelScope)
+    val destQuery: StateFlow<String> = destSearch.query
+    val destResults: StateFlow<List<Airport>> = destSearch.results
+
+    fun onOriginQueryChanged(query: String) { originSearch.onQueryChanged(query) }
+    fun onDestQueryChanged(query: String) { destSearch.onQueryChanged(query) }
+
+    fun clearRouteSearch() {
+        originSearch.onQueryChanged("")
+        originSearch.clearResults()
+        destSearch.onQueryChanged("")
+        destSearch.clearResults()
+    }
+
+    fun startCurated(catalogId: String) {
+        viewModelScope.launch {
+            val result = challengeRepository.startCuratedChallenge(catalogId)
+            _startResult.value = result
+            focusIfRoute(result)
+        }
+    }
+
+    /** [origin]/[dest] named from city names, per challenges.md's "Where it comes from" for Route
+     *  ("Stuttgart → Beijing," not "STR → PEK"). Some airports have no city in the data, so the
+     *  airport name (or, failing that, the code) stands in rather than leaving " → ". */
+    fun startCustomRoute(origin: Airport, dest: Airport) {
+        fun placeName(a: Airport) = a.municipality.ifBlank { a.name.ifBlank { a.iataCode } }
+        val name = "${placeName(origin)} → ${placeName(dest)}"
+        viewModelScope.launch {
+            val result = challengeRepository.startCustomRouteChallenge(origin.iataCode, dest.iataCode, name)
+            _startResult.value = result
+            clearRouteSearch()
+            focusIfRoute(result)
+        }
+    }
+
+    private fun focusIfRoute(result: StartChallengeResult) {
+        if (result is StartChallengeResult.Started && result.challenge.type == ChallengeType.ROUTE) {
+            preferencesRepository.setFocusedRouteChallengeId(result.challenge.id)
+            _focusedChallengeId.value = result.challenge.id
+        }
+    }
+
+    /** Focuses an existing Route challenge on the Hub - called right before navigating into the
+     *  scoped flight-search session for "continue"/"resume", so the Hub already reflects it on
+     *  return. */
+    fun focusRouteChallenge(id: Int) {
+        preferencesRepository.setFocusedRouteChallengeId(id)
+        _focusedChallengeId.value = id
+    }
+
+    /** Pauses the currently-focused challenge - the Hub reverts to the story-mode airport, but
+     *  the challenge itself (including any paused flight on it) is untouched. Same semantics as
+     *  `HubViewModel.exitFocusedChallenge()`, offered here too since the info modal's "PAUSE
+     *  CHALLENGE" action (shown only for the currently-focused one) is reachable from this
+     *  screen without going via the Hub. */
+    fun pauseFocusedChallenge() {
+        preferencesRepository.clearFocusedRouteChallengeId()
+        _focusedChallengeId.value = null
+    }
+
+    fun startCustomDistance(targetKm: Double) {
+        val name = "Custom Distance - ${formatKm(targetKm)}"
+        viewModelScope.launch {
+            _startResult.value = challengeRepository.startCustomDistanceChallenge(targetKm, name)
+        }
+    }
+
+    fun startCustomStreak(targetDays: Int) {
+        val name = "$targetDays-Day Streak"
+        viewModelScope.launch {
+            _startResult.value = challengeRepository.startCustomStreakChallenge(targetDays, name)
+        }
+    }
+
+    fun abandon(id: Int) {
+        viewModelScope.launch { challengeRepository.abandonChallenge(id) }
+    }
+
+    /** Called by the completion-presentation overlay the instant a challenge's fly-out animation
+     *  finishes - persists the flag (moving it into the log/off the slot) and advances the local
+     *  queue so the overlay moves on to the next one. */
+    fun celebrate(id: Int) {
+        viewModelScope.launch {
+            challengeRepository.markCelebrated(id)
+            _celebrationQueue.value = _celebrationQueue.value.filterNot { it.id == id }
+        }
+    }
+
+    fun clearStartResult() {
+        _startResult.value = null
+    }
+}
+
+/**
+ * Formats a distance *stored in km* for display - in miles, like every distance in the UI (see
+ * util/Units.kt). Kept under its old name because the Challenges screens call it throughout;
+ * the argument is still kilometres, only the output unit changed.
+ */
+fun formatKm(km: Double): String = com.silas270.blocktime.util.formatMiles(km)
+
+class ChallengesViewModelFactory(
+    private val challengeRepository: ChallengeRepository,
+    private val airportRepository: AirportRepository,
+    private val pilotProgressRepository: PilotProgressRepository,
+    private val preferencesRepository: PreferencesRepository
+) : ViewModelProvider.Factory {
+    @Suppress("UNCHECKED_CAST")
+    override fun <T : ViewModel> create(modelClass: Class<T>): T {
+        if (modelClass.isAssignableFrom(ChallengesViewModel::class.java)) {
+            return ChallengesViewModel(challengeRepository, airportRepository, pilotProgressRepository, preferencesRepository) as T
+        }
+        throw IllegalArgumentException("Unknown ViewModel class")
+    }
+}

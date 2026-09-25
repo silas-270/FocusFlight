@@ -4,21 +4,21 @@
     <!-- Debug-build-only automation hook for on-device performance testing
          (see tools/run_perf_scenario.sh at the repo root). Merged only into
          debug builds, never present in a release/Play-Store APK. Triggered via
-         adb shell am broadcast with action com.example.focusflight.PERF_SCENARIO
+         adb shell am broadcast with action com.silas270.blocktime.PERF_SCENARIO
          and an int extra named scenario_id. -->
     <application>
         <receiver
             android:name=".engine.live.PerfScenarioReceiver"
             android:exported="true">
             <intent-filter>
-                <action android:name="com.example.focusflight.PERF_SCENARIO" />
+                <action android:name="com.silas270.blocktime.PERF_SCENARIO" />
             </intent-filter>
         </receiver>
         <receiver
             android:name=".engine.live.DebugSeedReceiver"
             android:exported="true">
             <intent-filter>
-                <action android:name="com.example.focusflight.SEED_ACHIEVEMENTS" />
+                <action android:name="com.silas270.blocktime.SEED_ACHIEVEMENTS" />
             </intent-filter>
         </receiver>
     </application>

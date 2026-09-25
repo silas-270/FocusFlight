@@ -32,7 +32,7 @@
 #   ./gradlew :app:assembleDebug -Pcesium.profile=profiling && adb install -r ...
 set -euo pipefail
 
-PACKAGE="com.example.focusflight"
+PACKAGE="com.silas270.blocktime"
 RECEIVER="$PACKAGE/.engine.live.PerfScenarioReceiver"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT_DIR="${OUT_DIR:-$REPO_ROOT/perf_runs/multimode_$(date +%Y%m%d_%H%M%S)}"
