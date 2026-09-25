@@ -272,7 +272,10 @@ class InFlightViewModel(
      *  (e.g. ON_STOP), not on a timer — this only needs to be current when the user leaves. */
     fun saveCameraState() {
         val pose = com.example.focusflight.engine.live.CesiumLiveJniBridge.nativeGetCameraPose()
-        if (pose.size < 8) return
+        // The native side answers "no camera yet" (ON_STOP before the engine has one) with all
+        // zeros rather than an empty array. A zero quaternion is never a real rotation, and saving
+        // it would restore a broken pose on resume - keep whatever was saved before instead.
+        if (pose.size < 8 || (pose[4] == 0.0 && pose[5] == 0.0 && pose[6] == 0.0 && pose[7] == 0.0)) return
         val camera = CameraPose(
             mode = pose[0].toInt(),
             x = pose[1], y = pose[2], z = pose[3],
@@ -370,7 +373,8 @@ class InFlightViewModel(
                         var currentAlt = state.altitudeMeters
                         var currentSpeed = state.speedKmh
 
-                        if (telemetry.size >= 8) {
+                        // All zeros is the native side's "no telemetry yet", not a reading.
+                        if (telemetry.size >= 8 && telemetry.any { it != 0.0 }) {
                             currentLat = telemetry[1]
                             currentLon = telemetry[2]
                             currentAlt = telemetry[3].toInt()
@@ -434,7 +438,7 @@ class InFlightViewModel(
         val clamped = progress.coerceIn(0f, 1f)
         com.example.focusflight.engine.live.CesiumLiveJniBridge.nativeSetProgress(clamped.toDouble())
         val telemetry = com.example.focusflight.engine.live.CesiumLiveJniBridge.nativeGetTelemetry()
-        if (telemetry.size < 8) return
+        if (telemetry.size < 8 || telemetry.all { it == 0.0 }) return
         _uiState.update {
             it.copy(
                 progress = clamped,

@@ -158,7 +158,8 @@ The result is a `NetworkMode`: `ONLINE`, `OFFLINE_NO_CONNECTION` or `OFFLINE_DAT
 The controller is process-wide (`getInstance`), because ViewModels can outlive a recreated
 Activity. While offline:
 
-- the Hub header and the in-flight HUD show an OFFLINE badge (`OfflineBadge`);
+- the Hub header shows an OFFLINE badge (`OfflineBadge`). The in-flight HUD shows its own
+  smaller status pill, shaped so it is not mistaken for one of the top-bar buttons;
 - the live globe switches to the Offline style, and the network styles are locked in the
   map picker. The pilot's stored style is kept and restored when the app is back online,
   with a short notice pill in both directions;

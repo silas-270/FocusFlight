@@ -17,6 +17,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.indication
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -44,10 +45,6 @@ import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.outlined.Flight
 import androidx.compose.material.icons.outlined.LinearScale
 import androidx.compose.material.icons.outlined.Route
-import androidx.compose.material.icons.outlined.Speed
-import androidx.compose.material.icons.outlined.Height
-import androidx.compose.material.icons.outlined.Schedule
-import androidx.compose.material.icons.outlined.Straighten
 import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -78,20 +75,26 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.example.focusflight.R
 import com.example.focusflight.data.model.Airport
+import com.example.focusflight.data.model.FlightMode
 import com.example.focusflight.ui.components.CaptionLabel
-import com.example.focusflight.ui.components.OfflineBadge
-import com.example.focusflight.ui.components.ModalButtonRow
+import com.example.focusflight.ui.components.BadgeStyle
+import com.example.focusflight.ui.components.BadgeVariant
+import com.example.focusflight.ui.components.FocusBadge
+import com.example.focusflight.ui.components.ButtonSize
+import com.example.focusflight.ui.components.ButtonVariant
+import com.example.focusflight.ui.components.FocusButton
 import com.example.focusflight.ui.components.ModalTitle
 import com.example.focusflight.ui.components.ScrimCardModal
 import com.example.focusflight.ui.components.SpeedMotionLayer
@@ -99,8 +102,10 @@ import com.example.focusflight.data.network.NetworkMode
 import com.example.focusflight.domain.NetworkNotice
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import com.example.focusflight.ui.theme.*
+import com.example.focusflight.ui.viewmodel.inflight.InFlightState
 import com.example.focusflight.ui.viewmodel.inflight.InFlightViewModel
 import com.example.focusflight.util.AirportClock
 import com.example.focusflight.util.airportClock
@@ -146,17 +151,54 @@ fun InFlightScreen(
     // exact same gap to the bottom edge and the timer never jumps when toggling modes.
     var timerBottomInsetFromScreen by remember { mutableStateOf(ScenicPillBottomPadding) }
 
+    // True from the moment the timer reads 00:00 until the arrival screen takes over: the
+    // ~3 s end hold the ViewModel plays before it lands the flight (and the instant after a
+    // skip). Leaving in that window would exit without logging a flight that has already
+    // been flown, so the HUD shows "LANDING…" and leave/settings stand down. Collected as its
+    // own flag, like CountdownOverlayHost, so this scope doesn't recompose on every tick.
+    val landing by remember(viewModel) {
+        viewModel.uiState.map { it.isLanding() }.distinctUntilChanged()
+    }.collectAsState(initial = viewModel.uiState.value.isLanding())
+
     // Intercept back button during flight - pause and ask for confirmation instead
-    // of silently doing nothing or aborting the flight outright.
+    // of silently doing nothing or aborting the flight outright. Swallowed while landing
+    // (see [landing]), since the only way out then is the arrival screen.
     BackHandler {
+        if (landing) return@BackHandler
         viewModel.pauseTimer()
         showExitConfirm = true
     }
 
-    var sheetExpanded by remember { mutableStateOf(false) }
-    // Defaults to Chase for a brand-new flight; seeded from the restored mode when resuming
+    LaunchedEffect(landing) {
+        if (landing) showSettings = false
+    }
+
+    // Defaults to Chase for a brand-new flight; synced to the restored mode when resuming
     // one that was previously saved with a camera pose (see InFlightViewModel.init).
     var selectedCamera by rememberSaveable { mutableStateOf(uiState.restoredCameraMode ?: 1) }
+    // The restored mode can arrive after the first composition (a CHALLENGE session reads its
+    // paused flight from Room), so seeding the picker once isn't enough: it would show CHASE
+    // while the engine flies the restored view, and tapping CHASE would then do nothing. Synced
+    // when it lands, unless the pilot has already picked a view themselves in the meantime.
+    var cameraPickedByUser by rememberSaveable { mutableStateOf(false) }
+    val restoredCameraMode by remember(viewModel) {
+        viewModel.uiState.map { it.restoredCameraMode }.distinctUntilChanged()
+    }.collectAsState(initial = viewModel.uiState.value.restoredCameraMode)
+    LaunchedEffect(restoredCameraMode) {
+        val restored = restoredCameraMode
+        if (restored != null && !cameraPickedByUser) selectedCamera = restored
+    }
+
+    // Wall-clock moment this session effectively departed: now minus the elapsed time the
+    // flight started (or resumed) with. Captured once the ViewModel has loaded the session -
+    // before that the state still reads 0 elapsed, even for a resumed flight - and held at
+    // screen level so hiding the sheet in scenic mode doesn't drop it. Only the departure
+    // clock uses it; the arrival clock is re-derived from the remaining time (see the sheet).
+    var departureEpochMs by remember { mutableStateOf<Long?>(null) }
+    LaunchedEffect(viewModel) {
+        val loaded = viewModel.uiState.first { it.totalDurationSeconds > 0 }
+        departureEpochMs = System.currentTimeMillis() - loaded.timeElapsedMs.coerceAtLeast(0)
+    }
     val selectedMapStyle by viewModel.mapStyle.collectAsState()
     // What the globe really shows: the pilot's choice, or the offline map while offline.
     val effectiveMapStyle by viewModel.effectiveMapStyle.collectAsState()
@@ -279,24 +321,50 @@ fun InFlightScreen(
             val speedMph = kmhToMph(uiState.speedKmh)
             val distanceLeftKm = routeDetails?.distanceKm?.let { it * (1f - uiState.progress) } ?: 0.0
 
-            // Wall-clock departure/arrival, approximated per-airport from longitude
-            // since no real timezone database is bundled. Captured once so it stays
-            // stable across recompositions instead of drifting with "now".
-            val departureEpochMs = remember { System.currentTimeMillis() - uiState.timeElapsedMs.coerceAtLeast(0) }
-            val arrivalEpochMs = departureEpochMs + uiState.totalDurationSeconds * 1000
-            val departureClock = originAirport?.let { origin ->
-                val departureDate = localDateOf(departureEpochMs, origin.lon, origin.lat, origin.isoCountry)
-                airportClock(departureEpochMs, origin.lon, origin.lat, origin.isoCountry, departureDate)
+            // Wall-clock departure/arrival in each airport's local time (see util/FlightClock.kt).
+            // Arrival is now + time remaining rather than departure + total, so a pause (the
+            // app backgrounded, the leave dialog open) pushes it later the way it really does.
+            // Keyed to the minute the label shows, so the 30 Hz recomposition of this sheet
+            // doesn't redo the time-zone work on every tick.
+            val departureMs = departureEpochMs
+            val remainingMs = uiState.totalDurationSeconds * 1000L - uiState.timeElapsedMs.coerceAtLeast(0)
+            val arrivalMinute = (System.currentTimeMillis() + remainingMs.coerceAtLeast(0)) / 60_000L
+            val departureClock = remember(departureMs, originAirport) {
+                val origin = originAirport
+                if (departureMs == null || origin == null) return@remember null
+                val departureDate = localDateOf(departureMs, origin.lon, origin.lat, origin.isoCountry)
+                airportClock(departureMs, origin.lon, origin.lat, origin.isoCountry, departureDate)
             }
-            val arrivalClock = destAirport?.let { dest ->
-                val departureDate = originAirport?.let { localDateOf(departureEpochMs, it.lon, it.lat, it.isoCountry) }
-                    ?: localDateOf(departureEpochMs, dest.lon, dest.lat, dest.isoCountry)
+            val arrivalClock = remember(arrivalMinute, departureMs, originAirport, destAirport) {
+                val dest = destAirport
+                if (departureMs == null || dest == null) return@remember null
+                val arrivalEpochMs = arrivalMinute * 60_000L
+                val departureDate = originAirport?.let { localDateOf(departureMs, it.lon, it.lat, it.isoCountry) }
+                    ?: localDateOf(departureMs, dest.lon, dest.lat, dest.isoCountry)
                 airportClock(arrivalEpochMs, dest.lon, dest.lat, dest.isoCountry, departureDate)
             }
 
+            // Landscape: the expanded panel is roughly as tall as the whole screen, and M3 lets
+            // the sheet grow to its content's height - so uncapped it slid up over the top-bar
+            // buttons (the sheet and the buttons share the same centered 600dp span). Capped to
+            // end just below them, scrolling when the content doesn't fit.
+            val landscapeSheetMaxHeight = (
+                LocalConfiguration.current.screenHeightDp.dp -
+                    WindowInsets.statusBars.asPaddingValues().calculateTopPadding() -
+                    HudTopBarReservedHeight
+                ).coerceAtLeast(104.dp)
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .then(
+                        if (isLandscape) {
+                            Modifier
+                                .heightIn(max = landscapeSheetMaxHeight)
+                                .verticalScroll(rememberScrollState())
+                        } else {
+                            Modifier
+                        }
+                    )
                     .padding(horizontal = Spacing.Large)
                     .padding(bottom = 30.dp)
             ) {
@@ -332,13 +400,25 @@ fun InFlightScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     if (isLandscape) {
+                        // Speed and altitude flank the timer only while the sheet is collapsed:
+                        // expanded, the instruments below show the same two numbers, so they
+                        // fade out here rather than appear twice.
+                        val peekReadoutAlpha by animateFloatAsState(
+                            targetValue = if (instrumentsVisible) 0f else 1f,
+                            label = "peekReadoutAlpha"
+                        )
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             // Left: Ground Speed
-                            Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.Start) {
+                            Column(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .graphicsLayer { alpha = peekReadoutAlpha },
+                                horizontalAlignment = Alignment.Start
+                            ) {
                                 Text(text = "GROUND SPEED", style = MaterialTheme.typography.labelSmall, color = Haze)
                                 Text(
                                     text = formatMph(uiState.speedKmh),
@@ -352,7 +432,7 @@ fun InFlightScreen(
 
                             // Center: Time Remaining (Stronger Visual)
                             Text(
-                                text = formatRemainingTime(uiState.timeRemainingSeconds),
+                                text = if (landing) LandingLabel else formatRemainingTime(uiState.timeRemainingSeconds),
                                 style = MaterialTheme.typography.displaySmall.copy(
                                     fontWeight = FontWeight.Black,
                                     fontFamily = FontFamily.Monospace,
@@ -366,7 +446,12 @@ fun InFlightScreen(
                             )
 
                             // Right: Altitude
-                            Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
+                            Column(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .graphicsLayer { alpha = peekReadoutAlpha },
+                                horizontalAlignment = Alignment.End
+                            ) {
                                 Text(text = "ALTITUDE", style = MaterialTheme.typography.labelSmall, color = Haze)
                                 Text(
                                     text = formatFeet(uiState.altitudeMeters),
@@ -382,7 +467,7 @@ fun InFlightScreen(
                         // Portrait: speed/altitude move into the expanded panel below, so the
                         // always-visible peek is just the one number that matters at a glance.
                         Text(
-                            text = formatRemainingTime(uiState.timeRemainingSeconds),
+                            text = if (landing) LandingLabel else formatRemainingTime(uiState.timeRemainingSeconds),
                             style = MaterialTheme.typography.displaySmall.copy(
                                 fontWeight = FontWeight.Black,
                                 fontFamily = FontFamily.Monospace,
@@ -396,10 +481,11 @@ fun InFlightScreen(
 
                 // --- Expanded Info Panel ---
                 HorizontalDivider(color = Border, thickness = 1.dp)
-                Spacer(modifier = Modifier.height(30.dp))
+                // Tighter in landscape, where height is what keeps the sheet below the top bar.
+                Spacer(modifier = Modifier.height(if (isLandscape) Spacing.Medium else 30.dp))
 
                 if (isLandscape) {
-                    // Wide screen: route hero + flight-time bar on the left, instrument
+                    // Wide screen: route hero + flight-time readout on the left, instrument
                     // cluster on the right. Rather than stretching either side to match
                     // the other (which just inserts gaps), the instrument faces are
                     // sized to a fixed height tuned to equal the left column's height.
@@ -419,7 +505,7 @@ fun InFlightScreen(
                                 progress = { uiState.progress },
                                 modifier = Modifier.fillMaxWidth()
                             )
-                            FlightTimeBar(
+                            FlightTimeReadout(
                                 elapsedSec = uiState.timeElapsedSeconds,
                                 totalSec = uiState.totalDurationSeconds,
                                 distanceLeftKm = distanceLeftKm,
@@ -464,7 +550,7 @@ fun InFlightScreen(
 
                         Spacer(modifier = Modifier.height(20.dp))
 
-                        FlightTimeBar(
+                        FlightTimeReadout(
                             elapsedSec = uiState.timeElapsedSeconds,
                             totalSec = uiState.totalDurationSeconds,
                             distanceLeftKm = distanceLeftKm,
@@ -505,31 +591,33 @@ fun InFlightScreen(
             // the card's right border instead of the physical screen edge.
             val screenWidthDp = LocalConfiguration.current.screenWidthDp.dp
             val sheetSideMargin = ((screenWidthDp - SheetMaxWidth) / 2).coerceAtLeast(0.dp)
+            // Each 40dp button sits in a 48dp touch target (see HudButton), so the padding and
+            // gaps here are each HudTouchInset smaller than the visual spacing they produce.
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .windowInsetsPadding(WindowInsets.statusBars)
                     .padding(
-                        start = Spacing.Large,
-                        end = if (isLandscape) sheetSideMargin else Spacing.Large,
-                        top = Spacing.Large,
-                        bottom = Spacing.Medium
+                        start = Spacing.Large - HudTouchInset,
+                        end = (if (isLandscape) sheetSideMargin else Spacing.Large) - HudTouchInset,
+                        top = Spacing.Large - HudTouchInset,
+                        bottom = Spacing.Medium - HudTouchInset
                     ),
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp - HudTouchInset * 2),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Only while offline. Scenic mode keeps just the icon, on glass like the
-                    // settings button, so the cleared-down HUD stays uncluttered.
+                    // Only while offline: a status pill, not a button. Scenic mode keeps just
+                    // the icon, so the cleared-down HUD stays uncluttered.
                     if (networkMode.isOffline) {
-                        if (scenicMode) {
-                            ScenicOfflineIndicator(networkMode)
-                        } else {
-                            OfflineBadge(mode = networkMode)
-                        }
+                        HudOfflineStatus(
+                            mode = networkMode,
+                            iconOnly = scenicMode,
+                            modifier = Modifier.padding(end = HudTouchInset)
+                        )
                     }
 
                     // Debug: jump straight to landing. Still scaffolding - see
@@ -539,37 +627,28 @@ fun InFlightScreen(
                     SkipFlightDebugButton(viewModel)
 
                     // Scenic-mode toggle: clears the HUD down to a glass settings
-                    // button and a timer-only pill. Plain icon, no background/border.
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clickable { scenicMode = !scenicMode },
-                        contentAlignment = Alignment.Center
+                    // button and a timer-only pill. Drawn on the same surface as the
+                    // settings button beside it - bare, its icon vanished against the
+                    // globe in the light theme, where OffWhite is navy.
+                    HudButton(
+                        onClick = { scenicMode = !scenicMode },
+                        surface = hudButtonSurface(scenicMode)
                     ) {
                         Icon(
                             imageVector = if (scenicMode) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
                             contentDescription = if (scenicMode) "Show flight HUD" else "Hide flight HUD",
-                            tint = OffWhite,
+                            tint = if (scenicMode) Silver else OffWhite,
                             modifier = Modifier.size(20.dp)
                         )
                     }
 
-                    // Flight settings button (camera view + pause/leave slider).
-                    // Restyled to a grey glass look in scenic mode.
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .then(
-                                if (scenicMode) {
-                                    Modifier.glassSurface(RoundedCornerShape(12.dp))
-                                } else {
-                                    Modifier
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .background(DeepNavy)
-                                }
-                            )
-                            .clickable { showSettings = true },
-                        contentAlignment = Alignment.Center
+                    // Flight settings button (camera view + leave slider).
+                    // Restyled to a grey glass look in scenic mode. Stands down while
+                    // landing, since everything behind it is moot by then.
+                    HudButton(
+                        onClick = { showSettings = true },
+                        surface = hudButtonSurface(scenicMode),
+                        enabled = !landing
                     ) {
                         Icon(
                             imageVector = Icons.Outlined.AirplanemodeActive,
@@ -607,7 +686,7 @@ fun InFlightScreen(
                             .padding(horizontal = 24.dp, vertical = pillTextVerticalPadding)
                     ) {
                         Text(
-                            text = formatRemainingTime(uiState.timeRemainingSeconds),
+                            text = if (landing) LandingLabel else formatRemainingTime(uiState.timeRemainingSeconds),
                             style = MaterialTheme.typography.displaySmall.copy(
                                 fontWeight = FontWeight.Black,
                                 fontFamily = FontFamily.Monospace,
@@ -645,6 +724,28 @@ fun InFlightScreen(
 
     }
 
+    // Overlays below are drawn in this order, each above the last: countdown, debug
+    // scrubber, settings, leave dialog. The countdown used to come last, so backing out
+    // during it left a frozen giant digit painted over the leave dialog.
+
+    // --- Movie Style Countdown Overlay ---
+    // Reading uiState.timeElapsedMs directly here would subscribe this whole screen to a
+    // field that changes every 33 ms tick, forcing everything above — scaffold, buttons,
+    // camera controls — to recompose 30x/second. Scoped into its own composable instead,
+    // gated on a boolean that only flips once, so after the countdown nothing recomposes.
+    CountdownOverlayHost(viewModel)
+
+    // --- TEMPORARY debug-only engine sound scrubber ---
+    // Lets you drag through the whole flight instantly to audition enginePower/altitude/speed
+    // at any point without waiting real time. BuildConfig.DEBUG-gated so it can never ship, and
+    // meant to be deleted once the engine sound tuning is done.
+    if (com.example.focusflight.BuildConfig.DEBUG) {
+        EngineSoundDebugScrubber(
+            viewModel = viewModel,
+            onResume = { if (!showExitConfirm) viewModel.startTimer() }
+        )
+    }
+
     // --- Flight settings overlay ---
     // Lives as a sibling of the scaffold rather than inside its content lambda: the
     // content lambda is drawn *underneath* the bottom sheet, which is what let the
@@ -660,6 +761,7 @@ fun InFlightScreen(
         selectedRouteLineMode = routeLineMode,
         engineSoundEnabled = engineSoundEnabled,
         onCameraSelected = {
+            cameraPickedByUser = true
             selectedCamera = it
             showSettings = false
         },
@@ -673,67 +775,78 @@ fun InFlightScreen(
         },
         onEngineSoundToggled = viewModel::setEngineSoundEnabled,
         onDismiss = { showSettings = false },
-        onPauseRequested = {
+        onLeaveRequested = {
             showSettings = false
-            viewModel.pauseTimer()
-            showExitConfirm = true
+            // The overlay closes itself the moment the landing starts, but a slide
+            // released in that same instant must still not open the leave dialog.
+            if (!landing) {
+                viewModel.pauseTimer()
+                showExitConfirm = true
+            }
         }
     )
 
-    // --- TEMPORARY debug-only engine sound scrubber ---
-    // Lets you drag through the whole flight instantly to audition enginePower/altitude/speed
-    // at any point without waiting real time. BuildConfig.DEBUG-gated so it can never ship, and
-    // meant to be deleted once the engine sound tuning is done.
-    if (com.example.focusflight.BuildConfig.DEBUG) {
-        EngineSoundDebugScrubber(
-            progress = uiState.progress,
-            altitudeMeters = uiState.altitudeMeters,
-            speedKmh = uiState.speedKmh,
-            enginePower = viewModel.enginePower,
-            onScrub = { progress ->
-                viewModel.pauseTimer()
-                viewModel.scrubProgress(progress)
-            }
-        )
-    }
-
     // --- Layer 2 Exit/Pause confirmation Dialog overlay ---
     if (showExitConfirm) {
-        ScrimCardModal(onScrimTap = {
+        val resume = {
             showExitConfirm = false
             viewModel.startTimer()
-        }) {
+        }
+        ScrimCardModal(onScrimTap = resume) {
             ModalTitle("LEAVE FLIGHT?")
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "Your progress is saved. You can resume this flight later from the Hub.",
+                text = leaveFlightMessage(viewModel.mode),
                 style = MaterialTheme.typography.bodyMedium,
                 color = Haze,
                 textAlign = TextAlign.Center
             )
             Spacer(modifier = Modifier.height(24.dp))
-            ModalButtonRow(
-                dismissText = "RESUME",
-                confirmText = "LEAVE",
-                onDismiss = {
-                    showExitConfirm = false
-                    viewModel.startTimer()
-                },
-                onConfirm = {
-                    showExitConfirm = false
-                    onExitFlight()
-                }
-            )
+            // RESUME is the primary action here - staying is the answer this dialog hopes
+            // for - so it gets the accent fill and the trailing slot, with LEAVE as the
+            // quieter secondary button. Laid out locally because the shared ModalButtonRow
+            // always puts the accent on its confirm button.
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                FocusButton(
+                    text = "LEAVE",
+                    onClick = {
+                        showExitConfirm = false
+                        onExitFlight()
+                    },
+                    modifier = Modifier.weight(1f),
+                    variant = ButtonVariant.Secondary,
+                    size = ButtonSize.Compact,
+                    fillMaxWidth = false
+                )
+                FocusButton(
+                    text = "RESUME",
+                    onClick = resume,
+                    modifier = Modifier.weight(1f),
+                    variant = ButtonVariant.Primary,
+                    size = ButtonSize.Compact,
+                    fillMaxWidth = false
+                )
+            }
         }
     }
-
-    // --- Movie Style Countdown Overlay ---
-    // Reading uiState.timeElapsedMs directly here would subscribe this whole screen to a
-    // field that changes every 33 ms tick, forcing everything above — scaffold, buttons,
-    // camera controls — to recompose 30x/second. Scoped into its own composable instead,
-    // gated on a boolean that only flips once, so after the countdown nothing recomposes.
-    CountdownOverlayHost(viewModel)
 }
+
+/** Where a flight left now can be picked up again, which depends on the slot it is saved to
+ *  (see PausedFlightStore): Story flights resume from the Hub; Free flights from the Free Mode
+ *  row on Challenges; a challenge leg from that challenge on Challenges, and from the Hub too
+ *  while it is the focused challenge - which it is when one of its legs is being flown. */
+private fun leaveFlightMessage(mode: FlightMode): String = "Your progress is saved. " + when (mode) {
+    FlightMode.STORY -> "You can resume this flight later from the Hub."
+    FlightMode.FREE -> "You can resume it later from Free Mode on the Challenges screen."
+    FlightMode.CHALLENGE -> "You can resume it later from the Hub, or from this challenge on the Challenges screen."
+}
+
+/** See `landing` in [InFlightScreen]: the timer has run out and the flight is about to land. */
+private fun InFlightState.isLanding(): Boolean =
+    totalDurationSeconds > 0 && timeElapsedMs >= totalDurationSeconds * 1000L
+
+/** Stands in for the 00:00 timer while the flight lands. Same width as an hh:mm:ss timer. */
+private const val LandingLabel = "LANDING…"
 
 @Composable
 private fun CountdownOverlayHost(viewModel: InFlightViewModel) {
@@ -758,7 +871,7 @@ private fun CountdownOverlayHost(viewModel: InFlightViewModel) {
 //  hanging under the top bar. Landscape has almost none - the stacked card is
 //  taller than the whole viewport there - so landscape gets a right-anchored
 //  drawer that spends the axis it actually has: two side-by-side columns of
-//  compact option rows, with the slide-to-pause control across the foot.
+//  compact option rows, with the slide-to-leave control across the foot.
 // ============================================================================
 
 private data class CameraOption(val label: String, val mode: Int, val icon: ImageVector)
@@ -825,20 +938,82 @@ private fun MapStyleOfflineHint(text: String) {
     )
 }
 
-/** Scenic mode's OFFLINE marker: just the icon, on the same glass as the settings button. */
+/**
+ * The HUD's OFFLINE marker. Deliberately not shaped like the 40dp square buttons beside it (as
+ * the shared [com.example.focusflight.ui.components.OfflineBadge] is, to sit in the Hub header):
+ * a short, fully rounded pill with no click handler, so it reads as status rather than as a
+ * control that does nothing. [iconOnly] is scenic mode's version - just the icon, on glass.
+ */
 @Composable
-private fun ScenicOfflineIndicator(mode: NetworkMode) {
+private fun HudOfflineStatus(mode: NetworkMode, iconOnly: Boolean, modifier: Modifier = Modifier) {
+    val dataSaver = mode == NetworkMode.OFFLINE_DATA_SAVER
+    val icon = if (dataSaver) Icons.Outlined.DataSaverOn else Icons.Outlined.CloudOff
+    val description = if (dataSaver) "Offline: data saver on" else "Offline: no connection"
+    val pill = RoundedCornerShape(50)
+    if (iconOnly) {
+        Box(
+            modifier = modifier
+                .glassSurface(pill)
+                .padding(horizontal = 10.dp, vertical = 5.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(imageVector = icon, contentDescription = description, tint = Silver, modifier = Modifier.size(16.dp))
+        }
+    } else {
+        FocusBadge(
+            text = "OFFLINE",
+            modifier = modifier.semantics { contentDescription = description },
+            variant = BadgeVariant.Neutral,
+            style = BadgeStyle.Translucent,
+            icon = icon,
+            shape = pill
+        )
+    }
+}
+
+/** The look of a top-bar button: solid in the full HUD, glass in scenic mode. */
+private fun hudButtonSurface(scenicMode: Boolean): Modifier =
+    if (scenicMode) {
+        Modifier.glassSurface(RoundedCornerShape(12.dp))
+    } else {
+        Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(DeepNavy)
+    }
+
+/**
+ * A 40dp top-bar button inside a 48dp touch target. The extra 4dp on each side is invisible and
+ * tappable, and the ripple is still drawn on the 40dp [surface] only, so the button looks exactly
+ * as it did while being easier to hit. Callers shrink their padding by [HudTouchInset] to keep the
+ * same visual spacing.
+ */
+@Composable
+private fun HudButton(
+    onClick: () -> Unit,
+    surface: Modifier,
+    enabled: Boolean = true,
+    content: @Composable BoxScope.() -> Unit
+) {
+    val interactionSource = remember { MutableInteractionSource() }
     Box(
         modifier = Modifier
-            .size(40.dp)
-            .glassSurface(RoundedCornerShape(12.dp)),
+            .size(HudTouchTarget)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                enabled = enabled,
+                onClick = onClick
+            ),
         contentAlignment = Alignment.Center
     ) {
-        Icon(
-            imageVector = if (mode == NetworkMode.OFFLINE_DATA_SAVER) Icons.Outlined.DataSaverOn else Icons.Outlined.CloudOff,
-            contentDescription = if (mode == NetworkMode.OFFLINE_DATA_SAVER) "Offline: data saver on" else "Offline: no connection",
-            tint = Silver,
-            modifier = Modifier.size(20.dp)
+        Box(
+            modifier = Modifier
+                .size(HudButtonSize)
+                .alpha(if (enabled) 1f else DisabledOptionAlpha)
+                .then(surface)
+                .indication(interactionSource, ripple()),
+            contentAlignment = Alignment.Center,
+            content = content
         )
     }
 }
@@ -904,21 +1079,57 @@ private fun NetworkNoticePill(notice: NetworkNotice?, onShown: () -> Unit) {
 
 // --- TEMPORARY: engine sound debug scrubber, see its call site above. Delete this whole
 // composable along with the call site once engine sound tuning is done. ---
+//
+// Collapsed to a small "DBG" chip in the top-left corner, clear of the top-bar buttons on the
+// right; the panel opens *below* the top bar, never over it. (Pinned open across the top, its
+// slider used to catch taps meant for the buttons and silently pause the flight.) Scrubbing
+// pauses the timer so the two don't fight, and the panel says so and offers RESUME; closing
+// the panel after a scrub resumes the timer too, via [onResume].
 @Composable
-private fun EngineSoundDebugScrubber(
-    progress: Float,
-    altitudeMeters: Int,
-    speedKmh: Int,
-    enginePower: kotlinx.coroutines.flow.StateFlow<Float>,
-    onScrub: (Float) -> Unit
-) {
-    // Collected here rather than by the caller, so the 30 Hz readout only recomposes this overlay.
-    val power by enginePower.collectAsState()
+private fun EngineSoundDebugScrubber(viewModel: InFlightViewModel, onResume: () -> Unit) {
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    var scrubbed by remember { mutableStateOf(false) }
+    val chipShape = RoundedCornerShape(8.dp)
+    val topBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + Spacing.Large
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .windowInsetsPadding(WindowInsets.systemBars)
-            .padding(horizontal = Spacing.Large, vertical = 8.dp),
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
+            .padding(start = Spacing.Large, top = topBarTop)
+    ) {
+        Text(
+            text = "DBG",
+            color = Color.White,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            fontFamily = FontFamily.Monospace,
+            modifier = Modifier
+                .clip(chipShape)
+                .background(Color.Black.copy(alpha = if (expanded) 0.85f else 0.5f))
+                .clickable {
+                    if (expanded && scrubbed) {
+                        scrubbed = false
+                        onResume()
+                    }
+                    expanded = !expanded
+                }
+                .padding(horizontal = 10.dp, vertical = 12.dp)
+        )
+    }
+
+    if (!expanded) return
+
+    // Collected here rather than by the caller, so the 30 Hz readout only recomposes this overlay.
+    val state by viewModel.uiState.collectAsState()
+    val power by viewModel.enginePower.collectAsState()
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
+            // Below the top bar's 40dp buttons, the same line NetworkNoticePill starts at.
+            .padding(top = topBarTop + HudButtonSize + Spacing.Medium)
+            .padding(horizontal = Spacing.Large),
         contentAlignment = Alignment.TopCenter
     ) {
         Column(
@@ -929,17 +1140,38 @@ private fun EngineSoundDebugScrubber(
                 .padding(12.dp)
         ) {
             Text(
-                text = "DEBUG progress=${"%.3f".format(progress)}  alt=${altitudeMeters}m  " +
-                    "spd=${speedKmh}km/h  N1=${"%.2f".format(power)}",
+                text = "DEBUG progress=${"%.3f".format(state.progress)}  alt=${state.altitudeMeters}m  " +
+                    "spd=${state.speedKmh}km/h  N1=${"%.2f".format(power)}",
                 color = Color.White,
                 fontSize = 11.sp,
                 fontFamily = FontFamily.Monospace
             )
             Slider(
-                value = progress,
-                onValueChange = onScrub,
+                value = state.progress,
+                onValueChange = { progress ->
+                    scrubbed = true
+                    viewModel.pauseTimer()
+                    viewModel.scrubProgress(progress)
+                },
                 valueRange = 0f..1f
             )
+            if (!state.isRunning) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "TIMER PAUSED",
+                        color = Color.White,
+                        fontSize = 11.sp,
+                        fontFamily = FontFamily.Monospace,
+                        modifier = Modifier.weight(1f)
+                    )
+                    TextButton(onClick = {
+                        scrubbed = false
+                        onResume()
+                    }) {
+                        Text(text = "RESUME", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
         }
     }
 }
@@ -956,9 +1188,13 @@ private fun FlightSettingsOverlay(
     onRouteLineModeSelected: (Int) -> Unit,
     onEngineSoundToggled: (Boolean) -> Unit,
     onDismiss: () -> Unit,
-    onPauseRequested: () -> Unit
+    onLeaveRequested: () -> Unit
 ) {
     val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+
+    // Back closes the panel first. Registered after the screen's own BackHandler, so while
+    // the panel is open it takes precedence over "pause and ask to leave".
+    BackHandler(enabled = visible, onBack = onDismiss)
 
     Box(modifier = Modifier.fillMaxSize()) {
         AnimatedVisibility(
@@ -1003,7 +1239,7 @@ private fun FlightSettingsOverlay(
                     onRouteLineModeSelected = onRouteLineModeSelected,
                     onEngineSoundToggled = onEngineSoundToggled,
                     onDismiss = onDismiss,
-                    onPauseRequested = onPauseRequested
+                    onLeaveRequested = onLeaveRequested
                 )
             } else {
                 PortraitFlightSettingsCard(
@@ -1015,7 +1251,7 @@ private fun FlightSettingsOverlay(
                     onMapStyleSelected = onMapStyleSelected,
                     onRouteLineModeSelected = onRouteLineModeSelected,
                     onEngineSoundToggled = onEngineSoundToggled,
-                    onPauseRequested = onPauseRequested
+                    onLeaveRequested = onLeaveRequested
                 )
             }
         }
@@ -1034,7 +1270,7 @@ private fun PortraitFlightSettingsCard(
     onMapStyleSelected: (Int) -> Unit,
     onRouteLineModeSelected: (Int) -> Unit,
     onEngineSoundToggled: (Boolean) -> Unit,
-    onPauseRequested: () -> Unit
+    onLeaveRequested: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -1169,7 +1405,7 @@ private fun PortraitFlightSettingsCard(
             )
         }
 
-        SlideToPauseControl(onSlideCompleted = onPauseRequested)
+        SlideToLeaveControl(onSlideCompleted = onLeaveRequested)
     }
 }
 
@@ -1189,7 +1425,7 @@ private fun LandscapeFlightSettingsPanel(
     onRouteLineModeSelected: (Int) -> Unit,
     onEngineSoundToggled: (Boolean) -> Unit,
     onDismiss: () -> Unit,
-    onPauseRequested: () -> Unit
+    onLeaveRequested: () -> Unit
 ) {
     val screenWidth = LocalConfiguration.current.screenWidthDp.dp
     val panelWidth = (screenWidth * 0.52f).coerceIn(360.dp, 500.dp)
@@ -1203,8 +1439,11 @@ private fun LandscapeFlightSettingsPanel(
             .background(DeepNavy)
             .border(1.dp, Border, panelShape)
             // Insets inside the surface so the drawer's fill still runs edge to edge
-            // behind the status and navigation bars.
-            .windowInsetsPadding(WindowInsets.systemBars)
+            // behind the status and navigation bars. safeDrawing rather than systemBars:
+            // the bars are hidden in flight, so systemBars is zero, while a punch-hole
+            // camera on this side still needs clearing. Start is left out - the drawer's
+            // left edge is mid-screen, so a cutout on the far side isn't its concern.
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Vertical + WindowInsetsSides.End))
             // Height is the scarce axis here: scroll rather than clip if a device's
             // usable height is shorter than the content.
             .verticalScroll(rememberScrollState())
@@ -1225,20 +1464,35 @@ private fun LandscapeFlightSettingsPanel(
                 color = OffWhite,
                 modifier = Modifier.weight(1f)
             )
+            // 32dp square drawn inside a 48dp touch target; the offset keeps the visible
+            // square's right edge where it was, flush with the column below.
+            val closeInteraction = remember { MutableInteractionSource() }
             Box(
                 modifier = Modifier
-                    .size(32.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(Slate)
-                    .clickable(onClick = onDismiss),
+                    .offset(x = (HudTouchTarget - 32.dp) / 2)
+                    .size(HudTouchTarget)
+                    .clickable(
+                        interactionSource = closeInteraction,
+                        indication = null,
+                        onClick = onDismiss
+                    ),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = Icons.Outlined.Close,
-                    contentDescription = "Close flight settings",
-                    tint = Haze,
-                    modifier = Modifier.size(16.dp)
-                )
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Slate)
+                        .indication(closeInteraction, ripple()),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Close,
+                        contentDescription = "Close flight settings",
+                        tint = Haze,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
             }
         }
 
@@ -1377,7 +1631,7 @@ private fun LandscapeFlightSettingsPanel(
 
         HorizontalDivider(color = Border, thickness = 1.dp)
 
-        SlideToPauseControl(onSlideCompleted = onPauseRequested, trackHeight = 48.dp)
+        SlideToLeaveControl(onSlideCompleted = onLeaveRequested, trackHeight = 48.dp)
     }
 }
 
@@ -1543,7 +1797,7 @@ private fun MapStyleThumbnail(
 }
 
 @Composable
-private fun SlideToPauseControl(onSlideCompleted: () -> Unit, trackHeight: Dp = 56.dp) {
+private fun SlideToLeaveControl(onSlideCompleted: () -> Unit, trackHeight: Dp = 56.dp) {
     val thumbInsetDp = 4.dp
     val thumbSizeDp = trackHeight - thumbInsetDp * 2
     val trackHeightDp = trackHeight
@@ -1570,11 +1824,11 @@ private fun SlideToPauseControl(onSlideCompleted: () -> Unit, trackHeight: Dp = 
         var committed by remember { mutableStateOf(false) }
         val animatedOffsetPx by animateFloatAsState(
             targetValue = dragOffsetPx,
-            label = "slideToPauseOffset"
+            label = "slideToLeaveOffset"
         )
         val thumbScale by animateFloatAsState(
             targetValue = if (dragging) 1.08f else 1f,
-            label = "slideToPauseThumbScale"
+            label = "slideToLeaveThumbScale"
         )
         val progress = if (maxOffsetPx > 0f) (animatedOffsetPx / maxOffsetPx).coerceIn(0f, 1f) else 0f
         val armed = progress >= commitThreshold
@@ -1593,7 +1847,7 @@ private fun SlideToPauseControl(onSlideCompleted: () -> Unit, trackHeight: Dp = 
         )
 
         Text(
-            text = if (armed) "RELEASE TO PAUSE" else "SLIDE TO PAUSE",
+            text = if (armed) "RELEASE TO LEAVE" else "SLIDE TO LEAVE",
             style = MaterialTheme.typography.labelMedium.copy(
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.sp
@@ -1645,7 +1899,7 @@ private fun SlideToPauseControl(onSlideCompleted: () -> Unit, trackHeight: Dp = 
                 } else {
                     Icons.AutoMirrored.Outlined.KeyboardArrowRight
                 },
-                contentDescription = "Slide to pause",
+                contentDescription = "Slide to leave the flight",
                 tint = Midnight,
                 modifier = Modifier.size(if (armed) 20.dp else 24.dp)
             )
@@ -1714,21 +1968,6 @@ fun MovieCountdown(timeElapsedMs: Long) {
                 fontWeight = FontWeight.Black,
                 fontFamily = FontFamily.Monospace
             )
-        )
-    }
-}
-
-@Composable
-private fun TelemetryText(label: String, value: String) {
-    Column {
-        Text(text = label, style = MaterialTheme.typography.labelSmall, color = Haze)
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodyMedium.copy(
-                fontWeight = FontWeight.Bold,
-                fontFamily = FontFamily.Monospace
-            ),
-            color = OffWhite
         )
     }
 }
@@ -1867,15 +2106,27 @@ private fun RouteProgressTrack(progress: () -> Float, modifier: Modifier = Modif
 
 // Shared frame for the two instrument cards so they always match in size: a face
 // that fills the card's width (so its margin matches the card's own padding on
-// every side) at a given height, a spacer, then an icon+label caption underneath.
+// every side) at a given height, a spacer, then a label caption underneath.
 private val InstrumentFaceHeight = 108.dp
-private val LandscapeInstrumentFaceHeight = 124.dp
+// Tuned to the landscape left column (route hero + flight-time readout) so both sides of
+// the expanded panel end level.
+private val LandscapeInstrumentFaceHeight = 100.dp
 
 // The bottom sheet is centered and capped at this width on wide landscape screens
 // (Material3's own default is 640.dp; kept explicit here so the HUD top bar can
 // compute the same side margin and line the settings button up with the sheet's
 // actual right border).
 private val SheetMaxWidth = 600.dp
+
+// Top-bar buttons: drawn at HudButtonSize, tappable across HudTouchTarget (the 48dp minimum),
+// which leaves HudTouchInset of invisible touch area on each side. See HudButton.
+private val HudButtonSize = 40.dp
+private val HudTouchTarget = 48.dp
+private val HudTouchInset = (HudTouchTarget - HudButtonSize) / 2
+
+// How far down from the top edge (below any status-bar inset) the top-bar buttons reach, plus
+// a small gap - the landscape bottom sheet is capped to stop here so it can't cover them.
+private val HudTopBarReservedHeight = Spacing.Large + HudButtonSize + 4.dp
 
 // How far the scenic-mode timer pill sits above the physical bottom edge. Chosen to
 // approximate where the timer already sits in the normal collapsed sheet peek.
@@ -1895,13 +2146,13 @@ private fun Modifier.glassSurface(shape: Shape): Modifier = this
 // without sitting through a real session. Must go before shipping - see DEV_FEATURES_TO_REVERT.md.
 @Composable
 private fun SkipFlightDebugButton(viewModel: InFlightViewModel) {
-    Box(
-        modifier = Modifier
-            .size(40.dp)
+    // HudButton for the same 48dp touch target and spacing as its neighbours in the top bar.
+    HudButton(
+        onClick = { viewModel.skipFlight() },
+        surface = Modifier
             .background(DeepNavy.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
             .border(1.dp, Border, RoundedCornerShape(12.dp))
-            .clickable { viewModel.skipFlight() },
-        contentAlignment = Alignment.Center
+            .clip(RoundedCornerShape(12.dp))
     ) {
         Text(
             text = ">>",
@@ -1916,7 +2167,6 @@ private fun SkipFlightDebugButton(viewModel: InFlightViewModel) {
 @Composable
 private fun InstrumentCard(
     label: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
     modifier: Modifier = Modifier,
     faceHeight: Dp = InstrumentFaceHeight,
     face: @Composable BoxScope.() -> Unit
@@ -1937,15 +2187,11 @@ private fun InstrumentCard(
             content = face
         )
         Spacer(modifier = Modifier.height(8.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(imageVector = icon, contentDescription = null, tint = Amber, modifier = Modifier.size(12.dp))
-            Spacer(modifier = Modifier.width(4.dp))
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.5.sp),
-                color = Haze
-            )
-        }
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.5.sp),
+            color = Haze
+        )
     }
 }
 
@@ -1970,7 +2216,7 @@ private fun AltitudeGauge(altitudeFt: Int, modifier: Modifier = Modifier, faceHe
     // the amber "ft" readout.
     val baseIdx by remember { derivedStateOf { animatedIndexState.value.roundToInt() } }
 
-    InstrumentCard(label = "ALTITUDE", icon = Icons.Outlined.Height, modifier = modifier, faceHeight = faceHeight) {
+    InstrumentCard(label = "ALTITUDE", modifier = modifier, faceHeight = faceHeight) {
         val centerIdx = baseIdx
         for (offset in -3..3) {
             val idx = centerIdx + offset
@@ -2049,7 +2295,7 @@ private fun SpeedInstrument(
     val intensity = (speedMph / maxSpeedMph).coerceIn(0f, 1f)
     val moving = animate && intensity > 0.02f
 
-    InstrumentCard(label = "SPEED", icon = Icons.Outlined.Speed, modifier = modifier, faceHeight = faceHeight) {
+    InstrumentCard(label = "GROUND SPEED", modifier = modifier, faceHeight = faceHeight) {
         if (moving) {
             // The animated layer only exists while the aircraft is moving *and* the panel
             // is on screen. Leaving composition disposes its infinite transition, so a
@@ -2073,7 +2319,7 @@ private fun SpeedInstrument(
         // so Text never sees equal parameters and re-measures on each 30 Hz tick even
         // when the string is unchanged. Same reasoning everywhere else in this file.
         Text(
-            text = "$speedMph MPH",
+            text = "$speedMph mph",
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Bold,
             fontFamily = FontFamily.Monospace,
@@ -2083,10 +2329,12 @@ private fun SpeedInstrument(
     }
 }
 
-// --- Flight time as a fuel-gauge-style fill bar; tap it to swap the readout for
-// miles left / total miles, with a small swap glyph hinting it's interactive. ---
+// --- Flight time as elapsed / total; tap it to swap the readout for miles left / total
+// miles, with a swap glyph hinting it's interactive. It used to carry a fill bar too, but
+// the route track's travelling plane above already shows progress, so the bar was a third
+// copy of the same fact. ---
 @Composable
-private fun FlightTimeBar(
+private fun FlightTimeReadout(
     elapsedSec: Long,
     totalSec: Long,
     distanceLeftKm: Double,
@@ -2094,72 +2342,43 @@ private fun FlightTimeBar(
     modifier: Modifier = Modifier
 ) {
     var showDistance by remember { mutableStateOf(false) }
-    val fraction = if (totalSec > 0) (elapsedSec.toFloat() / totalSec.toFloat()).coerceIn(0f, 1f) else 0f
-    val animatedFraction = animateFloatAsState(targetValue = fraction, label = "flightTimeBar")
 
-    Column(
+    Row(
         modifier = modifier
             .clip(RoundedCornerShape(16.dp))
             .background(Slate.copy(alpha = 0.5f))
-            .clickable { showDistance = !showDistance }
-            .padding(16.dp)
-    ) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = if (showDistance) Icons.Outlined.Straighten else Icons.Outlined.Schedule,
-                    contentDescription = null,
-                    tint = Amber,
-                    modifier = Modifier.size(14.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = if (showDistance) "DISTANCE" else "FLIGHT TIME",
-                    style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.5.sp),
-                    color = Haze
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Icon(
-                    imageVector = Icons.Outlined.SwapHoriz,
-                    contentDescription = "Tap to switch units",
-                    tint = Haze.copy(alpha = 0.6f),
-                    modifier = Modifier.size(13.dp)
-                )
+            .clickable(onClickLabel = if (showDistance) "Show flight time" else "Show distance") {
+                showDistance = !showDistance
             }
+            .padding(16.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = if (showDistance) {
-                    "${formatMiles(distanceLeftKm)} / ${formatMiles(totalDistanceKm)}"
-                } else {
-                    "${formatRemainingTime(elapsedSec)} / ${formatRemainingTime(totalSec)}"
-                },
-                style = MaterialTheme.typography.labelMedium.copy(
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace
-                ),
-                color = OffWhite
+                text = if (showDistance) "DISTANCE" else "FLIGHT TIME",
+                style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.5.sp),
+                color = Haze
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Icon(
+                imageVector = Icons.Outlined.SwapHoriz,
+                contentDescription = null,
+                tint = Haze,
+                modifier = Modifier.size(14.dp)
             )
         }
-        Spacer(modifier = Modifier.height(10.dp))
-        // Drawn rather than sized: `fillMaxWidth(animatedFraction)` reads the animation
-        // during composition, so the bar re-composed and re-laid-out on every frame it
-        // moved. drawBehind reads it in the draw phase instead — same look, no layout.
-        val fillBrush = remember { Brush.horizontalGradient(listOf(Amber.copy(alpha = 0.7f), Amber)) }
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(14.dp)
-                .clip(RoundedCornerShape(7.dp))
-                .background(Midnight.copy(alpha = 0.5f))
-                .drawBehind {
-                    val w = size.width * animatedFraction.value
-                    if (w > 0f) {
-                        drawRoundRect(
-                            brush = fillBrush,
-                            size = Size(w, size.height),
-                            cornerRadius = CornerRadius(size.height / 2f)
-                        )
-                    }
-                }
+        Text(
+            text = if (showDistance) {
+                "${formatMiles(distanceLeftKm)} / ${formatMiles(totalDistanceKm)}"
+            } else {
+                "${formatRemainingTime(elapsedSec)} / ${formatRemainingTime(totalSec)}"
+            },
+            style = MaterialTheme.typography.labelMedium.copy(
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace
+            ),
+            color = OffWhite
         )
     }
 }
@@ -2174,44 +2393,3 @@ private fun formatRemainingTime(seconds: Long): String {
         String.format(java.util.Locale.US, "%02d:%02d", m, s)
     }
 }
-
-@Composable
-private fun TelemetryRow(label: String, value: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodySmall.copy(
-                fontFamily = FontFamily.Monospace,
-                fontWeight = FontWeight.Medium
-            ),
-            color = Haze
-        )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodySmall.copy(
-                fontFamily = FontFamily.Monospace,
-                fontWeight = FontWeight.Bold
-            ),
-            color = OffWhite,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-    }
-}
-
-private data class CelebrationParticle(
-    var x: Float,
-    var y: Float,
-    val vx: Float,
-    val vy: Float,
-    val size: Float,
-    val color: Color,
-    var alpha: Float,
-    val decay: Float
-)

@@ -200,5 +200,7 @@ every other phase, that power steps down through the climb to cruise rather than
 the arrival goes approach → quiet flare → reverse → taxi idle in that order.
 
 For auditioning by ear, the in-flight screen has a `BuildConfig.DEBUG`-gated scrubber that
-drags through a whole flight instantly, showing progress, altitude, speed and N1. It is
+drags through a whole flight instantly, showing progress, altitude, speed and N1. It sits
+collapsed behind a "DBG" chip in the top-left corner. Scrubbing pauses the timer, and the
+panel then offers RESUME; closing the panel resumes the timer too. It is
 temporary and is meant to be deleted along with its call site once tuning is finished.
