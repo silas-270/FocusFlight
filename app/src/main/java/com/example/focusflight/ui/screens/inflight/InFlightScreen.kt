@@ -419,7 +419,6 @@ fun InFlightScreen(
                                     .graphicsLayer { alpha = peekReadoutAlpha },
                                 horizontalAlignment = Alignment.Start
                             ) {
-                                Text(text = "GROUND SPEED", style = MaterialTheme.typography.labelSmall, color = Haze)
                                 Text(
                                     text = formatMph(uiState.speedKmh),
                                     style = MaterialTheme.typography.titleMedium.copy(
@@ -452,7 +451,6 @@ fun InFlightScreen(
                                     .graphicsLayer { alpha = peekReadoutAlpha },
                                 horizontalAlignment = Alignment.End
                             ) {
-                                Text(text = "ALTITUDE", style = MaterialTheme.typography.labelSmall, color = Haze)
                                 Text(
                                     text = formatFeet(uiState.altitudeMeters),
                                     style = MaterialTheme.typography.titleMedium.copy(
@@ -2166,7 +2164,6 @@ private fun SkipFlightDebugButton(viewModel: InFlightViewModel) {
 
 @Composable
 private fun InstrumentCard(
-    label: String,
     modifier: Modifier = Modifier,
     faceHeight: Dp = InstrumentFaceHeight,
     face: @Composable BoxScope.() -> Unit
@@ -2185,12 +2182,6 @@ private fun InstrumentCard(
                 .background(Midnight.copy(alpha = 0.35f)),
             contentAlignment = Alignment.Center,
             content = face
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.5.sp),
-            color = Haze
         )
     }
 }
@@ -2216,7 +2207,7 @@ private fun AltitudeGauge(altitudeFt: Int, modifier: Modifier = Modifier, faceHe
     // the amber "ft" readout.
     val baseIdx by remember { derivedStateOf { animatedIndexState.value.roundToInt() } }
 
-    InstrumentCard(label = "ALTITUDE", modifier = modifier, faceHeight = faceHeight) {
+    InstrumentCard(modifier = modifier, faceHeight = faceHeight) {
         val centerIdx = baseIdx
         for (offset in -3..3) {
             val idx = centerIdx + offset
@@ -2295,7 +2286,7 @@ private fun SpeedInstrument(
     val intensity = (speedMph / maxSpeedMph).coerceIn(0f, 1f)
     val moving = animate && intensity > 0.02f
 
-    InstrumentCard(label = "GROUND SPEED", modifier = modifier, faceHeight = faceHeight) {
+    InstrumentCard(modifier = modifier, faceHeight = faceHeight) {
         if (moving) {
             // The animated layer only exists while the aircraft is moving *and* the panel
             // is on screen. Leaving composition disposes its infinite transition, so a
