@@ -38,6 +38,8 @@ Picks the route. Two search modes the pilot toggles between:
 Origin is the pilot's current airport in Story Mode, and a free choice in Free Mode.
 Selected routes are paged as cards, bidirectionally synced with the timeline: swiping the
 pager updates the selection, picking a new interval resets the pager to the first card.
+Tapping a partly visible neighbouring card pages to it; tapping the centred card books it,
+the same as **Confirm selection**.
 
 **The LHR fallback.** If a Story Mode origin has no outbound routes at all, the ViewModel
 rehomes the pilot to London Heathrow and persists it, so the screen always has content.
@@ -55,7 +57,8 @@ is rendering behind it — this is the first of the two routes where
 `nativeSetRenderingEnabled(true)` is on.
 
 A route lookup that fails degrades rather than propagating: the ticket renders without a
-distance. `loadRouteContext` treats a failed query the same as "no such route", because
+distance, and since starting needs the route's duration, **Start flight** stays disabled
+with a short note to go back and pick the flight again. `loadRouteContext` treats a failed query the same as "no such route", because
 both callers resolve it inside a plain `viewModelScope.launch` where an escaping throw
 would take the process down, and neither has anything better to do with the failure.
 

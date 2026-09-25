@@ -1,5 +1,11 @@
 package com.example.focusflight.ui.screens.flightsearch
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -8,10 +14,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -35,10 +44,12 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -61,6 +72,7 @@ import com.example.focusflight.ui.theme.Slate
 import com.example.focusflight.ui.theme.Spacing
 import com.example.focusflight.ui.viewmodel.flightsearch.FlightSearchViewModel
 import com.example.focusflight.ui.viewmodel.flightsearch.SearchMode
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -160,11 +172,19 @@ fun FlightSearchScreen(
         },
         containerColor = Midnight
     ) { paddingValues ->
+        // The window is edge-to-edge, so the keyboard overlays this screen instead of resizing
+        // it. imePadding() lifts the bottom of the layout (results list + CONFIRM SELECTION) above
+        // it, and while it's up the route map steps aside so the results keep a usable height -
+        // with the map in place the airport search's list was down to a sliver. Only the airport
+        // search has a text field, so the time search never sees either.
+        val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+
         // Main Screen Column
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
+                .imePadding()
                 .padding(bottom = Spacing.Large),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -187,17 +207,25 @@ fun FlightSearchScreen(
             }
 
             // 2. Tactical 2D Route Map (expands to take available vertical space, no border, consistent padding)
-            RouteMap(
-                viewModel = viewModel,
-                originAirport = originAirport,
-                routes = if (searchMode == SearchMode.TIME) filteredRoutes else airportSearchResults,
-                selectedRoute = selectedRoute,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = Spacing.Large, vertical = Spacing.Small)
-            )
+            AnimatedVisibility(
+                visible = !imeVisible,
+                enter = fadeIn(tween(200)) + expandVertically(),
+                exit = fadeOut(tween(150)) + shrinkVertically()
+            ) {
+                Column {
+                    RouteMap(
+                        viewModel = viewModel,
+                        originAirport = originAirport,
+                        routes = if (searchMode == SearchMode.TIME) filteredRoutes else airportSearchResults,
+                        selectedRoute = selectedRoute,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = Spacing.Large, vertical = Spacing.Small)
+                    )
 
-            Spacer(modifier = Modifier.height(Spacing.Medium))
+                    Spacer(modifier = Modifier.height(Spacing.Medium))
+                }
+            }
 
             Box(
                 modifier = Modifier
@@ -223,6 +251,7 @@ fun FlightSearchScreen(
                         // 4. Carousel / Cards (or Empty State)
                         if (filteredRoutes.isNotEmpty()) {
                             val pagerState = rememberPagerState(pageCount = { filteredRoutes.size })
+                            val pagerScope = rememberCoroutineScope()
 
                             // Reset pager selection back to the first option when the filtered list changes
                             LaunchedEffect(filteredRoutes) {
@@ -258,8 +287,18 @@ fun FlightSearchScreen(
                                 SelectionCard(
                                     route = route,
                                     isSelected = isSelected,
+                                    // A peeking neighbour used to ripple and then do nothing.
+                                    // Tapping it now brings it to the centre (which selects it,
+                                    // via the page -> selectedRoute sync above), and tapping the
+                                    // centred card still books it - the standard carousel
+                                    // "tap the focused item to open it", and it keeps the
+                                    // one-tap path to a session that architecture.md protects.
                                     onClick = {
-                                        if (isSelected) onRouteConfirm(route)
+                                        if (isSelected) {
+                                            onRouteConfirm(route)
+                                        } else {
+                                            pagerScope.launch { pagerState.animateScrollToPage(page) }
+                                        }
                                     }
                                 )
                             }
@@ -336,6 +375,7 @@ fun FlightSearchScreen(
                         query = airportSearchQuery,
                         onQueryChange = { viewModel.onAirportSearchQueryChanged(it) },
                         results = if (airportSearchQuery.isEmpty()) allRoutes else airportSearchResults,
+                        originCity = originAirport?.municipality,
                         selectedRoute = selectedRoute,
                         onRouteSelect = { viewModel.selectRoute(it) },
                         modifier = Modifier
@@ -350,9 +390,7 @@ fun FlightSearchScreen(
             // 6. Common Confirm Selection Button (always displayed at the bottom)
             PrimaryActionButton(
                 text = "CONFIRM SELECTION",
-                modifier = Modifier
-                    .padding(horizontal = Spacing.Large)
-                    .height(54.dp),
+                modifier = Modifier.padding(horizontal = Spacing.Large),
                 enabled = selectedRoute != null,
                 onClick = { selectedRoute?.let { onRouteConfirm(it) } }
             )

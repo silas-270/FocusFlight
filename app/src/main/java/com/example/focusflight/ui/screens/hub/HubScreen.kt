@@ -3,6 +3,8 @@ package com.example.focusflight.ui.screens.hub
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.indication
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,6 +15,7 @@ import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -38,6 +41,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberBottomSheetScaffoldState
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
@@ -52,6 +56,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -105,7 +110,7 @@ fun HubScreen(
     val currentAirport by viewModel.currentAirport.collectAsState()
     val focusedChallenge by viewModel.focusedChallenge.collectAsState()
     val stats by viewModel.flightStats.collectAsState()
-    val recentFlights by viewModel.recentFlights.collectAsState()
+    val pilotName by viewModel.pilotName.collectAsState()
     val routeMapPath by viewModel.routeMapPath.collectAsState()
     val networkMode by viewModel.networkMode.collectAsState()
 
@@ -163,7 +168,7 @@ fun HubScreen(
                     val flight = pausedFlight!!
                     PrimaryActionButton(
                         text = "RESUME FLIGHT",
-                        modifier = Modifier.height(56.dp),
+                        modifier = Modifier.heightIn(min = 56.dp),
                         icon = Icons.Outlined.FlightTakeoff,
                         onClick = { onResumeFlightClick(flight) }
                     )
@@ -171,7 +176,7 @@ fun HubScreen(
                     val focused = focusedChallenge
                     PrimaryActionButton(
                         text = "BOOK A FLIGHT",
-                        modifier = Modifier.height(56.dp),
+                        modifier = Modifier.heightIn(min = 56.dp),
                         icon = Icons.Outlined.FlightTakeoff,
                         onClick = { if (focused != null) onContinueChallengeClick(focused.id) else onBookFlightClick() }
                     )
@@ -203,11 +208,15 @@ fun HubScreen(
                     .padding(horizontal = Spacing.Large)
                     .padding(bottom = Spacing.Small)
             ) {
+                // The pilot's own (generated, renameable) name rather than a rank - ranks are
+                // earned per flight on arrival, so a fixed "Captain" here contradicted them.
                 Text(
-                    text = "Welcome back, Captain",
+                    text = pilotName?.let { "Welcome back, $it" } ?: "Welcome back",
                     style = MaterialTheme.typography.titleMedium,
                     color = Amber,
-                    letterSpacing = 0.5.sp
+                    letterSpacing = 0.5.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 Spacer(modifier = Modifier.height(9.dp))
                 
@@ -333,73 +342,52 @@ fun HubScreen(
             // Top Header & Navigation (outside solid container so globe is behind). Settings sits
             // alone on the left so it doesn't compete with the Challenges/Account pair - those two
             // are the frequent, session-shaped destinations; Settings is the occasional one.
+            // Each button is a 40dp tile inside a 48dp touch area (see HubHeaderIconButton), so
+            // every padding here is 4dp less than the visual spacing it produces.
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .windowInsetsPadding(WindowInsets.statusBars)
-                    .padding(start = Spacing.Large, end = Spacing.Large, top = Spacing.Large, bottom = Spacing.Medium),
+                    .padding(
+                        start = Spacing.Large - HeaderTouchInset,
+                        end = Spacing.Large - HeaderTouchInset,
+                        top = Spacing.Large - HeaderTouchInset,
+                        bottom = Spacing.Medium - HeaderTouchInset
+                    ),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Settings: theme preference and the Story Mode home-base actions.
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(DeepNavy)
-                        .clickable { onSettingsClick() },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Settings,
-                        contentDescription = "Settings",
-                        tint = OffWhite,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
+                HubHeaderIconButton(
+                    icon = Icons.Outlined.Settings,
+                    contentDescription = "Settings",
+                    onClick = onSettingsClick
+                )
 
+                // Challenges and Passport, visually Spacing.Small apart - exactly the two touch
+                // insets, so the touch areas meet without overlapping.
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     // Only visible while offline (no connection, or data saver on in Settings).
                     if (networkMode.isOffline) {
                         OfflineBadge(mode = networkMode)
-                        Spacer(modifier = Modifier.width(Spacing.Small))
+                        Spacer(modifier = Modifier.width(Spacing.Small - HeaderTouchInset))
                     }
 
                     // Challenges: Free Mode entry, the challenge slots, and achievements
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(DeepNavy)
-                            .clickable { onChallengesClick() },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Explore,
-                            contentDescription = "Challenges",
-                            tint = OffWhite,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
+                    HubHeaderIconButton(
+                        icon = Icons.Outlined.Explore,
+                        contentDescription = "Challenges",
+                        onClick = onChallengesClick
+                    )
 
-                    Spacer(modifier = Modifier.width(Spacing.Small))
+                    Spacer(modifier = Modifier.width(Spacing.Small - HeaderTouchInset * 2))
 
-                    // Account
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(DeepNavy)
-                            .clickable { onPassportClick() },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Person,
-                            contentDescription = "Account",
-                            tint = OffWhite,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
+                    // Pilot Passport - named for the screen it opens
+                    HubHeaderIconButton(
+                        icon = Icons.Outlined.Person,
+                        contentDescription = "Passport",
+                        onClick = onPassportClick
+                    )
                 }
             }
         }
@@ -417,6 +405,50 @@ fun HubScreen(
             },
             onDismiss = { showDiscardFlightConfirm = false }
         )
+    }
+}
+
+/** How far each side of a [HubHeaderIconButton]'s 48dp touch area extends past its 40dp tile. */
+private val HeaderTouchInset = 4.dp
+
+/**
+ * One of the Hub header's 40dp icon tiles, with a 48dp touch area around it. The ripple is drawn
+ * on the tile only, so it looks exactly as before; the extra 4dp each side is invisible but
+ * tappable, and is what accessibility services see as the button's bounds.
+ */
+@Composable
+private fun HubHeaderIconButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    Box(
+        modifier = Modifier
+            .size(40.dp + HeaderTouchInset * 2)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                role = Role.Button,
+                onClick = onClick
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(DeepNavy)
+                .indication(interactionSource, ripple()),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                tint = OffWhite,
+                modifier = Modifier.size(20.dp)
+            )
+        }
     }
 }
 
@@ -460,6 +492,9 @@ private fun FocusedChallengeCard(challenge: Challenge, onExit: () -> Unit, modif
                 )
             }
             Spacer(modifier = Modifier.width(Spacing.Small))
+            // 24dp visually, but not 24dp to touch: Compose expands any pointer target smaller
+            // than ViewConfiguration.minimumTouchTargetSize to 48dp for touch input. Padding it
+            // out to 48dp explicitly would make the whole card 24dp taller.
             Box(
                 modifier = Modifier
                     .size(24.dp)

@@ -1,6 +1,5 @@
 package com.example.focusflight.ui.viewmodel.hub
 
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -8,7 +7,6 @@ import com.example.focusflight.data.model.Airport
 import com.example.focusflight.data.model.Challenge
 import com.example.focusflight.data.model.ChallengeStatus
 import com.example.focusflight.data.model.ChallengeType
-import com.example.focusflight.data.model.FlightLog
 import com.example.focusflight.data.model.FlightMode
 import com.example.focusflight.data.model.FlightStats
 import com.example.focusflight.data.model.PausedFlight
@@ -16,7 +14,6 @@ import com.example.focusflight.data.network.NetworkMode
 import com.example.focusflight.data.network.OfflineModeController
 import com.example.focusflight.data.repository.AirportRepository
 import com.example.focusflight.data.repository.ChallengeRepository
-import com.example.focusflight.data.repository.FlightLogRepository
 import com.example.focusflight.data.repository.PilotProgressRepository
 import com.example.focusflight.data.repository.PreferencesRepository
 import com.example.focusflight.data.repository.UserRepository
@@ -34,7 +31,6 @@ class HubViewModel(
     private val airportRepository: AirportRepository,
     private val preferencesRepository: PreferencesRepository,
     private val userRepository: UserRepository,
-    private val flightLogRepository: FlightLogRepository,
     private val challengeRepository: ChallengeRepository,
     private val pilotProgressRepository: PilotProgressRepository,
     offlineModeController: OfflineModeController,
@@ -56,8 +52,10 @@ class HubViewModel(
     private val _flightStats = MutableStateFlow(FlightStats())
     val flightStats: StateFlow<FlightStats> = _flightStats.asStateFlow()
 
-    private val _recentFlights = MutableStateFlow<List<FlightLog>>(emptyList())
-    val recentFlights: StateFlow<List<FlightLog>> = _recentFlights.asStateFlow()
+    /** The pilot's username for the Hub greeting, or null until the profile has loaded. Follows
+     *  the profile flow, so a rename on the Passport shows up here without a refresh. */
+    private val _pilotName = MutableStateFlow<String?>(null)
+    val pilotName: StateFlow<String?> = _pilotName.asStateFlow()
 
     private val _routeMapPath = MutableStateFlow<String?>(null)
     val routeMapPath: StateFlow<String?> = _routeMapPath.asStateFlow()
@@ -78,6 +76,11 @@ class HubViewModel(
         viewModelScope.launch {
             pilotProgressRepository.progress.collect { progress ->
                 _flightStats.value = progress?.stats ?: FlightStats()
+            }
+        }
+        viewModelScope.launch {
+            userRepository.getProfileFlow().collect { profile ->
+                _pilotName.value = profile?.username?.takeIf { it.isNotBlank() }
             }
         }
     }
@@ -120,16 +123,6 @@ class HubViewModel(
                 if (airport != null) {
                     generateRouteMap(airport)
                 }
-            }
-
-            // Recent flights stay a Hub-local query - nothing else in the app shows them, so
-            // there is nothing to share. The headline stats no longer come from here at all:
-            // they arrive already computed from PilotProgressRepository (see init), instead of
-            // being recomputed on every ON_START refresh of this screen.
-            try {
-                _recentFlights.value = flightLogRepository.getRecentFlights()
-            } catch (e: Exception) {
-                Log.e("HubViewModel", "Error loading recent flights", e)
             }
         }
     }
@@ -185,7 +178,6 @@ class HubViewModelFactory(
     private val airportRepository: AirportRepository,
     private val preferencesRepository: PreferencesRepository,
     private val userRepository: UserRepository,
-    private val flightLogRepository: FlightLogRepository,
     private val challengeRepository: ChallengeRepository,
     private val pilotProgressRepository: PilotProgressRepository,
     private val offlineModeController: OfflineModeController,
@@ -194,7 +186,7 @@ class HubViewModelFactory(
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(HubViewModel::class.java)) {
-            return HubViewModel(airportRepository, preferencesRepository, userRepository, flightLogRepository, challengeRepository, pilotProgressRepository, offlineModeController, cacheDir) as T
+            return HubViewModel(airportRepository, preferencesRepository, userRepository, challengeRepository, pilotProgressRepository, offlineModeController, cacheDir) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

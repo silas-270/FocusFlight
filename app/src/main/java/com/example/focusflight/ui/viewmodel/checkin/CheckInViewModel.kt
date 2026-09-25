@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.focusflight.data.model.Airport
 import com.example.focusflight.data.model.FlightRoute
 import com.example.focusflight.data.repository.AirportRepository
+import com.example.focusflight.data.repository.UserRepository
 import com.example.focusflight.domain.loadRouteContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,6 +20,7 @@ import kotlin.random.Random
 
 class CheckInViewModel(
     private val airportRepository: AirportRepository,
+    private val userRepository: UserRepository,
     val originIata: String,
     val destIata: String,
     val flightNumber: String
@@ -32,6 +34,16 @@ class CheckInViewModel(
 
     private val _routeDetails = MutableStateFlow<FlightRoute?>(null)
     val routeDetails: StateFlow<FlightRoute?> = _routeDetails.asStateFlow()
+
+    /** True once loading finished without finding the route. START FLIGHT needs its duration,
+     *  so it stays disabled for good in that case - this lets the screen say why instead of
+     *  showing a button that silently never enables. */
+    private val _routeMissing = MutableStateFlow(false)
+    val routeMissing: StateFlow<Boolean> = _routeMissing.asStateFlow()
+
+    /** The pilot's username for the boarding pass, or null until the profile has loaded. */
+    private val _pilotName = MutableStateFlow<String?>(null)
+    val pilotName: StateFlow<String?> = _pilotName.asStateFlow()
 
     val currentDate: String = SimpleDateFormat("dd MMM yyyy", Locale.US).format(Date()).uppercase()
 
@@ -51,12 +63,23 @@ class CheckInViewModel(
             _originAirport.value = context.origin
             _destAirport.value = context.dest
             _routeDetails.value = context.route
+            _routeMissing.value = context.route == null
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            _pilotName.value = try {
+                userRepository.getProfile()?.username?.takeIf { it.isNotBlank() }
+            } catch (e: Exception) {
+                // Cosmetic only - the pass falls back to a generic name.
+                android.util.Log.e("CheckInViewModel", "Error loading pilot name", e)
+                null
+            }
         }
     }
 }
 
 class CheckInViewModelFactory(
     private val airportRepository: AirportRepository,
+    private val userRepository: UserRepository,
     private val originIata: String,
     private val destIata: String,
     private val flightNumber: String
@@ -64,7 +87,7 @@ class CheckInViewModelFactory(
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(CheckInViewModel::class.java)) {
-            return CheckInViewModel(airportRepository, originIata, destIata, flightNumber) as T
+            return CheckInViewModel(airportRepository, userRepository, originIata, destIata, flightNumber) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }
