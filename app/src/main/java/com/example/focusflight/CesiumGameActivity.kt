@@ -859,7 +859,9 @@ class CesiumGameActivity : GameActivity() {
                 addAction("com.example.focusflight.CONTROL")
                 addAction("com.example.focusflight.CAPTURE_SCREEN")
             }
-            registerReceiver(object : android.content.BroadcastReceiver() {
+            // Exported on purpose: tools/capture_all_screens.sh sends these from `adb shell`.
+            // Debug builds only. Android 14+ throws at registration without an explicit flag.
+            androidx.core.content.ContextCompat.registerReceiver(this, object : android.content.BroadcastReceiver() {
                 override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
                     if (intent == null) return
                     val navTarget = intent.getStringExtra("navigate")
@@ -931,7 +933,7 @@ class CesiumGameActivity : GameActivity() {
                         }
                     }
                 }
-            }, filter)
+            }, filter, androidx.core.content.ContextCompat.RECEIVER_EXPORTED)
         }
     }
 
