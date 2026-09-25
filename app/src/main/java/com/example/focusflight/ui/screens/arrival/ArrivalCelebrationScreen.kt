@@ -5,6 +5,8 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -31,7 +33,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.focusflight.ui.components.FocusButton
-import com.example.focusflight.ui.components.FocusInfoRow
+import com.example.focusflight.ui.components.CaptionLabel
 import com.example.focusflight.ui.theme.*
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
@@ -56,12 +58,26 @@ fun ArrivalCelebrationScreen(
      *  `DestinationPhotoChannel` - null means "not resolved, no match, or fetch failed", all of
      *  which look identical here: fall back to the flat [Midnight] background below, silently. */
     destPhotoUrl: String? = null,
+    /** The destination's city for "Welcome to …", looked up by the caller from [destIata] (it
+     *  can't travel in the route string). Null until resolved, or if unknown: the IATA code
+     *  stands in. */
+    destCity: String? = null,
     onContinue: () -> Unit
 ) {
-    BackHandler {
-        onContinue()
+    // CONTINUE may wait up to LANDING_RESULT_TIMEOUT_MS on the landing result before it
+    // navigates (see CesiumGameActivity), so after the first tap the button shows it's working
+    // instead of looking dead, and further taps and back presses are ignored.
+    var continuing by remember { mutableStateOf(false) }
+    val continueOnce = {
+        if (!continuing) {
+            continuing = true
+            onContinue()
+        }
     }
-    
+    BackHandler {
+        continueOnce()
+    }
+
     val view = androidx.compose.ui.platform.LocalView.current
     val textMeasurer = rememberTextMeasurer()
 
@@ -136,10 +152,19 @@ fun ArrivalCelebrationScreen(
             )
         }
 
-        Column(
+        // Scrolls when the content outgrows the screen (large font scales), while
+        // heightIn(min = the viewport) keeps the weighted spacers spreading everything out
+        // exactly as before whenever it does fit.
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
                 .windowInsetsPadding(WindowInsets.systemBars)
+        ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .heightIn(min = maxHeight)
                 .padding(vertical = Spacing.Large, horizontal = Spacing.Large),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -162,7 +187,8 @@ fun ArrivalCelebrationScreen(
                 Spacer(modifier = Modifier.height(4.dp))
 
                 Text(
-                    text = "Welcome to $destIata",
+                    text = "Welcome to ${destCity?.takeIf { it.isNotBlank() } ?: destIata}",
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                     style = MaterialTheme.typography.titleMedium.copy(
                         fontFamily = FontFamily.Serif,
                         fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
@@ -291,15 +317,20 @@ fun ArrivalCelebrationScreen(
                             }
                         }
 
+                        // The stamp's text is sized in dp (converted with toSp), not sp: it is
+                        // artwork laid out at fixed offsets inside this fixed-size canvas, so
+                        // following the system font scale only made the lines collide. At the
+                        // default scale 1dp == 1sp, so nothing changes there.
+
                         // 4. Draw Date above IATA
                         val dateResult = textMeasurer.measure(
                             text = currentDateStr,
                             style = TextStyle(
                                 color = ink.copy(alpha = 0.75f),
-                                fontSize = 11.sp,
+                                fontSize = 11.dp.toSp(),
                                 fontFamily = FontFamily.Monospace,
                                 fontWeight = FontWeight.SemiBold,
-                                letterSpacing = 1.5.sp
+                                letterSpacing = 1.5.dp.toSp()
                             )
                         )
                         drawText(
@@ -316,9 +347,9 @@ fun ArrivalCelebrationScreen(
                             style = TextStyle(
                                 color = ink,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 44.sp,
+                                fontSize = 44.dp.toSp(),
                                 fontFamily = FontFamily.Monospace,
-                                letterSpacing = 3.sp
+                                letterSpacing = 3.dp.toSp()
                             )
                         )
                         drawText(
@@ -335,9 +366,9 @@ fun ArrivalCelebrationScreen(
                             style = TextStyle(
                                 color = ink.copy(alpha = 0.85f),
                                 fontWeight = FontWeight.Black,
-                                fontSize = 12.sp,
+                                fontSize = 12.dp.toSp(),
                                 fontFamily = FontFamily.SansSerif,
-                                letterSpacing = 2.sp
+                                letterSpacing = 2.dp.toSp()
                             )
                         )
                         drawText(
@@ -358,41 +389,37 @@ fun ArrivalCelebrationScreen(
             val mins = durationMin % 60
             val timeString = if (hours > 0) "${hours}h ${mins}m" else "${mins}m"
 
-            Text(
-                text = timeString,
-                style = MaterialTheme.typography.displayMedium.copy(
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace,
-                    letterSpacing = 2.sp
-                ),
-                color = OffWhite,
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.graphicsLayer { alpha = fade }
-            )
+            ) {
+                // Says what the number is: the time spent focused on this flight.
+                CaptionLabel(text = "FOCUSED FOR")
+                Text(
+                    text = timeString,
+                    style = MaterialTheme.typography.displayMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        letterSpacing = 2.sp
+                    ),
+                    color = OffWhite
+                )
+            }
 
             Spacer(modifier = Modifier.weight(1f))
 
-            // Exit / Continue Button
+            // CONTINUE rather than "ENTER HUB": when the landing moved a challenge it leads to
+            // the Challenge Outcome screen first. Taps only count once the button has faded in
+            // - while it's still invisible a stray tap would skip the whole celebration.
             FocusButton(
-                text = "ENTER HUB",
-                onClick = onContinue,
+                text = "CONTINUE",
+                onClick = { if (fade >= 0.99f) continueOnce() },
+                enabled = !continuing,
                 modifier = Modifier
                     .fillMaxWidth()
                     .graphicsLayer { alpha = fade }
             )
         }
+        }
     }
-}
-
-/**
- * Backward compatibility alias for the centralized [com.example.focusflight.ui.components.FocusInfoRow].
- */
-@Deprecated("Use FocusInfoRow instead", ReplaceWith("FocusInfoRow(label = label, value = value)", "com.example.focusflight.ui.components.FocusInfoRow"))
-@Composable
-fun CelebrationRow(label: String, value: String) {
-    FocusInfoRow(
-        label = label,
-        value = value,
-        labelColor = Haze.copy(alpha = 0.6f),
-        valueColor = Haze
-    )
 }
