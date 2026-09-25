@@ -7,8 +7,9 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
-// Untracked, gitignored dev-machine config (SDK paths etc.) - also where the Pexels API key for
-// the arrival-screen destination photo feature lives, so it never ends up in the repo.
+// Untracked, gitignored dev-machine config (SDK paths etc.) - also where the API keys live, so
+// they never end up in the repo: PEXELS_API_KEY for the arrival-screen destination photo, and
+// CARTO_API_KEY for the engine's dark basemap (passed to the Rust build in cargoNdkBuild).
 val localProperties = Properties().apply {
     val localPropertiesFile = rootProject.file("local.properties")
     if (localPropertiesFile.exists()) {
@@ -142,6 +143,12 @@ tasks.register("cargoNdkBuild") {
             builder.directory(File(absoluteRustPath))
 
             builder.environment()["ANDROID_NDK_HOME"] = ndkDir
+            // CesiumRS reads this at compile time (`standard_imagery_url()`); without it the dark
+            // basemap's tiles come back stamped "API KEY REQUIRED". Left unset when the property
+            // is missing, so a CARTO_API_KEY exported in the shell still reaches cargo.
+            localProperties.getProperty("CARTO_API_KEY")?.takeIf { it.isNotBlank() }?.let {
+                builder.environment()["CARTO_API_KEY"] = it
+            }
             if (!isWindows) {
                 builder.environment()["PATH"] = "$userHome/.cargo/bin:" + System.getenv("PATH")
             }
