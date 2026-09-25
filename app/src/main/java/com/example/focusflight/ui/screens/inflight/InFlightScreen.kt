@@ -1,5 +1,6 @@
 package com.example.focusflight.ui.screens.inflight
 
+import com.example.focusflight.ui.theme.LocalDesignScreenSize
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
@@ -349,7 +350,7 @@ fun InFlightScreen(
             // buttons (the sheet and the buttons share the same centered 600dp span). Capped to
             // end just below them, scrolling when the content doesn't fit.
             val landscapeSheetMaxHeight = (
-                LocalConfiguration.current.screenHeightDp.dp -
+                LocalDesignScreenSize.current.height -
                     WindowInsets.statusBars.asPaddingValues().calculateTopPadding() -
                     HudTopBarReservedHeight
                 ).coerceAtLeast(104.dp)
@@ -587,7 +588,7 @@ fun InFlightScreen(
             // SheetMaxWidth, so its right border sits inset from the screen edge by
             // this same margin. Match it so the button's right edge lines up with
             // the card's right border instead of the physical screen edge.
-            val screenWidthDp = LocalConfiguration.current.screenWidthDp.dp
+            val screenWidthDp = LocalDesignScreenSize.current.width
             val sheetSideMargin = ((screenWidthDp - SheetMaxWidth) / 2).coerceAtLeast(0.dp)
             // Each 40dp button sits in a 48dp touch target (see HudButton), so the padding and
             // gaps here are each HudTouchInset smaller than the visual spacing they produce.
@@ -1425,7 +1426,7 @@ private fun LandscapeFlightSettingsPanel(
     onDismiss: () -> Unit,
     onLeaveRequested: () -> Unit
 ) {
-    val screenWidth = LocalConfiguration.current.screenWidthDp.dp
+    val screenWidth = LocalDesignScreenSize.current.width
     val panelWidth = (screenWidth * 0.52f).coerceIn(360.dp, 500.dp)
     val panelShape = RoundedCornerShape(topStart = 24.dp, bottomStart = 24.dp)
 

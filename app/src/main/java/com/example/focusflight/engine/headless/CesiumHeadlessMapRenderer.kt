@@ -68,8 +68,8 @@ class CesiumHeadlessMapRenderer(private val cacheDir: File) {
         return try {
             Log.d(TAG, "Triggering route rendering for ${routesData.size} routes ($centerIata)...")
             val success = CesiumHeadlessJnaBindings.renderRoutes(
-                width = RENDER_WIDTH,
-                height = RENDER_HEIGHT,
+                width = renderWidth,
+                height = renderHeight,
                 routesData = routesData,
                 outPath = outFile.absolutePath
             )
@@ -90,8 +90,22 @@ class CesiumHeadlessMapRenderer(private val cacheDir: File) {
 
     companion object {
         private const val TAG = "CesiumHeadlessMapRenderer"
+        /** Reference size: an exact 1:1 fit for the Hub globe box on the S23 it was tuned on. */
         internal const val RENDER_WIDTH = 1080
         internal const val RENDER_HEIGHT = 1670
+
+        /**
+         * Actual render size: the reference aspect scaled to this display's shortest side, so the
+         * Hub globe stays pixel-sharp on higher-resolution screens where the UI is upscaled (see
+         * ProvideDesignDensity) instead of stretching a 1080px image. Identical on the S23;
+         * bounded so a very dense panel can't make the offscreen render arbitrarily expensive.
+         */
+        private val renderWidth: Int by lazy {
+            val metrics = android.content.res.Resources.getSystem().displayMetrics
+            minOf(metrics.widthPixels, metrics.heightPixels).coerceIn(RENDER_WIDTH, MAX_RENDER_WIDTH)
+        }
+        private val renderHeight: Int by lazy { renderWidth * RENDER_HEIGHT / RENDER_WIDTH }
+        private const val MAX_RENDER_WIDTH = 1440
         internal const val MAX_DISTANCE_KM = 10000.0
         internal const val MAX_ROUTES = 12
     }
