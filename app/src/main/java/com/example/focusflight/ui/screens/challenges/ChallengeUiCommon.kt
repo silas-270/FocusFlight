@@ -28,7 +28,7 @@ import androidx.compose.foundation.layout.Spacer
  * challenges can share them too.
  */
 
-/** "STR → PEK" / "3/7 visited" / "4,200 km / 10,000 km" / "2 of 4 days", by type. */
+/** "STR → PEK" / "3/7 visited" / "2,600 / 6,200 mi" / "2 of 4 days", by type. */
 internal fun challengeSubtitle(challenge: Challenge): String {
     return when (challenge.type) {
         // A predefined itinerary names the leg as well as its endpoints: on a circuit the endpoint
