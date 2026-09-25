@@ -343,493 +343,496 @@ class CesiumGameActivity : GameActivity() {
                         androidx.compose.material3.MaterialTheme.colorScheme.background
                     }
 
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxSize(),
-                        color = bgColor
-                    ) {
-                        NavHost(
-                            navController = navController,
-                            startDestination = startDestination,
-                            enterTransition = {
-                                slideIntoContainer(
-                                    towards = AnimatedContentTransitionScope.SlideDirection.Start,
-                                    animationSpec = tween(300)
-                                )
-                            },
-                            exitTransition = {
-                                slideOutOfContainer(
-                                    towards = AnimatedContentTransitionScope.SlideDirection.Start,
-                                    animationSpec = tween(300)
-                                )
-                            },
-                            popEnterTransition = {
-                                slideIntoContainer(
-                                    towards = AnimatedContentTransitionScope.SlideDirection.End,
-                                    animationSpec = tween(300)
-                                )
-                            },
-                            popExitTransition = {
-                                slideOutOfContainer(
-                                    towards = AnimatedContentTransitionScope.SlideDirection.End,
-                                    animationSpec = tween(300)
-                                )
-                            }
+                    // Every screen scales as one S23-proportioned layout - see ProvideDesignDensity.
+                    com.example.focusflight.ui.theme.ProvideDesignDensity {
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxSize(),
+                            color = bgColor
                         ) {
-                            // ── Onboarding ──
-                            composable(Screen.Onboarding.route) { entry ->
-                                val viewModel: OnboardingViewModel = viewModel(
-                                    factory = OnboardingViewModelFactory(airportRepository, preferencesRepository, userRepository, cacheDir)
-                                )
-                                OnboardingScreen(
-                                    viewModel = viewModel,
-                                    onOnboardingComplete = {
-                                        navController.navigateFrom(entry, Screen.Hub.route) {
-                                            popUpTo(Screen.Onboarding.route) { inclusive = true }
+                            NavHost(
+                                navController = navController,
+                                startDestination = startDestination,
+                                enterTransition = {
+                                    slideIntoContainer(
+                                        towards = AnimatedContentTransitionScope.SlideDirection.Start,
+                                        animationSpec = tween(300)
+                                    )
+                                },
+                                exitTransition = {
+                                    slideOutOfContainer(
+                                        towards = AnimatedContentTransitionScope.SlideDirection.Start,
+                                        animationSpec = tween(300)
+                                    )
+                                },
+                                popEnterTransition = {
+                                    slideIntoContainer(
+                                        towards = AnimatedContentTransitionScope.SlideDirection.End,
+                                        animationSpec = tween(300)
+                                    )
+                                },
+                                popExitTransition = {
+                                    slideOutOfContainer(
+                                        towards = AnimatedContentTransitionScope.SlideDirection.End,
+                                        animationSpec = tween(300)
+                                    )
+                                }
+                            ) {
+                                // ── Onboarding ──
+                                composable(Screen.Onboarding.route) { entry ->
+                                    val viewModel: OnboardingViewModel = viewModel(
+                                        factory = OnboardingViewModelFactory(airportRepository, preferencesRepository, userRepository, cacheDir)
+                                    )
+                                    OnboardingScreen(
+                                        viewModel = viewModel,
+                                        onOnboardingComplete = {
+                                            navController.navigateFrom(entry, Screen.Hub.route) {
+                                                popUpTo(Screen.Onboarding.route) { inclusive = true }
+                                            }
                                         }
-                                    }
-                                )
-                            }
+                                    )
+                                }
 
-                            // ── Hub ──
-                            composable(Screen.Hub.route) { entry ->
-                                val viewModel: HubViewModel = viewModel(
-                                    factory = HubViewModelFactory(airportRepository, preferencesRepository, userRepository, challengeRepository, pilotProgressRepository, offlineModeController, cacheDir)
-                                )
-                                val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
-                                com.example.focusflight.ui.screens.hub.HubScreen(
-                                    viewModel = viewModel,
-                                    onBookFlightClick = {
-                                        navController.navigateFrom(entry, Screen.FlightSearch.createRoute())
-                                    },
-                                    onChallengesClick = {
-                                        navController.navigateFrom(entry, Screen.Challenges.route)
-                                    },
-                                    onResumeFlightClick = { flight ->
-                                        coroutineScope.launch { resumeFlight(navController, entry, pendingFlightLoader, flight) }
-                                    },
-                                    onPassportClick = {
-                                        navController.navigateFrom(entry, Screen.Account.route)
-                                    },
-                                    onSettingsClick = {
-                                        navController.navigateFrom(entry, Screen.Settings.route)
-                                    },
-                                    onContinueChallengeClick = { challengeId ->
-                                        coroutineScope.launch {
-                                            continueRouteChallenge(navController, entry, pendingFlightLoader, challengeRepository, airportRepository, challengeId)
-                                        }
-                                    }
-                                )
-                            }
-
-                            // ── Challenges (modes/goals surface) ──
-                            composable(Screen.Challenges.route) { entry ->
-                                val challengesViewModel: ChallengesViewModel = viewModel(
-                                    factory = ChallengesViewModelFactory(challengeRepository, airportRepository, pilotProgressRepository, preferencesRepository)
-                                )
-                                val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
-                                com.example.focusflight.ui.screens.challenges.ChallengesScreen(
-                                    viewModel = challengesViewModel,
-                                    onBackClick = { navController.popBackStackFrom(entry) },
-                                    onFreeModeClick = {
-                                        navController.navigateFrom(entry, Screen.FlightSearch.createRoute(FlightMode.FREE))
-                                    },
-                                    onResumeFreeFlight = { flight ->
-                                        // The Story/Free slot already has a Free Mode flight paused - resume
-                                        // it directly instead of routing through a fresh booking, same as
-                                        // Hub's onResumeFlightClick and onResumeRouteChallenge below.
-                                        coroutineScope.launch { resumeFlight(navController, entry, pendingFlightLoader, flight) }
-                                    },
-                                    onContinueRouteChallenge = { challengeId ->
-                                        // Free-form: the same booking flow Story Mode's "Book a flight" uses,
-                                        // just tagged CHALLENGE and scoped to this challenge's own position
-                                        // pointer. Predefined itinerary: straight to the boarding card with
-                                        // the authored next leg already filled in. See continueRouteChallenge.
-                                        coroutineScope.launch {
-                                            continueRouteChallenge(navController, entry, pendingFlightLoader, challengeRepository, airportRepository, challengeId)
-                                        }
-                                    },
-                                    onResumeRouteChallenge = { challenge ->
-                                        // This challenge already has its own paused flight (see
-                                        // Challenge.pausedFlight) - resume it directly instead of sending
-                                        // the player through flight search again, same as Hub's
-                                        // onResumeFlightClick above.
-                                        val flight = challenge.pausedFlight
-                                        if (flight != null) {
+                                // ── Hub ──
+                                composable(Screen.Hub.route) { entry ->
+                                    val viewModel: HubViewModel = viewModel(
+                                        factory = HubViewModelFactory(airportRepository, preferencesRepository, userRepository, challengeRepository, pilotProgressRepository, offlineModeController, cacheDir)
+                                    )
+                                    val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
+                                    com.example.focusflight.ui.screens.hub.HubScreen(
+                                        viewModel = viewModel,
+                                        onBookFlightClick = {
+                                            navController.navigateFrom(entry, Screen.FlightSearch.createRoute())
+                                        },
+                                        onChallengesClick = {
+                                            navController.navigateFrom(entry, Screen.Challenges.route)
+                                        },
+                                        onResumeFlightClick = { flight ->
                                             coroutineScope.launch { resumeFlight(navController, entry, pendingFlightLoader, flight) }
-                                        }
-                                    },
-                                    onChallengeStarted = {
-                                        // A Route challenge just took over Hub focus - drop straight back
-                                        // there instead of lingering on the Challenges screen.
-                                        navController.navigateFrom(entry, Screen.Hub.route) {
-                                            popUpTo(Screen.Hub.route) { inclusive = true }
-                                        }
-                                    }
-                                )
-                            }
-
-                            // ── Flight Search ──
-                            composable(
-                                route = Screen.FlightSearch.route,
-                                arguments = listOf(
-                                    navArgument("mode") {
-                                        type = NavType.StringType
-                                        defaultValue = FlightMode.STORY.name
-                                    },
-                                    navArgument("challengeId") {
-                                        type = NavType.IntType
-                                        defaultValue = -1
-                                    }
-                                )
-                            ) { backStackEntry ->
-                                val mode = backStackEntry.arguments?.getString("mode")
-                                    ?.let { runCatching { FlightMode.valueOf(it) }.getOrDefault(FlightMode.STORY) }
-                                    ?: FlightMode.STORY
-                                val challengeId = backStackEntry.arguments?.getInt("challengeId")
-                                    ?.takeIf { it >= 0 }
-
-                                val viewModel: FlightSearchViewModel = viewModel(
-                                    factory = FlightSearchViewModelFactory(applicationContext, airportRepository, preferencesRepository, userRepository, challengeRepository, pilotProgressRepository, mode, challengeId)
-                                )
-                                val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
-
-                                FlightSearchScreen(
-                                    viewModel = viewModel,
-                                    mode = mode,
-                                    onBackClick = {
-                                        navController.popBackStackFrom(backStackEntry)
-                                    },
-                                    onRouteConfirm = { route ->
-                                        if (backStackEntry.isSettled()) coroutineScope.launch {
-                                            // `route.originIata` is whatever origin FlightSearchViewModel resolved
-                                            // for this session - `currentAirport` for STORY (unchanged), the
-                                            // player's picked airport for FREE, that Route challenge's own position
-                                            // pointer for CHALLENGE (Phase 3). Reading it off the route (rather
-                                            // than re-reading currentAirport here) is what lets both Free Mode's
-                                            // and a Route challenge's origin actually reach booking instead of
-                                            // being silently overridden.
-                                            val originIata = route.originIata
-                                            val flightNo = flightNumberFor(route.destIata)
-                                            val durationMin = route.durationMin
-                                            withContext(Dispatchers.IO) {
-                                                pendingFlightLoader.loadPendingFlight(originIata, route.destIata, durationMin)
+                                        },
+                                        onPassportClick = {
+                                            navController.navigateFrom(entry, Screen.Account.route)
+                                        },
+                                        onSettingsClick = {
+                                            navController.navigateFrom(entry, Screen.Settings.route)
+                                        },
+                                        onContinueChallengeClick = { challengeId ->
+                                            coroutineScope.launch {
+                                                continueRouteChallenge(navController, entry, pendingFlightLoader, challengeRepository, airportRepository, challengeId)
                                             }
-                                            navController.navigateFrom(backStackEntry, Screen.CheckIn.createRoute(originIata, flightNo, route.destIata, durationMin, mode, challengeId))
                                         }
-                                    }
-                                )
-                            }
-
-                            // ── Check-In ──
-                            composable(
-                                route = Screen.CheckIn.route,
-                                arguments = listOf(
-                                    navArgument("originIata") { type = NavType.StringType },
-                                    navArgument("flightNo") { type = NavType.StringType },
-                                    navArgument("destIata") { type = NavType.StringType },
-                                    navArgument("durationMin") { type = NavType.IntType },
-                                    navArgument("mode") { type = NavType.StringType },
-                                    navArgument("challengeId") {
-                                        type = NavType.IntType
-                                        defaultValue = -1
-                                    }
-                                )
-                            ) { backStackEntry ->
-                                val originIata = backStackEntry.arguments?.getString("originIata") ?: ""
-                                val flightNo = backStackEntry.arguments?.getString("flightNo") ?: ""
-                                val destIata = backStackEntry.arguments?.getString("destIata") ?: ""
-                                val durationMin = backStackEntry.arguments?.getInt("durationMin") ?: 0
-                                val mode = backStackEntry.arguments?.getString("mode")
-                                    ?.let { runCatching { FlightMode.valueOf(it) }.getOrDefault(FlightMode.STORY) }
-                                    ?: FlightMode.STORY
-                                // Pure passthrough here (CheckInViewModel doesn't need it) - carried forward to
-                                // InFlight, which is where a CHALLENGE session's scoping is actually consumed.
-                                val challengeId = backStackEntry.arguments?.getInt("challengeId")
-                                    ?.takeIf { it >= 0 }
-
-                                // No-op on the normal path; reloads the engine after process death.
-                                LaunchedEffect(originIata, destIata, durationMin) {
-                                    withContext(Dispatchers.IO) {
-                                        pendingFlightLoader.ensureLoaded(originIata, destIata, durationMin)
-                                    }
+                                    )
                                 }
 
-                                val viewModel: CheckInViewModel = viewModel(
-                                    factory = CheckInViewModelFactory(airportRepository, userRepository, originIata, destIata, flightNo)
-                                )
-                                val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
-
-                                CheckInScreen(
-                                    viewModel = viewModel,
-                                    onBackClick = {
-                                        navController.popBackStackFrom(backStackEntry)
-                                    },
-                                    onStartFlight = { fn, di, dm ->
-                                        // A fresh PausedFlight (elapsedMs/camera both null) is the reset -
-                                        // no separate "clear the old progress/camera" call needed, unlike
-                                        // before this was unified into one model. A CHALLENGE session's
-                                        // marker lives on the challenge's own row (see Challenge.pausedFlight),
-                                        // never in the global STORY/FREE slot - keeps a challenge pause from
-                                        // ever being confused with, or clobbered by, Story Mode's.
-                                        val flight = PausedFlight(fn, originIata, di, dm, mode, challengeId)
-                                        val store = if (mode == FlightMode.CHALLENGE && challengeId != null) {
-                                            challengeRepository.pausedFlightStore(challengeId)
-                                        } else {
-                                            preferencesRepository.pausedFlightStore(mode)
-                                        }
-                                        // Navigate only once the slot is actually written. This used
-                                        // to launch the save and navigate immediately, which for a
-                                        // CHALLENGE session was a race the save could lose: that
-                                        // store's save() does a suspending Room read first, and the
-                                        // navigation below pops CheckIn inclusively - cancelling the
-                                        // rememberCoroutineScope this runs in. When it lost, no
-                                        // PausedFlight was ever written, and InFlightViewModel's
-                                        // persistElapsed (`get() ?: return`) then silently skipped
-                                        // every elapsed-time write for the whole flight, so
-                                        // backgrounding it lost all progress with no way to resume.
-                                        //
-                                        // Ordering it this way removes the race rather than widening
-                                        // it: nothing pops this screen until the write returns, so
-                                        // the scope cannot be torn down underneath it.
-                                        if (backStackEntry.isSettled()) coroutineScope.launch {
-                                            store.save(flight)
-                                            navController.navigateFrom(backStackEntry, Screen.InFlight.createRoute(originIata, fn, di, dm, mode, challengeId)) {
-                                                popUpTo(Screen.CheckIn.route) { inclusive = true }
+                                // ── Challenges (modes/goals surface) ──
+                                composable(Screen.Challenges.route) { entry ->
+                                    val challengesViewModel: ChallengesViewModel = viewModel(
+                                        factory = ChallengesViewModelFactory(challengeRepository, airportRepository, pilotProgressRepository, preferencesRepository)
+                                    )
+                                    val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
+                                    com.example.focusflight.ui.screens.challenges.ChallengesScreen(
+                                        viewModel = challengesViewModel,
+                                        onBackClick = { navController.popBackStackFrom(entry) },
+                                        onFreeModeClick = {
+                                            navController.navigateFrom(entry, Screen.FlightSearch.createRoute(FlightMode.FREE))
+                                        },
+                                        onResumeFreeFlight = { flight ->
+                                            // The Story/Free slot already has a Free Mode flight paused - resume
+                                            // it directly instead of routing through a fresh booking, same as
+                                            // Hub's onResumeFlightClick and onResumeRouteChallenge below.
+                                            coroutineScope.launch { resumeFlight(navController, entry, pendingFlightLoader, flight) }
+                                        },
+                                        onContinueRouteChallenge = { challengeId ->
+                                            // Free-form: the same booking flow Story Mode's "Book a flight" uses,
+                                            // just tagged CHALLENGE and scoped to this challenge's own position
+                                            // pointer. Predefined itinerary: straight to the boarding card with
+                                            // the authored next leg already filled in. See continueRouteChallenge.
+                                            coroutineScope.launch {
+                                                continueRouteChallenge(navController, entry, pendingFlightLoader, challengeRepository, airportRepository, challengeId)
                                             }
-                                        }
-                                    }
-                                )
-                            }
-
-                            // ── In-Flight ──
-                            composable(
-                                route = Screen.InFlight.route,
-                                arguments = listOf(
-                                    navArgument("originIata") { type = NavType.StringType },
-                                    navArgument("flightNo") { type = NavType.StringType },
-                                    navArgument("destIata") { type = NavType.StringType },
-                                    navArgument("durationMin") { type = NavType.IntType },
-                                    navArgument("mode") { type = NavType.StringType },
-                                    navArgument("challengeId") {
-                                        type = NavType.IntType
-                                        defaultValue = -1
-                                    }
-                                )
-                            ) { backStackEntry ->
-                                val originIata = backStackEntry.arguments?.getString("originIata") ?: ""
-                                val flightNo = backStackEntry.arguments?.getString("flightNo") ?: ""
-                                val destIata = backStackEntry.arguments?.getString("destIata") ?: ""
-                                val durationMin = backStackEntry.arguments?.getInt("durationMin") ?: 0
-                                val mode = backStackEntry.arguments?.getString("mode")
-                                    ?.let { runCatching { FlightMode.valueOf(it) }.getOrDefault(FlightMode.STORY) }
-                                    ?: FlightMode.STORY
-                                // Consumed by InFlightViewModel.checkAchievementsAndChallenges() on landing - see
-                                // docs/challenges.md#persistence--route-scoping.
-                                val challengeId = backStackEntry.arguments?.getInt("challengeId")
-                                    ?.takeIf { it >= 0 }
-
-                                // No-op on the normal path; reloads the engine after process death.
-                                LaunchedEffect(originIata, destIata, durationMin) {
-                                    withContext(Dispatchers.IO) {
-                                        pendingFlightLoader.ensureLoaded(originIata, destIata, durationMin)
-                                    }
-                                }
-
-                                val viewModel: InFlightViewModel = viewModel(
-                                    factory = InFlightViewModelFactory(airportRepository, preferencesRepository, flightLogRepository, challengeRepository, landingResultChannel, destinationPhotoChannel, destinationPhotoRepository, offlineModeController, cacheDir, flightNo, originIata, destIata, durationMin, mode, challengeId)
-                                )
-
-                                InFlightScreen(
-                                    viewModel = viewModel,
-                                    onLandingCelebration = { rank ->
-                                        // InFlightViewModel.completeFlight() already cleared this session's
-                                        // paused flight (global slot or this challenge's own row, whichever
-                                        // applies) before this fires - nothing left to do here but navigate.
-                                        navController.navigate(Screen.ArrivalCelebration.createRoute(flightNo, destIata, durationMin, rank, mode)) {
-                                            popUpTo(Screen.InFlight.route) { inclusive = true }
-                                        }
-                                    },
-                                    onExitFlight = {
-                                        navController.navigateFrom(backStackEntry, Screen.Hub.route) {
-                                            popUpTo(Screen.Hub.route) { inclusive = true }
-                                        }
-                                    }
-                                )
-                            }
-
-                            // ── Arrival Celebration ──
-                            composable(
-                                route = Screen.ArrivalCelebration.route,
-                                arguments = listOf(
-                                    navArgument("flightNo") { type = NavType.StringType },
-                                    navArgument("destIata") { type = NavType.StringType },
-                                    navArgument("durationMin") { type = NavType.IntType },
-                                    navArgument("rank") { type = NavType.StringType },
-                                    navArgument("mode") { type = NavType.StringType }
-                                )
-                            ) { backStackEntry ->
-                                val flightNo = backStackEntry.arguments?.getString("flightNo") ?: ""
-                                val destIata = backStackEntry.arguments?.getString("destIata") ?: ""
-                                val durationMin = backStackEntry.arguments?.getInt("durationMin") ?: 0
-                                val rank = backStackEntry.arguments?.getString("rank") ?: ""
-                                // Not consumed by this screen itself - mechanics.md's post-landing
-                                // pipeline step 5 branches purely on `landingResultChannel`, not on mode.
-                                @Suppress("UNUSED_VARIABLE")
-                                val mode = backStackEntry.arguments?.getString("mode")
-                                    ?.let { runCatching { FlightMode.valueOf(it) }.getOrDefault(FlightMode.STORY) }
-                                    ?: FlightMode.STORY
-                                val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
-                                // Snapshot only - already resolved (or not) by InFlightViewModel's
-                                // prefetch well before this screen is reached, same as how
-                                // landingResultChannel.result.value is read below at line ~639.
-                                val destPhotoUrl = destinationPhotoChannel.url.value
-                                // For "Welcome to <city>". Looked up rather than passed in the route,
-                                // where a free-text city name would need escaping.
-                                val destCity by androidx.compose.runtime.produceState<String?>(null, destIata) {
-                                    value = withContext(Dispatchers.IO) {
-                                        runCatching { airportRepository.getAirportByIata(destIata)?.municipality }.getOrNull()
-                                    }
-                                }
-
-                                ArrivalCelebrationScreen(
-                                    flightNo = flightNo,
-                                    destIata = destIata,
-                                    durationMin = durationMin,
-                                    rank = rank,
-                                    destPhotoUrl = destPhotoUrl,
-                                    destCity = destCity,
-                                    onContinue = {
-                                        // mechanics.md's post-landing pipeline step 5: the rank stamp above
-                                        // always shows first, unchanged - this is the "always sequenced,
-                                        // never replaced" hand-off into whatever step 4's challenge check
-                                        // found (Phase 3b). `first { it != Pending }` awaits a resolved value
-                                        // rather than racing InFlightViewModel's IO-dispatched check - see
-                                        // LandingResultChannel's doc for why Pending is never itself acted on.
-                                        coroutineScope.launch {
-                                            // Bounded wait. `first { it != Pending }` on its own has no
-                                            // fallback: if the landing check never publishes - it threw,
-                                            // or its scope died - this suspends forever and "continue"
-                                            // becomes a button that does nothing, on a screen with no
-                                            // other way out. InFlightViewModel now guarantees a publish on
-                                            // every path, so this is the second lock on the same door
-                                            // rather than the only one; the timeout being reached at all
-                                            // means something upstream is broken, so it is logged.
-                                            // Restored after process death: no landing ran in this
-                                            // process, so no result can ever arrive - go straight on.
-                                            val outcome = if (!landingResultChannel.isArmed) LandingResult.None
-                                            else withTimeoutOrNull(LANDING_RESULT_TIMEOUT_MS) {
-                                                landingResultChannel.result.first { it != LandingResult.Pending }
-                                            } ?: run {
-                                                Log.w(
-                                                    "CesiumGameActivity",
-                                                    "Landing result never resolved within ${LANDING_RESULT_TIMEOUT_MS}ms; continuing to Hub"
-                                                )
-                                                LandingResult.None
+                                        },
+                                        onResumeRouteChallenge = { challenge ->
+                                            // This challenge already has its own paused flight (see
+                                            // Challenge.pausedFlight) - resume it directly instead of sending
+                                            // the player through flight search again, same as Hub's
+                                            // onResumeFlightClick above.
+                                            val flight = challenge.pausedFlight
+                                            if (flight != null) {
+                                                coroutineScope.launch { resumeFlight(navController, entry, pendingFlightLoader, flight) }
                                             }
-                                            when (outcome) {
-                                                is LandingResult.ChallengesAffected -> {
-                                                    // A completed Route challenge is no longer ACTIVE, so it can
-                                                    // no longer be focused - clear the pref rather than leave it
-                                                    // stale (HubViewModel would self-heal this anyway, but this
-                                                    // avoids the round-trip). Only when the completed one *is* the
-                                                    // focused one: finishing some other Route challenge must not
-                                                    // unfocus the one the pilot picked.
-                                                    val focusedId = preferencesRepository.getFocusedRouteChallengeId()
-                                                    if (outcome.outcomes.any {
-                                                            it is ChallengeOutcome.Completed &&
-                                                                it.type == ChallengeType.ROUTE &&
-                                                                it.challengeId == focusedId
-                                                        }
-                                                    ) {
-                                                        preferencesRepository.clearFocusedRouteChallengeId()
-                                                    }
-
-                                                    navController.navigateFrom(backStackEntry, Screen.ChallengeOutcome.route) {
-                                                        popUpTo(Screen.ArrivalCelebration.route) { inclusive = true }
-                                                    }
-                                                }
-                                                LandingResult.None, LandingResult.Pending ->
-                                                    navController.navigateFrom(backStackEntry, Screen.Hub.route) {
-                                                        popUpTo(Screen.Hub.route) { inclusive = true }
-                                                    }
-                                            }
-                                        }
-                                    }
-                                )
-                            }
-
-                            // ── Challenge outcome (per-leg tick-up and/or completion) ──
-                            composable(Screen.ChallengeOutcome.route) { entry ->
-                                val outcomes = (landingResultChannel.result.value as? LandingResult.ChallengesAffected)
-                                    ?.outcomes.orEmpty()
-                                if (outcomes.isEmpty()) {
-                                    // Only reachable when Navigation restores this screen after
-                                    // process death: the in-memory result is gone, so there is
-                                    // nothing to show. Completions still surface on Challenges via
-                                    // the database-driven celebration queue.
-                                    LaunchedEffect(Unit) {
-                                        entry.lifecycle.currentStateFlow.first { it == Lifecycle.State.RESUMED }
-                                        navController.navigateFrom(entry, Screen.Hub.route) {
-                                            popUpTo(Screen.Hub.route) { inclusive = true }
-                                        }
-                                    }
-                                    return@composable
-                                }
-                                ChallengeOutcomeScreen(
-                                    outcomes = outcomes,
-                                    loadChallenge = challengeRepository::getChallenge,
-                                    onContinue = {
-                                        // Any completion (even mixed with merely-advanced
-                                        // challenges) sends the pilot to Challenges instead of
-                                        // Hub, so they land on the completion-presentation
-                                        // celebration (docs/challenges.md) rather than having to
-                                        // think to go check. Collapses the whole flight-session
-                                        // stack down to Hub the same way the plain-Hub branch
-                                        // below does, just with Challenges pushed on top of it.
-                                        if (outcomes.any { it is ChallengeOutcome.Completed }) {
-                                            navController.navigateFrom(entry, Screen.Challenges.route) {
-                                                popUpTo(Screen.Hub.route) { inclusive = false }
-                                            }
-                                        } else {
+                                        },
+                                        onChallengeStarted = {
+                                            // A Route challenge just took over Hub focus - drop straight back
+                                            // there instead of lingering on the Challenges screen.
                                             navController.navigateFrom(entry, Screen.Hub.route) {
                                                 popUpTo(Screen.Hub.route) { inclusive = true }
                                             }
                                         }
-                                    }
-                                )
-                            }
+                                    )
+                                }
 
-                            // ── Account / Passport ──
-                            composable(Screen.Account.route) { entry ->
-                                val viewModel: AccountViewModel = viewModel(
-                                    factory = AccountViewModelFactory(applicationContext, userRepository, flightLogRepository, airportRepository, preferencesRepository, pilotProgressRepository, offlineModeController, cacheDir)
-                                )
-                                
-                                com.example.focusflight.ui.screens.account.AccountScreen(
-                                    viewModel = viewModel,
-                                    onBackClick = { navController.popBackStackFrom(entry) }
-                                )
-                            }
+                                // ── Flight Search ──
+                                composable(
+                                    route = Screen.FlightSearch.route,
+                                    arguments = listOf(
+                                        navArgument("mode") {
+                                            type = NavType.StringType
+                                            defaultValue = FlightMode.STORY.name
+                                        },
+                                        navArgument("challengeId") {
+                                            type = NavType.IntType
+                                            defaultValue = -1
+                                        }
+                                    )
+                                ) { backStackEntry ->
+                                    val mode = backStackEntry.arguments?.getString("mode")
+                                        ?.let { runCatching { FlightMode.valueOf(it) }.getOrDefault(FlightMode.STORY) }
+                                        ?: FlightMode.STORY
+                                    val challengeId = backStackEntry.arguments?.getInt("challengeId")
+                                        ?.takeIf { it >= 0 }
 
-                            // ── Settings ──
-                            composable(Screen.Settings.route) { entry ->
-                                val viewModel: AccountViewModel = viewModel(
-                                    factory = AccountViewModelFactory(applicationContext, userRepository, flightLogRepository, airportRepository, preferencesRepository, pilotProgressRepository, offlineModeController, cacheDir)
-                                )
+                                    val viewModel: FlightSearchViewModel = viewModel(
+                                        factory = FlightSearchViewModelFactory(applicationContext, airportRepository, preferencesRepository, userRepository, challengeRepository, pilotProgressRepository, mode, challengeId)
+                                    )
+                                    val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
 
-                                com.example.focusflight.ui.screens.settings.SettingsScreen(
-                                    viewModel = viewModel,
-                                    onBackClick = { navController.popBackStackFrom(entry) },
-                                    // The home-base celebrations end their flow at the Hub rather
-                                    // than dropping back onto Settings - same collapse-the-stack
-                                    // pattern every other "done, go home" hand-off uses.
-                                    onNavigateHome = {
-                                        navController.navigateFrom(entry, Screen.Hub.route) {
-                                            popUpTo(Screen.Hub.route) { inclusive = true }
+                                    FlightSearchScreen(
+                                        viewModel = viewModel,
+                                        mode = mode,
+                                        onBackClick = {
+                                            navController.popBackStackFrom(backStackEntry)
+                                        },
+                                        onRouteConfirm = { route ->
+                                            if (backStackEntry.isSettled()) coroutineScope.launch {
+                                                // `route.originIata` is whatever origin FlightSearchViewModel resolved
+                                                // for this session - `currentAirport` for STORY (unchanged), the
+                                                // player's picked airport for FREE, that Route challenge's own position
+                                                // pointer for CHALLENGE (Phase 3). Reading it off the route (rather
+                                                // than re-reading currentAirport here) is what lets both Free Mode's
+                                                // and a Route challenge's origin actually reach booking instead of
+                                                // being silently overridden.
+                                                val originIata = route.originIata
+                                                val flightNo = flightNumberFor(route.destIata)
+                                                val durationMin = route.durationMin
+                                                withContext(Dispatchers.IO) {
+                                                    pendingFlightLoader.loadPendingFlight(originIata, route.destIata, durationMin)
+                                                }
+                                                navController.navigateFrom(backStackEntry, Screen.CheckIn.createRoute(originIata, flightNo, route.destIata, durationMin, mode, challengeId))
+                                            }
+                                        }
+                                    )
+                                }
+
+                                // ── Check-In ──
+                                composable(
+                                    route = Screen.CheckIn.route,
+                                    arguments = listOf(
+                                        navArgument("originIata") { type = NavType.StringType },
+                                        navArgument("flightNo") { type = NavType.StringType },
+                                        navArgument("destIata") { type = NavType.StringType },
+                                        navArgument("durationMin") { type = NavType.IntType },
+                                        navArgument("mode") { type = NavType.StringType },
+                                        navArgument("challengeId") {
+                                            type = NavType.IntType
+                                            defaultValue = -1
+                                        }
+                                    )
+                                ) { backStackEntry ->
+                                    val originIata = backStackEntry.arguments?.getString("originIata") ?: ""
+                                    val flightNo = backStackEntry.arguments?.getString("flightNo") ?: ""
+                                    val destIata = backStackEntry.arguments?.getString("destIata") ?: ""
+                                    val durationMin = backStackEntry.arguments?.getInt("durationMin") ?: 0
+                                    val mode = backStackEntry.arguments?.getString("mode")
+                                        ?.let { runCatching { FlightMode.valueOf(it) }.getOrDefault(FlightMode.STORY) }
+                                        ?: FlightMode.STORY
+                                    // Pure passthrough here (CheckInViewModel doesn't need it) - carried forward to
+                                    // InFlight, which is where a CHALLENGE session's scoping is actually consumed.
+                                    val challengeId = backStackEntry.arguments?.getInt("challengeId")
+                                        ?.takeIf { it >= 0 }
+
+                                    // No-op on the normal path; reloads the engine after process death.
+                                    LaunchedEffect(originIata, destIata, durationMin) {
+                                        withContext(Dispatchers.IO) {
+                                            pendingFlightLoader.ensureLoaded(originIata, destIata, durationMin)
                                         }
                                     }
-                                )
+
+                                    val viewModel: CheckInViewModel = viewModel(
+                                        factory = CheckInViewModelFactory(airportRepository, userRepository, originIata, destIata, flightNo)
+                                    )
+                                    val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
+
+                                    CheckInScreen(
+                                        viewModel = viewModel,
+                                        onBackClick = {
+                                            navController.popBackStackFrom(backStackEntry)
+                                        },
+                                        onStartFlight = { fn, di, dm ->
+                                            // A fresh PausedFlight (elapsedMs/camera both null) is the reset -
+                                            // no separate "clear the old progress/camera" call needed, unlike
+                                            // before this was unified into one model. A CHALLENGE session's
+                                            // marker lives on the challenge's own row (see Challenge.pausedFlight),
+                                            // never in the global STORY/FREE slot - keeps a challenge pause from
+                                            // ever being confused with, or clobbered by, Story Mode's.
+                                            val flight = PausedFlight(fn, originIata, di, dm, mode, challengeId)
+                                            val store = if (mode == FlightMode.CHALLENGE && challengeId != null) {
+                                                challengeRepository.pausedFlightStore(challengeId)
+                                            } else {
+                                                preferencesRepository.pausedFlightStore(mode)
+                                            }
+                                            // Navigate only once the slot is actually written. This used
+                                            // to launch the save and navigate immediately, which for a
+                                            // CHALLENGE session was a race the save could lose: that
+                                            // store's save() does a suspending Room read first, and the
+                                            // navigation below pops CheckIn inclusively - cancelling the
+                                            // rememberCoroutineScope this runs in. When it lost, no
+                                            // PausedFlight was ever written, and InFlightViewModel's
+                                            // persistElapsed (`get() ?: return`) then silently skipped
+                                            // every elapsed-time write for the whole flight, so
+                                            // backgrounding it lost all progress with no way to resume.
+                                            //
+                                            // Ordering it this way removes the race rather than widening
+                                            // it: nothing pops this screen until the write returns, so
+                                            // the scope cannot be torn down underneath it.
+                                            if (backStackEntry.isSettled()) coroutineScope.launch {
+                                                store.save(flight)
+                                                navController.navigateFrom(backStackEntry, Screen.InFlight.createRoute(originIata, fn, di, dm, mode, challengeId)) {
+                                                    popUpTo(Screen.CheckIn.route) { inclusive = true }
+                                                }
+                                            }
+                                        }
+                                    )
+                                }
+
+                                // ── In-Flight ──
+                                composable(
+                                    route = Screen.InFlight.route,
+                                    arguments = listOf(
+                                        navArgument("originIata") { type = NavType.StringType },
+                                        navArgument("flightNo") { type = NavType.StringType },
+                                        navArgument("destIata") { type = NavType.StringType },
+                                        navArgument("durationMin") { type = NavType.IntType },
+                                        navArgument("mode") { type = NavType.StringType },
+                                        navArgument("challengeId") {
+                                            type = NavType.IntType
+                                            defaultValue = -1
+                                        }
+                                    )
+                                ) { backStackEntry ->
+                                    val originIata = backStackEntry.arguments?.getString("originIata") ?: ""
+                                    val flightNo = backStackEntry.arguments?.getString("flightNo") ?: ""
+                                    val destIata = backStackEntry.arguments?.getString("destIata") ?: ""
+                                    val durationMin = backStackEntry.arguments?.getInt("durationMin") ?: 0
+                                    val mode = backStackEntry.arguments?.getString("mode")
+                                        ?.let { runCatching { FlightMode.valueOf(it) }.getOrDefault(FlightMode.STORY) }
+                                        ?: FlightMode.STORY
+                                    // Consumed by InFlightViewModel.checkAchievementsAndChallenges() on landing - see
+                                    // docs/challenges.md#persistence--route-scoping.
+                                    val challengeId = backStackEntry.arguments?.getInt("challengeId")
+                                        ?.takeIf { it >= 0 }
+
+                                    // No-op on the normal path; reloads the engine after process death.
+                                    LaunchedEffect(originIata, destIata, durationMin) {
+                                        withContext(Dispatchers.IO) {
+                                            pendingFlightLoader.ensureLoaded(originIata, destIata, durationMin)
+                                        }
+                                    }
+
+                                    val viewModel: InFlightViewModel = viewModel(
+                                        factory = InFlightViewModelFactory(airportRepository, preferencesRepository, flightLogRepository, challengeRepository, landingResultChannel, destinationPhotoChannel, destinationPhotoRepository, offlineModeController, cacheDir, flightNo, originIata, destIata, durationMin, mode, challengeId)
+                                    )
+
+                                    InFlightScreen(
+                                        viewModel = viewModel,
+                                        onLandingCelebration = { rank ->
+                                            // InFlightViewModel.completeFlight() already cleared this session's
+                                            // paused flight (global slot or this challenge's own row, whichever
+                                            // applies) before this fires - nothing left to do here but navigate.
+                                            navController.navigate(Screen.ArrivalCelebration.createRoute(flightNo, destIata, durationMin, rank, mode)) {
+                                                popUpTo(Screen.InFlight.route) { inclusive = true }
+                                            }
+                                        },
+                                        onExitFlight = {
+                                            navController.navigateFrom(backStackEntry, Screen.Hub.route) {
+                                                popUpTo(Screen.Hub.route) { inclusive = true }
+                                            }
+                                        }
+                                    )
+                                }
+
+                                // ── Arrival Celebration ──
+                                composable(
+                                    route = Screen.ArrivalCelebration.route,
+                                    arguments = listOf(
+                                        navArgument("flightNo") { type = NavType.StringType },
+                                        navArgument("destIata") { type = NavType.StringType },
+                                        navArgument("durationMin") { type = NavType.IntType },
+                                        navArgument("rank") { type = NavType.StringType },
+                                        navArgument("mode") { type = NavType.StringType }
+                                    )
+                                ) { backStackEntry ->
+                                    val flightNo = backStackEntry.arguments?.getString("flightNo") ?: ""
+                                    val destIata = backStackEntry.arguments?.getString("destIata") ?: ""
+                                    val durationMin = backStackEntry.arguments?.getInt("durationMin") ?: 0
+                                    val rank = backStackEntry.arguments?.getString("rank") ?: ""
+                                    // Not consumed by this screen itself - mechanics.md's post-landing
+                                    // pipeline step 5 branches purely on `landingResultChannel`, not on mode.
+                                    @Suppress("UNUSED_VARIABLE")
+                                    val mode = backStackEntry.arguments?.getString("mode")
+                                        ?.let { runCatching { FlightMode.valueOf(it) }.getOrDefault(FlightMode.STORY) }
+                                        ?: FlightMode.STORY
+                                    val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
+                                    // Snapshot only - already resolved (or not) by InFlightViewModel's
+                                    // prefetch well before this screen is reached, same as how
+                                    // landingResultChannel.result.value is read below at line ~639.
+                                    val destPhotoUrl = destinationPhotoChannel.url.value
+                                    // For "Welcome to <city>". Looked up rather than passed in the route,
+                                    // where a free-text city name would need escaping.
+                                    val destCity by androidx.compose.runtime.produceState<String?>(null, destIata) {
+                                        value = withContext(Dispatchers.IO) {
+                                            runCatching { airportRepository.getAirportByIata(destIata)?.municipality }.getOrNull()
+                                        }
+                                    }
+
+                                    ArrivalCelebrationScreen(
+                                        flightNo = flightNo,
+                                        destIata = destIata,
+                                        durationMin = durationMin,
+                                        rank = rank,
+                                        destPhotoUrl = destPhotoUrl,
+                                        destCity = destCity,
+                                        onContinue = {
+                                            // mechanics.md's post-landing pipeline step 5: the rank stamp above
+                                            // always shows first, unchanged - this is the "always sequenced,
+                                            // never replaced" hand-off into whatever step 4's challenge check
+                                            // found (Phase 3b). `first { it != Pending }` awaits a resolved value
+                                            // rather than racing InFlightViewModel's IO-dispatched check - see
+                                            // LandingResultChannel's doc for why Pending is never itself acted on.
+                                            coroutineScope.launch {
+                                                // Bounded wait. `first { it != Pending }` on its own has no
+                                                // fallback: if the landing check never publishes - it threw,
+                                                // or its scope died - this suspends forever and "continue"
+                                                // becomes a button that does nothing, on a screen with no
+                                                // other way out. InFlightViewModel now guarantees a publish on
+                                                // every path, so this is the second lock on the same door
+                                                // rather than the only one; the timeout being reached at all
+                                                // means something upstream is broken, so it is logged.
+                                                // Restored after process death: no landing ran in this
+                                                // process, so no result can ever arrive - go straight on.
+                                                val outcome = if (!landingResultChannel.isArmed) LandingResult.None
+                                                else withTimeoutOrNull(LANDING_RESULT_TIMEOUT_MS) {
+                                                    landingResultChannel.result.first { it != LandingResult.Pending }
+                                                } ?: run {
+                                                    Log.w(
+                                                        "CesiumGameActivity",
+                                                        "Landing result never resolved within ${LANDING_RESULT_TIMEOUT_MS}ms; continuing to Hub"
+                                                    )
+                                                    LandingResult.None
+                                                }
+                                                when (outcome) {
+                                                    is LandingResult.ChallengesAffected -> {
+                                                        // A completed Route challenge is no longer ACTIVE, so it can
+                                                        // no longer be focused - clear the pref rather than leave it
+                                                        // stale (HubViewModel would self-heal this anyway, but this
+                                                        // avoids the round-trip). Only when the completed one *is* the
+                                                        // focused one: finishing some other Route challenge must not
+                                                        // unfocus the one the pilot picked.
+                                                        val focusedId = preferencesRepository.getFocusedRouteChallengeId()
+                                                        if (outcome.outcomes.any {
+                                                                it is ChallengeOutcome.Completed &&
+                                                                    it.type == ChallengeType.ROUTE &&
+                                                                    it.challengeId == focusedId
+                                                            }
+                                                        ) {
+                                                            preferencesRepository.clearFocusedRouteChallengeId()
+                                                        }
+
+                                                        navController.navigateFrom(backStackEntry, Screen.ChallengeOutcome.route) {
+                                                            popUpTo(Screen.ArrivalCelebration.route) { inclusive = true }
+                                                        }
+                                                    }
+                                                    LandingResult.None, LandingResult.Pending ->
+                                                        navController.navigateFrom(backStackEntry, Screen.Hub.route) {
+                                                            popUpTo(Screen.Hub.route) { inclusive = true }
+                                                        }
+                                                }
+                                            }
+                                        }
+                                    )
+                                }
+
+                                // ── Challenge outcome (per-leg tick-up and/or completion) ──
+                                composable(Screen.ChallengeOutcome.route) { entry ->
+                                    val outcomes = (landingResultChannel.result.value as? LandingResult.ChallengesAffected)
+                                        ?.outcomes.orEmpty()
+                                    if (outcomes.isEmpty()) {
+                                        // Only reachable when Navigation restores this screen after
+                                        // process death: the in-memory result is gone, so there is
+                                        // nothing to show. Completions still surface on Challenges via
+                                        // the database-driven celebration queue.
+                                        LaunchedEffect(Unit) {
+                                            entry.lifecycle.currentStateFlow.first { it == Lifecycle.State.RESUMED }
+                                            navController.navigateFrom(entry, Screen.Hub.route) {
+                                                popUpTo(Screen.Hub.route) { inclusive = true }
+                                            }
+                                        }
+                                        return@composable
+                                    }
+                                    ChallengeOutcomeScreen(
+                                        outcomes = outcomes,
+                                        loadChallenge = challengeRepository::getChallenge,
+                                        onContinue = {
+                                            // Any completion (even mixed with merely-advanced
+                                            // challenges) sends the pilot to Challenges instead of
+                                            // Hub, so they land on the completion-presentation
+                                            // celebration (docs/challenges.md) rather than having to
+                                            // think to go check. Collapses the whole flight-session
+                                            // stack down to Hub the same way the plain-Hub branch
+                                            // below does, just with Challenges pushed on top of it.
+                                            if (outcomes.any { it is ChallengeOutcome.Completed }) {
+                                                navController.navigateFrom(entry, Screen.Challenges.route) {
+                                                    popUpTo(Screen.Hub.route) { inclusive = false }
+                                                }
+                                            } else {
+                                                navController.navigateFrom(entry, Screen.Hub.route) {
+                                                    popUpTo(Screen.Hub.route) { inclusive = true }
+                                                }
+                                            }
+                                        }
+                                    )
+                                }
+
+                                // ── Account / Passport ──
+                                composable(Screen.Account.route) { entry ->
+                                    val viewModel: AccountViewModel = viewModel(
+                                        factory = AccountViewModelFactory(applicationContext, userRepository, flightLogRepository, airportRepository, preferencesRepository, pilotProgressRepository, offlineModeController, cacheDir)
+                                    )
+                                    
+                                    com.example.focusflight.ui.screens.account.AccountScreen(
+                                        viewModel = viewModel,
+                                        onBackClick = { navController.popBackStackFrom(entry) }
+                                    )
+                                }
+
+                                // ── Settings ──
+                                composable(Screen.Settings.route) { entry ->
+                                    val viewModel: AccountViewModel = viewModel(
+                                        factory = AccountViewModelFactory(applicationContext, userRepository, flightLogRepository, airportRepository, preferencesRepository, pilotProgressRepository, offlineModeController, cacheDir)
+                                    )
+
+                                    com.example.focusflight.ui.screens.settings.SettingsScreen(
+                                        viewModel = viewModel,
+                                        onBackClick = { navController.popBackStackFrom(entry) },
+                                        // The home-base celebrations end their flow at the Hub rather
+                                        // than dropping back onto Settings - same collapse-the-stack
+                                        // pattern every other "done, go home" hand-off uses.
+                                        onNavigateHome = {
+                                            navController.navigateFrom(entry, Screen.Hub.route) {
+                                                popUpTo(Screen.Hub.route) { inclusive = true }
+                                            }
+                                        }
+                                    )
+                                }
                             }
                         }
                     }

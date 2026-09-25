@@ -165,6 +165,25 @@ Activity. While offline:
   with a short notice pill in both directions;
 - the destination-photo prefetch waits for the app to be online instead of timing out.
 
+## Screen scaling
+
+Every screen is designed on a 360 dp-wide phone (Galaxy S23) and shown *upscaled*, not
+re-flowed, on bigger phones. `ProvideDesignDensity` (`ui/theme/DesignScale.kt`) wraps the whole
+NavHost and sets the density so the window's shortest side is always 360 dp: paddings, radii,
+fixed heights and text all scale by the same factor, so proportions, line breaks and column
+counts match the S23 exactly. It never goes below the system density, caps at 1.35x, is off on
+tablets and unfolded foldables, and passes the system font scale through.
+
+Two rules follow from it:
+
+- **Never read `LocalConfiguration.current.screenWidthDp/screenHeightDp`.** Those stay in the
+  system's dp and disagree with everything else on screen. Use `LocalDesignScreenSize`.
+- **Don't open separate windows** (`Dialog`, `Popup`, `DropdownMenu`, `ModalBottomSheet`): they
+  get their own `LocalDensity` and would render unscaled. Modals are in-window (`ScrimCardModal`).
+
+The headless map renders scale their pixel size to the display the same way, so the Hub globe
+stays sharp.
+
 ## Build
 
 ```

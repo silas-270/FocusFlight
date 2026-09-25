@@ -1,5 +1,6 @@
 package com.example.focusflight.ui.screens.hub
 
+import com.example.focusflight.ui.theme.LocalDesignScreenSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -54,7 +55,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
@@ -282,7 +282,7 @@ fun HubScreen(
             // grows (e.g. the focused-challenge card adds a row above Resume/Book), and sizing
             // off a shrinking container recentered the crop of this fixed-aspect image, reading
             // as the globe getting cut off at the top the moment a challenge is focused.
-            val screenHeightDp = LocalConfiguration.current.screenHeightDp.dp
+            val screenHeightDp = LocalDesignScreenSize.current.height
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
