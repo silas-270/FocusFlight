@@ -203,7 +203,9 @@ class AccountViewModel(
 
     private val dateFormat = SimpleDateFormat("MMM yyyy", Locale.US)
 
-    private val _sortOrder = MutableStateFlow(FlightSortOrder.DATE_DESC)
+    // Persisted (docs/state.md), so reopening the Passport keeps the pilot's last choice instead
+    // of snapping back to Newest First. Seeded into uiState in init.
+    private val _sortOrder = MutableStateFlow(preferencesRepository.getLogbookSortOrder())
     val sortOrder: StateFlow<FlightSortOrder> = _sortOrder.asStateFlow()
 
     // Seeded from ThemeModeHolder (itself seeded from PreferencesRepository in
@@ -234,6 +236,7 @@ class AccountViewModel(
     // second query plus a cachedIn copy of data the app was holding anyway - the screen now sorts
     // that one list and lets LazyColumn compose only what is on screen.
     init {
+        _uiState.update { it.copy(sortOrder = _sortOrder.value) }
         loadData()
         refreshHomeBaseCooldowns()
         viewModelScope.launch(Dispatchers.IO) {
@@ -434,6 +437,7 @@ class AccountViewModel(
 
     fun setSortOrder(order: FlightSortOrder) {
         _sortOrder.value = order
+        preferencesRepository.setLogbookSortOrder(order)
         _uiState.update { it.copy(sortOrder = order) }
     }
 

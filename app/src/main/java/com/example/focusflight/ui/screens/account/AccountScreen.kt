@@ -81,6 +81,17 @@ fun AccountScreen(
         sortFlights(uiState.flightHistory, uiState.sortOrder)
     }
 
+    // A logbook entry's number belongs to the flight, not to its row: the pilot's first flight is
+    // №01 in every sort order. It used to be the row position (counted from whichever end the sort
+    // started at), so re-sorting renumbered the whole book - and under the distance/duration
+    // orders the number meant nothing at all.
+    val entryNumbers = remember(uiState.flightHistory) {
+        uiState.flightHistory
+            .sortedBy { it.completedAt }
+            .withIndex()
+            .associate { (index, flight) -> flight.id to index + 1 }
+    }
+
     // Sticky tour headers only make sense when the list is chronologically sorted — grouping by
     // distance/duration order would scatter single-item groups.
     val tourHeaders = remember(uiState.tours, uiState.sortOrder) {
@@ -149,6 +160,12 @@ fun AccountScreen(
                 // Tap to open world exploration modal detail.
                 item { TravelMapCard(uiState, onClick = { showTravelMapModal = true }) }
 
+                // ── Stats ─────────────────────────────────────────────────────
+                // Flights and airports, plus the running tour once it is worth reporting. Right
+                // under the map on purpose: `airportsVisited` is STORY-scoped precisely so it agrees
+                // with the map beside it (docs/modes.md).
+                item { StatsGrid2x2(uiState) }
+
                 // ── Achievements ─────────────────────────────────────────────
                 // Earned badges only - a trophy case, sorted by difficulty (gold, silver, bronze).
                 item { SectionHeader(title = "ACHIEVEMENTS") }
@@ -172,16 +189,33 @@ fun AccountScreen(
                 item { FlightHighlightsRow(uiState.highlights) }
 
                 // ── Flight History Header + Sorting Bar ───────────────────────
+                // The sort control only appears once there is something to sort.
+                val hasFlights = sortedFlights.isNotEmpty()
                 item {
                     SectionHeader(
                         title = "FLIGHT HISTORY",
-                        trailingAction = {
-                            SortOrderButton(
-                                currentOrder = uiState.sortOrder,
-                                onClick = { showSortModal = true }
-                            )
+                        trailingAction = if (hasFlights) {
+                            {
+                                SortOrderButton(
+                                    currentOrder = uiState.sortOrder,
+                                    onClick = { showSortModal = true }
+                                )
+                            }
+                        } else {
+                            null
                         }
                     )
+                }
+
+                // Same quiet one-liner as the Achievements and highlights empty states.
+                if (!hasFlights) {
+                    item {
+                        Text(
+                            text = "No flights logged yet - your first landing will appear here.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Haze
+                        )
+                    }
                 }
 
                 // ── Logbook Items (with sticky tour headers) ──────────────────
@@ -211,12 +245,10 @@ fun AccountScreen(
                     val tourId = currentTourId
                     if (tourId == null || tourId in expandedTours) {
                         item(key = flight.id, contentType = "flight") {
-                            val entryNo = when (uiState.sortOrder) {
-                                FlightSortOrder.DATE_DESC, FlightSortOrder.DISTANCE_DESC, FlightSortOrder.DURATION_DESC ->
-                                    sortedFlights.size - index
-                                FlightSortOrder.DATE_ASC, FlightSortOrder.DISTANCE_ASC -> index + 1
-                            }
-                            LogbookEntry(flight = flight, entryNumber = entryNo)
+                            LogbookEntry(
+                                flight = flight,
+                                entryNumber = entryNumbers[flight.id] ?: (index + 1)
+                            )
                         }
                     }
                 }
@@ -252,7 +284,7 @@ fun AccountScreen(
             if (fromPaths > 0) fromPaths else if (uiState.countryToContinent.isNotEmpty()) uiState.countryToContinent.size else 195
         }
         TravelMapDetailModal(
-            visitedCountriesCount = uiState.allVisitedCountries.size,
+            visitedCountryCodes = uiState.allVisitedCountries,
             totalCountriesCount = totalCountries,
             onDismiss = { showTravelMapModal = false }
         )

@@ -4,6 +4,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.runtime.remember
+import com.example.focusflight.ui.theme.Border
+import java.util.Locale
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -61,12 +69,27 @@ internal fun TravelMapCard(
     }
 }
 
+/**
+ * Opened by tapping [TravelMapCard]. The card already *is* the map (a static drawing - no pan or
+ * zoom), so this is the part the map cannot say: how many countries, and which ones by name. It
+ * used to stop at the count, which made the tap feel like it had opened nothing.
+ *
+ * [visitedCountryCodes] are ISO 3166 alpha-2 codes; names come from [Locale], as the Settings
+ * screen's location line does, and a code it does not know falls back to itself.
+ */
 @Composable
 internal fun TravelMapDetailModal(
-    visitedCountriesCount: Int,
+    visitedCountryCodes: Set<String>,
     totalCountriesCount: Int,
     onDismiss: () -> Unit
 ) {
+    val visitedCountriesCount = visitedCountryCodes.size
+    val countryNames = remember(visitedCountryCodes) {
+        visitedCountryCodes
+            .map { code -> Locale("", code).getDisplayCountry(Locale.US).ifBlank { code } }
+            .sorted()
+    }
+
     ScrimCardModal(onScrimTap = onDismiss) {
         Text(
             text = "WORLD EXPLORATION",
@@ -112,5 +135,26 @@ internal fun TravelMapDetailModal(
             color = OffWhite,
             textAlign = TextAlign.Center
         )
+
+        if (countryNames.isNotEmpty()) {
+            Spacer(Modifier.height(Spacing.Medium))
+            HorizontalDivider(color = Border.copy(alpha = 0.4f))
+            Spacer(Modifier.height(Spacing.Small))
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 240.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                countryNames.forEach { name ->
+                    Text(
+                        text = name,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = OffWhite
+                    )
+                }
+            }
+        }
     }
 }

@@ -130,6 +130,8 @@ internal fun HomeBaseCelebrationScreen(
 
             if (hero != null && inlineHero == null) {
                 Box(modifier = Modifier.graphicsLayer { alpha = fade }) { hero() }
+                // Without this the hero sits flush on the eyebrow text.
+                Spacer(modifier = Modifier.height(Spacing.Large))
             }
 
             Text(

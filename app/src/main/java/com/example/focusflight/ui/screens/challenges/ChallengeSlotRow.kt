@@ -14,9 +14,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -171,6 +173,27 @@ private fun FilledSlot(
                     text = labelText,
                     modifier = Modifier.padding(horizontal = 6.dp)
                 )
+            }
+
+            // A Route challenge with a leg paused mid-air: tapping it offers RESUME rather than a
+            // fresh booking, and the slot should say so before the tap rather than after.
+            if (challenge.pausedFlight != null) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(6.dp)
+                        .size(18.dp)
+                        .clip(CircleShape)
+                        .background(Amber),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Pause,
+                        contentDescription = "Flight paused",
+                        tint = DeepNavy,
+                        modifier = Modifier.size(12.dp)
+                    )
+                }
             }
         }
     }

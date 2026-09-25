@@ -30,6 +30,7 @@ Owns short-lived, fast-changing, per-device session state. Nothing derived lives
 | `focused_route_challenge_id` | `ChallengesViewModel`; `HubViewModel` (self-healing clear); `CesiumGameActivity` (clear on Route completion) | `HubViewModel`, `ChallengesViewModel` | Display-only pointer. Never mutates the challenge row. |
 | `paused_flight` | `CesiumGameActivity` check-in; `InFlightViewModel` | `HubViewModel`, `InFlightViewModel` | STORY slot. |
 | `paused_free_flight` | same | `ChallengesViewModel`, `InFlightViewModel` | FREE slot, deliberately separate so the two can coexist. |
+| `logbook_sort_order` | `AccountViewModel.setSortOrder()` | `AccountViewModel` (seeds the Passport logbook's sort) | A `FlightSortOrder` name. Display preference only; an unknown value falls back to `DATE_DESC`. |
 | ~~`home_airport_iata`~~ | **removed** | — | Moved to Room. This key is the bug this document exists for. |
 
 ## Room — `user_data.db`
