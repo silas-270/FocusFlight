@@ -9,6 +9,7 @@ private const val KM_TO_MILES = 0.621371
 private const val METERS_TO_FEET = 3.28084
 
 fun kmToMiles(km: Double): Double = km * KM_TO_MILES
+fun milesToKm(miles: Double): Double = miles / KM_TO_MILES
 fun metersToFeet(meters: Double): Double = meters * METERS_TO_FEET
 fun kmhToMph(kmh: Int): Int = (kmh * KM_TO_MILES).roundToInt()
 

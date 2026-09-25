@@ -41,9 +41,18 @@ pager updates the selection, picking a new interval resets the pager to the firs
 Tapping a partly visible neighbouring card pages to it; tapping the centred card books it,
 the same as **Confirm selection**.
 
-**The LHR fallback.** If a Story Mode origin has no outbound routes at all, the ViewModel
-rehomes the pilot to London Heathrow and persists it, so the screen always has content.
-It fires only on a genuinely empty result, never on a *failed* query — a transient SQLite
+**Only the main network is offered.** Destination lists (every mode) and every airport picker
+contain only airports in the main route network — the ones reachable from everywhere and able to
+fly back out (`RouteNetwork.mainComponent`). About 730 IATA airports with no routes, no
+departures, or only a closed local cluster are hidden. Route lists also drop self-routes,
+duplicate pairs and physically impossible durations (`SANE_ROUTE` in
+`AirportRouteSqliteDataSource`). Airport search is accent- and case-insensitive and also matches
+ICAO codes and country names (`AirportSearchIndex`).
+
+**The dead-end fallback.** If a Story Mode origin has no routes into the main network (a pilot
+stranded before dead ends were hidden), the ViewModel rehomes the pilot to the nearest large
+network airport and persists it, so the screen always has content. It fires only on a genuinely
+empty result, never on a *failed* query — a transient SQLite
 error used to silently teleport the pilot — and the screen now shows a notice when it
 happens rather than moving them in silence.
 

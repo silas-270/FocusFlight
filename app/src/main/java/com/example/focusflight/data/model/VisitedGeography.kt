@@ -22,5 +22,10 @@ data class VisitedGeography(
     val visitedCountries: Set<String>,
     val countryToContinent: Map<String, String>,
     val continentStats: List<ContinentStats>,
-    val completedContinents: Set<String>
+    val completedContinents: Set<String>,
+    /** Continents with at least one visit: a visited country counts under it, or a visited airport
+     *  physically sits on it (Honolulu reaches Oceania though the US counts under North America).
+     *  Backs "Globetrotter". */
+    val reachedContinents: Set<String> = continentStats.filter { it.visitedCountries.isNotEmpty() }
+        .mapTo(HashSet()) { it.continentCode }
 )

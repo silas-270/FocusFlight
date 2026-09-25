@@ -29,16 +29,28 @@ scalar progress bar is a derived summary of the checklist, not the only thing th
 knows about itself.
 
 Progress is read live off `VisitedGeography`, which is already `STORY`-filtered at the
-`AirportRepository.getVisitedGeography` boundary.
+`AirportRepository.getVisitedGeography` boundary. A visit is the origin or destination of a
+`STORY` flight, or the home base.
+
+**Only reachable geography counts.** The denominators come from `getContinentCountryMap`, built
+from airports in the main route network only, with each country under exactly **one** continent
+(the continent most of its airports are on; Russia is overridden to Europe). The raw data files
+Spain, Egypt, Greece, Russia, Turkey and the US under two continents, which used to make "World
+Traveler" need 239 of 233 countries and put Spain on "Master of Africa". World Traveler now
+targets the distinct reachable countries. Globetrotter targets the continents the network
+reaches (six — no Antarctic airport has a route, so there is no "Master of Antarctica"), and a
+continent counts as *reached* if a visited country counts under it **or** a visited airport sits
+on it, so Honolulu still reaches Oceania.
 
 ### Distance milestones
 
 Thematic rather than linear — a few big, flavourful targets rather than "fly 1 / 5 / 10
-flights" counters. The four current ones are **one ladder, not four independent goals**:
+flights" counters. The five current ones are **one ladder, not five independent goals**:
 they all read the same cumulative distance, so passing the furthest necessarily means
 passing the nearer ones. That is what `familyId` / `familyRank` on `AchievementStatus`
 express, so the UI can collapse a ladder into a single tiered badge instead of showing
-four bars that all move together.
+five bars that all move together. Distances are stored in km (as the flight log is) and
+reported in miles, like every distance in the UI.
 
 ### Behavioral
 
@@ -121,16 +133,17 @@ The Account screen ("passport") is the read-only view of everything derived:
 |---|---|
 | Visited-country map | `VisitedGeography` over `world-map.svg`, via `WorldMapParser` and a Robinson projection |
 | Stats grid | `FlightStats` — `totalFlights`, `totalMinutes`, `airportsVisited` |
-| Highlights row | `FlightHighlights` — longest flight, most-visited airport, and total distance as a multiple of the equator's 40,075 km |
+| Highlights row | `FlightHighlights` — longest flight, most-visited airport, and total distance as a multiple of the equator's circumference |
 | Badge grid | `AchievementBoard`, families collapsed into tiers |
 | Unfinished achievements | The same board, shown as the Challenges screen's second tab |
 | Logbook | The flight log, collapsible and sortable |
 | Completed challenges | `listCompletedChallenges` |
 | Home base section | Return home / change home base — see [modes.md](modes.md) |
 
-`airportsVisited` is `STORY`-scoped so it agrees with the map beside it, and counts the
-home airport once. `totalFlights`, `totalMinutes` and the equator ratio are mode-blind,
-because a Free Mode flight really was flown.
+`airportsVisited` is `STORY`-scoped so it agrees with the map beside it (Story origins and
+destinations), and counts the home airport once. `totalFlights`, `totalMinutes` and the three
+highlights (longest flight, most-visited airport, equator ratio) are mode-blind, because they
+describe flying the pilot actually did — a Free Mode flight really was flown and landed.
 The isolation matrix in [modes.md](modes.md) has the full rules.
 
 ## Tours

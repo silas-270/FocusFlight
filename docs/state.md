@@ -24,11 +24,11 @@ Owns short-lived, fast-changing, per-device session state. Nothing derived lives
 | Key | Writers | Readers | Notes |
 |---|---|---|---|
 | `onboarding_completed` | `OnboardingViewModel.saveHomeAirport()` | `CesiumGameActivity` start destination | Written **last**, only after the profile row exists. See below. |
-| `current_airport_iata` | `OnboardingViewModel.saveHomeAirport()`; `InFlightViewModel.completeFlight()` (STORY only, and only if the logbook write succeeded); `AccountViewModel.returnHome()`; `FlightSearchViewModel.fetchRoutes()` (LHR rehome) | `domain.resolveCurrentAirportIata()` only | Four writers, one store. The LHR rehome is the surprising one — see *Known sharp edges*. |
+| `current_airport_iata` | `OnboardingViewModel.saveHomeAirport()`; `InFlightViewModel.completeFlight()` (STORY only, and only if the logbook write succeeded); `AccountViewModel.returnHome()`; `FlightSearchViewModel.fetchRoutes()` (dead-end rehome) | `domain.resolveCurrentAirportIata()` only | Four writers, one store. The dead-end rehome is the surprising one — see *Known sharp edges*. |
 | `last_return_home_at` | `AccountViewModel.returnHome()` | `AccountViewModel` | 7-day cooldown. Never conflated with the 30-day one. |
 | `last_home_base_changed_at` | `OnboardingViewModel` (seeds 31 days in the past); `AccountViewModel.changeHomeBase()` | `AccountViewModel` | Written only after the Room home-airport write succeeds. |
 | `focused_route_challenge_id` | `ChallengesViewModel`; `HubViewModel` (self-healing clear); `CesiumGameActivity` (clear on Route completion) | `HubViewModel`, `ChallengesViewModel` | Display-only pointer. Never mutates the challenge row. |
-| `paused_flight` | `CesiumGameActivity` check-in; `InFlightViewModel` | `HubViewModel`, `InFlightViewModel` | STORY slot. |
+| `paused_flight` | `CesiumGameActivity` check-in; `InFlightViewModel`; `AccountViewModel.returnHome()` (clears it when the flight departs from anywhere but home) | `HubViewModel`, `InFlightViewModel`, `AccountViewModel` | STORY slot. |
 | `paused_free_flight` | same | `ChallengesViewModel`, `InFlightViewModel` | FREE slot, deliberately separate so the two can coexist. |
 | `logbook_sort_order` | `AccountViewModel.setSortOrder()` | `AccountViewModel` (seeds the Passport logbook's sort) | A `FlightSortOrder` name. Display preference only; an unknown value falls back to `DATE_DESC`. |
 | ~~`home_airport_iata`~~ | **removed** | — | Moved to Room. This key is the bug this document exists for. |
@@ -82,7 +82,8 @@ Discardable. Rebuilt on demand, never a source of truth.
 |---|---|---|
 | `AirportRouteSqliteDataSource.connection` | Process | Read-only bundled asset; nothing writes it |
 | `cachedContinentCountryMap` | Process | Immutable reference data. Populated **only on success** — a failure throws, and a throw cannot be memoised. That is why `AirportDataException` had to exist before this cache could |
-| `airportByIataCache` (LRU 128) | Process | Airports are immutable within a build. Successful lookups only |
+| `airportIndex` (every IATA airport + search index) | Process | Airports are immutable within a build. Loaded once, assigned only on success |
+| `cachedNetwork` (main route network) | Process | Pure function of the immutable routes table. Assigned only on success |
 | `WorldMapParser.cachedMap` | Process | Parsed from a bundled SVG; warmed at app start |
 | `MergedMapPathsCache` | Process | Pure function of its key; single entry |
 | `PaperGrainTexture.brush` | Process | Deterministic, seeded |
@@ -163,7 +164,7 @@ plus the resurrect case and an uncontended control. Its fake DAO models Room's r
 granularity (`@Update` rewrites everything, the scoped updates do not), so it cannot pass against a
 DAO that could not exist.
 
-Not covered, and worth knowing: the new DAO SQL (`getDistinctDestinationsInMode`,
+Not covered, and worth knowing: the new DAO SQL (`getDistinctAirportsInMode`,
 `updatePausedFlight`, `updateRouteProgress`) is only exercised by Room's generated code and would
 need Robolectric or an instrumented test to verify directly. And `InFlightViewModel` itself has no
 unit test at all — it loads the native Cesium engine on first touch — which is why the landing's
@@ -194,8 +195,10 @@ derived side, and `HomeBaseCooldown.isEligible(now, ...)` is the same rule again
 
 ## Known sharp edges
 
-- **The LHR rehome.** `FlightSearchViewModel.fetchRoutes()` rewrites `current_airport_iata`
-  when a Story Mode origin has no outbound routes at all. It no longer fires on a *failed*
+- **The dead-end rehome.** `FlightSearchViewModel.fetchRoutes()` rewrites `current_airport_iata`
+  when a Story Mode origin has no routes into the main network, moving the pilot to the nearest
+  large network airport (LHR only if that can't be resolved). Pickers and destination lists no
+  longer offer dead ends, so this only catches pilots stranded before that change. It no longer fires on a *failed*
   query (that was the actual bug — a transient SQLite error silently teleported the pilot and
   persisted it), and Flight Search now shows a notice when it happens rather than moving the
   pilot in silence.

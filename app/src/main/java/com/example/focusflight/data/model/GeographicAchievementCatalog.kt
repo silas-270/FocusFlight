@@ -42,28 +42,29 @@ sealed class GeographicAchievementGoal(
     object AllContinents : GeographicAchievementGoal(
         id = "geo_all_continents",
         displayName = "Globetrotter",
-        description = "Visit at least one country on every continent."
+        description = "Visit at least one country on every inhabited continent."
     ) {
-        /** Reuses [CuratedChallengeSets.ALL_CONTINENTS]'s member list rather than declaring a
-         *  second continent-name table: it is the same seven codes with the same labels, and the
-         *  two drifting apart would be a real bug. */
+        /** Reuses [CuratedChallengeSets.ALL_CONTINENTS]'s member labels rather than declaring a
+         *  second continent-name table, and lists only continents present in [geo] - the same
+         *  ones the progress target counts, so the checklist and "6 / 6" always agree. */
         override fun memberProgress(geo: VisitedGeography): List<SetMemberProgress> =
-            CuratedChallengeSets.ALL_CONTINENTS.memberItems.map { member ->
-                val stat = geo.continentStats.find { it.continentCode == member.id }
-                SetMemberProgress(
-                    id = member.id,
-                    displayName = member.displayName,
-                    isVisited = stat?.visitedCountries?.isNotEmpty() == true
-                )
-            }.visitedFirst()
+            CuratedChallengeSets.ALL_CONTINENTS.memberItems
+                .filter { member -> geo.continentStats.any { it.continentCode == member.id } }
+                .map { member ->
+                    SetMemberProgress(
+                        id = member.id,
+                        displayName = member.displayName,
+                        isVisited = member.id in geo.reachedContinents
+                    )
+                }.visitedFirst()
     }
 
-    /** Every country in the world map visited - the strictest geographic goal, distinct from
-     *  [AllContinents]'s "touched" bar. */
+    /** Every country the route network reaches visited - the strictest geographic goal,
+     *  distinct from [AllContinents]'s "touched" bar. */
     object AllCountries : GeographicAchievementGoal(
         id = "geo_all_countries",
         displayName = "World Traveler",
-        description = "Visit every country in the world."
+        description = "Visit every country you can fly to."
     ) {
         override fun memberProgress(geo: VisitedGeography): List<SetMemberProgress> =
             geo.countryToContinent.keys.map { code ->
@@ -148,7 +149,8 @@ object GeographicAchievementCatalog {
         GeographicAchievementGoal.EntireContinent("AF", "Africa"),
         GeographicAchievementGoal.EntireContinent("NA", "North America"),
         GeographicAchievementGoal.EntireContinent("SA", "South America"),
-        GeographicAchievementGoal.EntireContinent("OC", "Oceania"),
-        GeographicAchievementGoal.EntireContinent("AN", "Antarctica")
+        GeographicAchievementGoal.EntireContinent("OC", "Oceania")
+        // No "Master of Antarctica": no Antarctic airport has a single route, so it could only
+        // ever show LOCKED with an empty checklist.
     )
 }

@@ -28,7 +28,9 @@ interface FlightLogDao {
     suspend fun getTotalMinutes(userId: Int): Int
 
     /**
-     * How many distinct airports the pilot has *visited*, counting only STORY flights and never
+     * How many distinct airports the pilot has *visited* - the origins and destinations of STORY
+     * flights, matching `AirportRepository.getVisitedGeography` (a Story origin is always somewhere
+     * the pilot really was, under the origin lock). Counts only STORY flights and never
      * counting [homeIata] - which the caller adds back itself, exactly once, whether or not it
      * ever appears as a destination here.
      *
@@ -44,12 +46,14 @@ interface FlightLogDao {
      * encoding changes. A null [homeIata] (no home base yet) excludes nothing.
      */
     @Query("""
-        SELECT COUNT(DISTINCT dest_iata) FROM flight_log
-        WHERE user_id = :userId
-          AND mode = :mode
-          AND (:homeIata IS NULL OR dest_iata <> :homeIata)
+        SELECT COUNT(*) FROM (
+            SELECT dest_iata AS iata FROM flight_log WHERE user_id = :userId AND mode = :mode
+            UNION
+            SELECT origin_iata AS iata FROM flight_log WHERE user_id = :userId AND mode = :mode
+        )
+        WHERE iata <> '' AND (:homeIata IS NULL OR iata <> :homeIata)
     """)
-    suspend fun getDistinctDestinationsInMode(userId: Int, mode: FlightMode, homeIata: String?): Int
+    suspend fun getDistinctAirportsInMode(userId: Int, mode: FlightMode, homeIata: String?): Int
 
     // ── Highlight aggregate queries ────────────────────────────────────────
 
