@@ -48,7 +48,9 @@ fun AirportSearchPanel(
     results: List<FlightRoute>,
     selectedRoute: FlightRoute?,
     onRouteSelect: (FlightRoute) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** The origin's city, named in the "no match" message; omitted from it while unknown. */
+    originCity: String? = null
 ) {
     Column(
         modifier = modifier
@@ -188,7 +190,11 @@ fun AirportSearchPanel(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "The airport does not offer direct connections to that airport",
+                    text = if (originCity.isNullOrBlank()) {
+                        "No direct flights match that search."
+                    } else {
+                        "No direct flights from $originCity match that search."
+                    },
                     color = Haze,
                     style = MaterialTheme.typography.bodyMedium,
                     textAlign = TextAlign.Center
