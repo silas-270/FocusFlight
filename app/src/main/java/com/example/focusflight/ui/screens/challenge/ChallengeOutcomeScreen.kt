@@ -20,6 +20,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -33,6 +36,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -44,10 +48,17 @@ import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.PaddingValues
+import com.example.focusflight.data.model.Challenge
+import com.example.focusflight.data.model.ChallengeType
+import com.example.focusflight.data.model.predefinedRoute
 import com.example.focusflight.data.repository.ChallengeOutcome
+import com.example.focusflight.util.formatMiles
+import com.example.focusflight.util.kmToMiles
+import java.util.Locale
 import com.example.focusflight.ui.components.BadgeSize
 import com.example.focusflight.ui.components.BadgeStyle
 import com.example.focusflight.ui.components.BadgeVariant
@@ -87,11 +98,28 @@ private const val StartBeatMs = 250
  * than picking a single winner to show.
  */
 @Composable
-fun ChallengeOutcomeScreen(outcomes: List<ChallengeOutcome>, onContinue: () -> Unit) {
+fun ChallengeOutcomeScreen(
+    outcomes: List<ChallengeOutcome>,
+    /** Reads a challenge's current row, so each progress line can be spelled out in its own
+     *  units ("Leg 3/5", "2,600 / 6,200 mi") rather than only as a percentage. Null, or a
+     *  lookup that finds nothing, falls back to the percentage. */
+    loadChallenge: (suspend (Int) -> Challenge?)? = null,
+    onContinue: () -> Unit
+) {
     BackHandler { onContinue() }
 
+    val progressLabels by produceState(emptyMap<Int, String>(), outcomes) {
+        val lookup = loadChallenge ?: return@produceState
+        value = outcomes.mapNotNull { outcome ->
+            runCatching { lookup(outcome.challengeId) }.getOrNull()
+                ?.let(::outcomeProgressLabel)
+                ?.let { outcome.challengeId to it }
+        }.toMap()
+    }
+
     val completedCount = outcomes.count { it is ChallengeOutcome.Completed }
-    val hasAdvance = outcomes.any { it is ChallengeOutcome.Advanced }
+    val advancedCount = outcomes.count { it is ChallengeOutcome.Advanced }
+    val hasAdvance = advancedCount > 0
     val settleDelayMs = StartBeatMs + if (hasAdvance) AdvanceDurationMs else CompleteDurationMs
 
     var animateIn by remember { mutableStateOf(false) }
@@ -106,8 +134,11 @@ fun ChallengeOutcomeScreen(outcomes: List<ChallengeOutcome>, onContinue: () -> U
         if (completedCount > 0) showConfetti = true
     }
 
+    // Says what actually happened: "CHALLENGE COMPLETE" over one completion and two mere
+    // advances overstated it, so a mixed landing names both counts.
     val headline = when {
         completedCount == 0 -> "CHALLENGE PROGRESS"
+        advancedCount > 0 -> "$completedCount COMPLETE · $advancedCount ADVANCED"
         completedCount == 1 -> "CHALLENGE COMPLETE"
         else -> "CHALLENGES COMPLETE"
     }
@@ -116,11 +147,17 @@ fun ChallengeOutcomeScreen(outcomes: List<ChallengeOutcome>, onContinue: () -> U
         animationSpec = tween(durationMillis = 400),
         label = "challengeOutcomeHeadlineColor"
     )
-    val buttonColor = if (completedCount > 0) ChallengeGold else Amber
 
     Box(modifier = Modifier.fillMaxSize().background(Midnight), contentAlignment = Alignment.Center) {
+        // Scrolls as a whole when it outgrows the screen (three rows at a large font scale
+        // used to squeeze CONTINUE down to nothing). The card no longer scrolls on its own -
+        // one scroll container, so the button always stays reachable below it.
         Column(
-            modifier = Modifier.fillMaxWidth().padding(Spacing.Large),
+            modifier = Modifier
+                .fillMaxWidth()
+                .windowInsetsPadding(WindowInsets.systemBars)
+                .verticalScroll(rememberScrollState())
+                .padding(Spacing.Large),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             CaptionLabel(text = "CHALLENGE UPDATE")
@@ -141,14 +178,16 @@ fun ChallengeOutcomeScreen(outcomes: List<ChallengeOutcome>, onContinue: () -> U
                 contentPadding = PaddingValues(24.dp)
             ) {
                 Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .verticalScroll(rememberScrollState()),
+                    modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(20.dp)
                 ) {
                     outcomes.forEachIndexed { index, outcome ->
                         if (index > 0) HorizontalDivider(color = Border, thickness = 1.dp)
-                        ChallengeOutcomeRow(outcome = outcome, animateIn = animateIn)
+                        ChallengeOutcomeRow(
+                            outcome = outcome,
+                            animateIn = animateIn,
+                            progressLabel = progressLabels[outcome.challengeId]
+                        )
                     }
                 }
             }
@@ -168,7 +207,7 @@ fun ChallengeOutcomeScreen(outcomes: List<ChallengeOutcome>, onContinue: () -> U
 }
 
 @Composable
-private fun ChallengeOutcomeRow(outcome: ChallengeOutcome, animateIn: Boolean) {
+private fun ChallengeOutcomeRow(outcome: ChallengeOutcome, animateIn: Boolean, progressLabel: String?) {
     val isCompleted = outcome is ChallengeOutcome.Completed
     val oldProgress = when (outcome) {
         is ChallengeOutcome.Advanced -> outcome.oldProgress
@@ -207,8 +246,12 @@ private fun ChallengeOutcomeRow(outcome: ChallengeOutcome, animateIn: Boolean) {
                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                 color = OffWhite,
                 modifier = Modifier.weight(1f),
-                maxLines = 1
+                maxLines = 1,
+                // At 360dp the badges leave the name ~150dp, so "Trans-Pacific Explorer" was
+                // clipped mid-word; an ellipsis at least says there's more.
+                overflow = TextOverflow.Ellipsis
             )
+            Spacer(modifier = Modifier.width(6.dp))
             Row(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -236,12 +279,35 @@ private fun ChallengeOutcomeRow(outcome: ChallengeOutcome, animateIn: Boolean) {
 
         Spacer(modifier = Modifier.height(8.dp))
 
+        val percent = if (isCompleted) "100%" else "${(newProgress * 100).roundToInt()}%"
         FocusInfoRow(
             label = "PROGRESS",
-            value = if (isCompleted) "100%" else "${(newProgress * 100).roundToInt()}%",
+            value = progressLabel?.let { "$it · $percent" } ?: percent,
             valueColor = barColor
         )
     }
+}
+
+/**
+ * The challenge's progress in its own units, from its row as it stands after this landing -
+ * legs for an itinerary, members for a set, miles for distance, days for a streak. Null where
+ * there is no count more meaningful than the percentage (a free-form route, scored by distance
+ * closed along a straight line).
+ */
+private fun outcomeProgressLabel(challenge: Challenge): String? = when (challenge.type) {
+    ChallengeType.ROUTE -> challenge.predefinedRoute()
+        ?.takeIf { it.legCount > 0 }
+        ?.let { "Leg ${challenge.legIndex.coerceIn(0, it.legCount)}/${it.legCount}" }
+    ChallengeType.SET_COMPLETION ->
+        challenge.setTotalMembers.takeIf { it > 0 }
+            ?.let { "${challenge.visitedSetMembers.size}/$it visited" }
+    ChallengeType.DISTANCE -> challenge.targetDistanceKm?.takeIf { it > 0 }?.let { target ->
+        // Bare numbers on the left so the unit is said once: "2,600 / 6,200 mi".
+        val flown = String.format(Locale.US, "%,.0f", kmToMiles(challenge.cumulativeDistanceKm.coerceAtMost(target)))
+        "$flown / ${formatMiles(target)}"
+    }
+    ChallengeType.STREAK -> challenge.targetDays?.takeIf { it > 0 }
+        ?.let { "${challenge.streakDays.coerceAtMost(it)} of $it days" }
 }
 
 private data class ConfettiParticle(
