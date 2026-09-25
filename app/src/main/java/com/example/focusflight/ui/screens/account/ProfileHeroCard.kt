@@ -81,7 +81,7 @@ internal fun ProfileHeroCard(state: AccountUiState) {
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = state.username.ifBlank { "Captain" },
+                    text = state.username.ifBlank { "Pilot" },
                     style = MaterialTheme.typography.headlineSmall.copy(
                         fontWeight = FontWeight.Bold
                     ),
