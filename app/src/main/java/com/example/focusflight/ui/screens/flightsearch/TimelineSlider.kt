@@ -1,5 +1,12 @@
 package com.example.focusflight.ui.screens.flightsearch
 
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
+import com.example.focusflight.util.formatDuration
 import androidx.compose.animation.rememberSplineBasedDecay
 import androidx.compose.animation.core.AnimationState
 import androidx.compose.animation.core.Spring
@@ -132,6 +139,22 @@ fun TimelineSlider(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(top = 24.dp, start = sidePadding, end = sidePadding)
+                // Soft fades at both ends, so the empty half beside the first or last bucket
+                // reads as the end of the scale rather than missing content.
+                .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                .drawWithContent {
+                    drawContent()
+                    val fade = (EdgeFadeWidth.toPx() / size.width).coerceIn(0f, 0.5f)
+                    drawRect(
+                        brush = Brush.horizontalGradient(
+                            0f to Color.Transparent,
+                            fade to Color.Black,
+                            1f - fade to Color.Black,
+                            1f to Color.Transparent
+                        ),
+                        blendMode = BlendMode.DstIn
+                    )
+                }
         ) {
             itemsIndexed(intervals) { index, interval ->
                 val isCenter = interval == selectedInterval
@@ -167,7 +190,7 @@ fun TimelineSlider(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = formatTime(interval),
+                        text = formatDuration(interval),
                         style = textStyle,
                         color = color
                     )
@@ -177,11 +200,6 @@ fun TimelineSlider(
     }
 }
 
-internal fun formatTime(minutes: Int): String {
-    val h = minutes / 60
-    val m = minutes % 60
-    return "%02d:%02d".format(h, m)
-}
 
 @Composable
 fun rememberInertiaSnapFlingBehavior(
@@ -234,3 +252,5 @@ fun rememberInertiaSnapFlingBehavior(
         }
     }
 }
+
+private val EdgeFadeWidth = 24.dp

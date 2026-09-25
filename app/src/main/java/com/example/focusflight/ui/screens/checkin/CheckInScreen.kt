@@ -1,5 +1,7 @@
 package com.example.focusflight.ui.screens.checkin
 
+import com.example.focusflight.util.formatDuration
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -99,19 +101,23 @@ fun CheckInScreen(
                 SectionHeader(
                     title = "FOCUSFLIGHT",
                     modifier = Modifier.padding(horizontal = Spacing.Large),
+                    // A plain caption: as a filled chip it looked like a button.
                     trailingAction = {
-                        FocusBadge(
+                        Text(
                             text = "BOARDING PASS",
-                            variant = BadgeVariant.Neutral,
-                            style = BadgeStyle.Translucent,
-                            size = BadgeSize.Compact
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            ),
+                            color = Haze,
+                            letterSpacing = 1.sp
                         )
                     }
                 )
 
-                Spacer(modifier = Modifier.height(Spacing.Large))
+                SectionGap(Spacing.Large)
                 DashedDivider(color = Border, thickness = 1.dp)
-                Spacer(modifier = Modifier.height(Spacing.Large))
+                SectionGap(Spacing.Large)
 
                 // Pilot Info - the pilot's own name rather than a fixed rank (ranks are earned
                 // per flight on arrival). Labelled PILOT, not PASSENGER: the app's player flies.
@@ -121,9 +127,9 @@ fun CheckInScreen(
                     modifier = Modifier.padding(horizontal = Spacing.Large)
                 )
 
-                Spacer(modifier = Modifier.height(Spacing.Medium))
+                SectionGap(Spacing.Medium)
                 DashedDivider(color = Border, thickness = 1.dp)
-                Spacer(modifier = Modifier.height(Spacing.Large))
+                SectionGap(Spacing.Large)
 
                 // FROM / TO Row
                 Row(
@@ -197,15 +203,13 @@ fun CheckInScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(Spacing.Large))
+                SectionGap(Spacing.Large)
                 DashedDivider(color = Border, thickness = 1.dp)
-                Spacer(modifier = Modifier.height(Spacing.Large))
+                SectionGap(Spacing.Large)
 
                 // DURATION / DISTANCE Rows
                 val durationMin = routeDetails?.durationMin ?: 0
-                val hours = durationMin / 60
-                val minutes = durationMin % 60
-                val durationText = if (hours > 0) "${hours}h ${minutes}m" else "${minutes}m"
+                val durationText = formatDuration(durationMin)
                 val distanceKm = routeDetails?.distanceKm ?: 0.0
 
                 FocusInfoRow(
@@ -220,9 +224,9 @@ fun CheckInScreen(
                     modifier = Modifier.padding(horizontal = Spacing.Large)
                 )
 
-                Spacer(modifier = Modifier.height(Spacing.Medium))
+                SectionGap(Spacing.Medium)
                 DashedDivider(color = Border, thickness = 1.dp)
-                Spacer(modifier = Modifier.height(Spacing.Large))
+                SectionGap(Spacing.Large)
 
                 // FLIGHT / DATE Rows
                 FocusInfoRow(
@@ -237,9 +241,9 @@ fun CheckInScreen(
                     modifier = Modifier.padding(horizontal = Spacing.Large)
                 )
 
-                Spacer(modifier = Modifier.weight(1f))
+                SectionGap(Spacing.Medium)
                 DashedDivider(color = Border, thickness = 1.dp)
-                Spacer(modifier = Modifier.height(Spacing.Large))
+                SectionGap(Spacing.Large)
 
                 // Custom Barcode
                 Box(
@@ -282,6 +286,16 @@ fun CheckInScreen(
 
         }
     }
+}
+
+/**
+ * A gap between two pass sections: [min] at the least, plus an equal share of whatever height the
+ * pass has left over. The spare height used to all land in one spot, above the barcode.
+ */
+@Composable
+private fun ColumnScope.SectionGap(min: Dp) {
+    Spacer(modifier = Modifier.height(min))
+    Spacer(modifier = Modifier.weight(1f))
 }
 
 @Composable

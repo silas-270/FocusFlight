@@ -1,5 +1,9 @@
 package com.example.focusflight.ui.screens.challenge
 
+import com.example.focusflight.ui.theme.Success
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
@@ -138,28 +142,38 @@ fun ChallengeOutcomeScreen(
     // advances overstated it, so a mixed landing names both counts.
     val headline = when {
         completedCount == 0 -> "CHALLENGE PROGRESS"
-        advancedCount > 0 -> "$completedCount COMPLETE · $advancedCount ADVANCED"
+        // Broken on purpose, so the two counts sit on balanced lines instead of wrapping wherever.
+        advancedCount > 0 -> "$completedCount COMPLETE\n$advancedCount ADVANCED"
         completedCount == 1 -> "CHALLENGE COMPLETE"
         else -> "CHALLENGES COMPLETE"
     }
     val headlineColor by animateColorAsState(
-        targetValue = if (completedCount > 0 && animateIn) ChallengeGold else Amber,
+        // Gold marks what's done. The headline only turns gold when everything in it is; on a
+        // mixed landing the completed rows carry the gold and the headline stays Amber.
+        targetValue = if (completedCount > 0 && advancedCount == 0 && animateIn) ChallengeGold else Amber,
         animationSpec = tween(durationMillis = 400),
         label = "challengeOutcomeHeadlineColor"
     )
 
     Box(modifier = Modifier.fillMaxSize().background(Midnight), contentAlignment = Alignment.Center) {
-        // Scrolls as a whole when it outgrows the screen (three rows at a large font scale
-        // used to squeeze CONTINUE down to nothing). The card no longer scrolls on its own -
-        // one scroll container, so the button always stays reachable below it.
+        // Content scrolls in the space above CONTINUE, which is pinned to the bottom like on
+        // Arrival and Check-in (it used to follow the card, mid-screen). One scroll container,
+        // so three rows at a large font scale still can't squeeze the button away.
         Column(
             modifier = Modifier
-                .fillMaxWidth()
+                .fillMaxSize()
                 .windowInsetsPadding(WindowInsets.systemBars)
-                .verticalScroll(rememberScrollState())
                 .padding(Spacing.Large),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+          Column(
+              modifier = Modifier
+                  .weight(1f)
+                  .fillMaxWidth()
+                  .verticalScroll(rememberScrollState()),
+              horizontalAlignment = Alignment.CenterHorizontally,
+              verticalArrangement = Arrangement.Center
+          ) {
             CaptionLabel(text = "CHALLENGE UPDATE")
             Spacer(modifier = Modifier.height(8.dp))
             Text(
@@ -192,7 +206,9 @@ fun ChallengeOutcomeScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(Spacing.ExtraLarge))
+          }
+
+            Spacer(modifier = Modifier.height(Spacing.Large))
 
             FocusButton(
                 text = "CONTINUE",
@@ -246,32 +262,28 @@ private fun ChallengeOutcomeRow(outcome: ChallengeOutcome, animateIn: Boolean, p
                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                 color = OffWhite,
                 modifier = Modifier.weight(1f),
-                maxLines = 1,
-                // At 360dp the badges leave the name ~150dp, so "Trans-Pacific Explorer" was
-                // clipped mid-word; an ellipsis at least says there's more.
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
-            Spacer(modifier = Modifier.width(6.dp))
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                FocusBadge(
-                    text = challengeTypeLabel(outcome.type),
-                    variant = BadgeVariant.Primary,
-                    style = BadgeStyle.Translucent,
-                    size = BadgeSize.Compact
-                )
-                if (isCompleted) {
-                    FocusBadge(
-                        text = "COMPLETED",
-                        variant = BadgeVariant.Success,
-                        style = BadgeStyle.Translucent,
-                        size = BadgeSize.Compact
-                    )
-                }
-            }
         }
+        // Type and status as a plain text line under the name, not chips beside it: the chips
+        // looked like buttons, and squeezed the name down to "First Cro...".
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = buildAnnotatedString {
+                withStyle(SpanStyle(color = Amber)) { append(challengeTypeLabel(outcome.type)) }
+                if (isCompleted) {
+                    withStyle(SpanStyle(color = Haze)) { append("  ·  ") }
+                    withStyle(SpanStyle(color = Success)) { append("COMPLETED") }
+                }
+            },
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace,
+                letterSpacing = 0.5.sp
+            ),
+            modifier = Modifier.padding(start = 20.dp + Spacing.Small)
+        )
 
         Spacer(modifier = Modifier.height(10.dp))
 

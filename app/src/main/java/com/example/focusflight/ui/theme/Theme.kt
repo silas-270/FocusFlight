@@ -51,6 +51,9 @@ object Spacing {
     val ExtraLarge: Dp = 32.dp
 }
 
+/** Horizontal margin between the screen edge and the content of every full-screen destination. */
+val ScreenGutter: Dp = Spacing.Large
+
 object Radius {
     val Small: Dp = 12.dp
     val Medium: Dp = 14.dp

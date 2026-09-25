@@ -61,7 +61,10 @@ fun BoxScope.SpeedMotionLayer(
     intensity: () -> Float,
     iconSize: Dp = 28.dp,
     iconAlignment: Alignment = BiasAlignment(0f, -0.44f),
-    shakeScale: Float = 1f
+    shakeScale: Float = 1f,
+    // Vertical band (fractions of the height) kept free of streaks, e.g. behind a text readout
+    // drawn on top of this layer, so no line runs through the glyphs.
+    clearBand: ClosedFloatingPointRange<Float>? = null
 ) {
     val currentIntensity by rememberUpdatedState(intensity)
 
@@ -165,6 +168,7 @@ fun BoxScope.SpeedMotionLayer(
         val globalAlpha = (0.25f + 0.75f * i).coerceIn(0f, 1f)
 
         for (p in particles) {
+            if (clearBand != null && p.yFraction in clearBand) continue
             val strokeLengthPx = p.lengthDp.dp.toPx()
             val xPx = p.x * w
             val yPx = p.yFraction * h

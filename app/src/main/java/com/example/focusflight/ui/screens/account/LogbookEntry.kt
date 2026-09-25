@@ -1,5 +1,8 @@
 package com.example.focusflight.ui.screens.account
 
+import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -204,7 +207,7 @@ internal fun LogPaperCard(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "%02d".format(entryNumber),
+                    text = String.format(Locale.US, "%02d", entryNumber),
                     style = MaterialTheme.typography.labelSmall.copy(
                         fontFamily = FontFamily.Monospace,
                         fontWeight = FontWeight.Bold,
@@ -226,9 +229,7 @@ internal fun LogbookEntry(flight: FlightLog, entryNumber: Int) {
     val dateStr = remember(flight.completedAt) {
         SimpleDateFormat("dd MMM yyyy", Locale.US).format(Date(flight.completedAt))
     }
-    val hoursInt = flight.durationMin / 60
-    val minutesInt = flight.durationMin % 60
-    val durationStr = String.format(Locale.US, "%02dh%02dm", hoursInt, minutesInt)
+    val durationStr = com.example.focusflight.util.formatDuration(flight.durationMin)
     val distanceStr = com.example.focusflight.util.formatMiles(flight.distanceKm)
 
     val inkDark   = LogbookInkDark
@@ -260,14 +261,15 @@ internal fun LogbookEntry(flight: FlightLog, entryNumber: Int) {
                 FocusBadge(
                     text = flight.flightNumber,
                     variant = BadgeVariant.Danger,
-                    style = BadgeStyle.Outlined,
-                    size = BadgeSize.Compact,
-                    shape = RoundedCornerShape(3.dp)
+                    style = BadgeStyle.Stamp,
+                    size = BadgeSize.Compact
                 )
             }
 
-            // Row 2: ORIGIN ··✈·· DEST
+            // Row 2: ORIGIN ··✈·· DEST across the full width, so origin/distance sit on the left
+            // and destination/time on the right of every entry, lined up down the list.
             Row(
+                modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
@@ -281,14 +283,9 @@ internal fun LogbookEntry(flight: FlightLog, entryNumber: Int) {
                     ),
                     color = inkDark
                 )
-                Text(
-                    text = "·  ·  ·  ✈  ·  ·  ·",
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 8.sp,
-                        letterSpacing = 0.sp
-                    ),
-                    color = inkMid.copy(alpha = 0.45f)
+                LogbookRouteConnector(
+                    color = inkMid.copy(alpha = 0.45f),
+                    modifier = Modifier.weight(1f)
                 )
                 Text(
                     text = flight.destIata,
@@ -302,13 +299,16 @@ internal fun LogbookEntry(flight: FlightLog, entryNumber: Int) {
                 )
             }
 
-            // Row 3: DIST | TIME
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                LogbookDataCell(label = "DIST", value = distanceStr, labelColor = inkFaint, valueColor = inkMid)
-                LogbookDataCell(label = "TIME", value = durationStr, labelColor = inkFaint, valueColor = inkMid)
+            // Row 3: DIST (left) | TIME (right), under origin and destination
+            Row(modifier = Modifier.fillMaxWidth()) {
+                LogbookDataCell(
+                    label = "DIST", value = distanceStr, labelColor = inkFaint, valueColor = inkMid,
+                    modifier = Modifier.weight(1f)
+                )
+                LogbookDataCell(
+                    label = "TIME", value = durationStr, labelColor = inkFaint, valueColor = inkMid,
+                    modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End
+                )
             }
         }
     }
@@ -319,9 +319,11 @@ internal fun LogbookDataCell(
     label: String,
     value: String,
     labelColor: Color = Haze.copy(alpha = 0.6f),
-    valueColor: Color = Amber
+    valueColor: Color = Amber,
+    modifier: Modifier = Modifier,
+    horizontalAlignment: Alignment.Horizontal = Alignment.Start
 ) {
-    Column {
+    Column(modifier = modifier, horizontalAlignment = horizontalAlignment) {
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall.copy(
@@ -339,6 +341,35 @@ internal fun LogbookDataCell(
                 fontSize = 11.sp
             ),
             color = valueColor
+        )
+    }
+}
+
+/** Dotted line with a small plane in the middle, stretching between origin and destination. */
+@Composable
+private fun LogbookRouteConnector(color: Color, modifier: Modifier = Modifier) {
+    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+        DottedSegment(color, Modifier.weight(1f))
+        Text(
+            text = "✈",
+            fontSize = 10.sp,
+            color = color,
+            modifier = Modifier.padding(horizontal = 4.dp)
+        )
+        DottedSegment(color, Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun DottedSegment(color: Color, modifier: Modifier) {
+    Canvas(modifier = modifier.height(2.dp)) {
+        drawLine(
+            color = color,
+            start = Offset(0f, size.height / 2),
+            end = Offset(size.width, size.height / 2),
+            strokeWidth = 1.5.dp.toPx(),
+            pathEffect = PathEffect.dashPathEffect(floatArrayOf(2.dp.toPx(), 5.dp.toPx())),
+            cap = StrokeCap.Round
         )
     }
 }

@@ -16,3 +16,19 @@ fun kmhToMph(kmh: Int): Int = (kmh * KM_TO_MILES).roundToInt()
 fun formatMiles(km: Double): String = String.format(Locale.US, "%,.0f mi", kmToMiles(km))
 fun formatFeet(meters: Int): String = String.format(Locale.US, "%,d ft", metersToFeet(meters.toDouble()).roundToInt())
 fun formatMph(kmh: Int): String = String.format(Locale.US, "%d mph", kmhToMph(kmh))
+
+/**
+ * A length of time as the app writes it everywhere: "45m", "1h", "1h 25m", "134h 27m". Running
+ * clocks (the In-Flight countdown and its elapsed/total readout) are timers, not lengths, and
+ * keep their hh:mm:ss form.
+ */
+fun formatDuration(minutes: Int): String {
+    val safe = minutes.coerceAtLeast(0)
+    val h = safe / 60
+    val m = safe % 60
+    return when {
+        h == 0 -> String.format(Locale.US, "%dm", m)
+        m == 0 -> String.format(Locale.US, "%dh", h)
+        else -> String.format(Locale.US, "%dh %dm", h, m)
+    }
+}

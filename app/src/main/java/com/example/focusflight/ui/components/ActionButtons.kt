@@ -90,7 +90,9 @@ fun FocusButton(
     val shape = RoundedCornerShape(Radius.Medium)
 
     val containerColor = when {
-        !enabled -> if (style == ButtonStyle.Filled) Container.copy(alpha = 0.5f) else Color.Transparent
+        // Disabled is deliberately faint: at the old 50 % container / full-strength label a
+        // disabled button read as an ordinary secondary one, so a tap on it just seemed ignored.
+        !enabled -> if (style == ButtonStyle.Filled) Container.copy(alpha = 0.25f) else Color.Transparent
         style == ButtonStyle.Outlined -> Color.Transparent
         variant == ButtonVariant.Primary -> Accent
         variant == ButtonVariant.Secondary -> Container
@@ -100,7 +102,7 @@ fun FocusButton(
     }
 
     val contentColor = when {
-        !enabled -> TextSecondary
+        !enabled -> TextSecondary.copy(alpha = 0.5f)
         style == ButtonStyle.Outlined -> when (variant) {
             ButtonVariant.Primary -> Accent
             ButtonVariant.Secondary -> TextPrimary
@@ -116,7 +118,7 @@ fun FocusButton(
 
     val borderStroke = when {
         style == ButtonStyle.Filled -> null
-        !enabled -> BorderStroke(1.dp, Border.copy(alpha = 0.5f))
+        !enabled -> BorderStroke(1.dp, Border.copy(alpha = 0.3f))
         variant == ButtonVariant.Primary -> BorderStroke(1.dp, Accent)
         variant == ButtonVariant.Secondary -> BorderStroke(1.dp, Border)
         variant == ButtonVariant.Danger -> BorderStroke(1.dp, Danger)

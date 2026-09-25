@@ -1,5 +1,14 @@
 package com.example.focusflight.ui.screens.account
 
+import com.example.focusflight.ui.theme.Border
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material.icons.outlined.ConnectingAirports
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -29,7 +38,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.focusflight.ui.components.FocusStatCard
 import com.example.focusflight.ui.theme.Amber
 import com.example.focusflight.ui.theme.DeepNavy
 import com.example.focusflight.ui.theme.Haze
@@ -57,60 +65,80 @@ internal fun StatsGrid2x2(state: AccountUiState) {
     val currentTour = state.tours.firstOrNull()
         ?.takeIf { it.isOpenAt(now, zone) && it.activeDays >= MIN_ACTIVE_DAYS_TO_SHOW_TOUR }
 
+    // One read-only panel split by hairlines, not four separate tiles: four filled cards with
+    // icon bubbles looked like buttons that did nothing when tapped.
     Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(DeepNavy)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            FocusStatCard(
-                value = state.stats.totalFlights.toString(),
-                label = "FLIGHTS",
-                icon = Icons.Outlined.AirplanemodeActive,
-                modifier = Modifier.weight(1f)
-            )
-            FocusStatCard(
-                value = state.stats.airportsVisited.toString(),
-                label = "AIRPORTS",
-                icon = Icons.Outlined.FlightLand,
-                modifier = Modifier.weight(1f)
-            )
-        }
+        StatRow(
+            left = { StatCell(state.stats.totalFlights.toString(), "FLIGHTS", Icons.Outlined.AirplanemodeActive) },
+            right = { StatCell(state.stats.airportsVisited.toString(), "AIRPORTS", Icons.Outlined.FlightLand) }
+        )
         if (currentTour != null) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                FocusStatCard(
-                    value = "${currentTour.activeDays} / ${currentTour.spanDays}",
-                    label = "TOUR DAYS",
-                    icon = Icons.Outlined.Event,
-                    modifier = Modifier.weight(1f)
-                )
-                FocusStatCard(
-                    value = currentTour.flights.size.toString(),
-                    label = "THIS TOUR",
-                    icon = Icons.Outlined.Schedule,
-                    modifier = Modifier.weight(1f)
-                )
-            }
+            HorizontalDivider(color = Border, thickness = 1.dp)
+            StatRow(
+                left = {
+                    StatCell("${currentTour.activeDays} / ${currentTour.spanDays}", "DAYS FLOWN", Icons.Outlined.Event)
+                },
+                right = {
+                    StatCell(currentTour.flights.size.toString(), "TOUR FLIGHTS", Icons.Outlined.ConnectingAirports)
+                }
+            )
         }
     }
 }
 
 @Composable
-internal fun StatCard(
-    modifier: Modifier,
-    value: String,
-    label: String,
-    icon: ImageVector
-) {
-    FocusStatCard(
-        value = value,
-        label = label,
-        icon = icon,
-        modifier = modifier
-    )
+private fun StatRow(left: @Composable RowScope.() -> Unit, right: @Composable RowScope.() -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(IntrinsicSize.Min)
+    ) {
+        left()
+        Box(
+            modifier = Modifier
+                .fillMaxHeight()
+                .width(1.dp)
+                .background(Border)
+        )
+        right()
+    }
+}
+
+@Composable
+private fun RowScope.StatCell(value: String, label: String, icon: ImageVector) {
+    Row(
+        modifier = Modifier
+            .weight(1f)
+            .padding(Spacing.Medium),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = Amber,
+            modifier = Modifier.size(22.dp)
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Column {
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold
+                ),
+                color = OffWhite
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = Haze,
+                letterSpacing = 0.5.sp
+            )
+        }
+    }
 }

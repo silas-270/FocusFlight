@@ -1,5 +1,6 @@
 package com.example.focusflight.ui.screens.flightsearch
 
+import com.example.focusflight.util.formatDuration
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -106,7 +107,7 @@ fun SelectionCard(route: FlightRoute, isSelected: Boolean, onClick: () -> Unit) 
 
             // Bottom: Duration
             Text(
-                text = formatTime(route.durationMin),
+                text = formatDuration(route.durationMin),
                 color = Haze,
                 fontFamily = FontFamily.SansSerif,
                 fontSize = 16.sp

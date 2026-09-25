@@ -184,6 +184,15 @@ Two rules follow from it:
 The headless map renders scale their pixel size to the display the same way, so the Hub globe
 stays sharp.
 
+## Display formatting
+
+- **Numbers are always formatted with `Locale.US`** (`String.format(Locale.US, …)`, never a bare
+  `"…".format(…)`), so a German phone doesn't show "3,9 %" next to "6,838 mi".
+- **Lengths of time use `formatDuration`** (`util/Units.kt`): `45m`, `1h`, `1h 25m`. Only running
+  clocks (the In-Flight countdown and its elapsed/total readout) use `hh:mm:ss`.
+- Distances, altitudes and speeds go through `formatMiles` / `formatFeet` / `formatMph` in the
+  same file.
+
 ## Build
 
 ```

@@ -52,6 +52,7 @@ fun RouteMap(
         routes = routes,
         selectedRoute = selectedRoute,
         animationProgress = animationProgress,
+        focusOnSelection = true,
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))

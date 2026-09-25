@@ -30,7 +30,7 @@ import com.example.focusflight.ui.theme.Spacing
  */
 @Composable
 fun AchievementDetailModal(achievement: AchievementStatus, onDismiss: () -> Unit) {
-    ScrimCardModal(onScrimTap = onDismiss) {
+    ScrimCardModal(onScrimTap = onDismiss, onClose = onDismiss) {
         ModalTitle(text = achievement.displayName)
         Spacer(Modifier.height(6.dp))
         Text(

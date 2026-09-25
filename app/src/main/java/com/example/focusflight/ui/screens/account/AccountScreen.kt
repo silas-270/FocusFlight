@@ -1,5 +1,7 @@
 package com.example.focusflight.ui.screens.account
 
+import com.example.focusflight.ui.theme.ScreenGutter
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -121,10 +123,11 @@ fun AccountScreen(
     var selectedStack by remember { mutableStateOf<AchievementStack?>(null) }
     var selectedAchievement by remember { mutableStateOf<AchievementStatus?>(null) }
 
+    val listState = rememberLazyListState()
     Box(modifier = Modifier.fillMaxSize()) {
     Scaffold(
         topBar = {
-            BackTopAppBar(title = "PILOT PASSPORT", onBackClick = onBackClick)
+            BackTopAppBar(title = "PILOT PASSPORT", onBackClick = onBackClick, scrolled = listState.canScrollBackward)
         },
         containerColor = Midnight
     ) { paddingValues ->
@@ -139,13 +142,14 @@ fun AccountScreen(
             }
         } else {
             LazyColumn(
+                state = listState,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues),
                 verticalArrangement = Arrangement.spacedBy(20.dp),
                 contentPadding = PaddingValues(
-                    start = Spacing.Medium,
-                    end = Spacing.Medium,
+                    start = ScreenGutter,
+                    end = ScreenGutter,
                     top = Spacing.Small,
                     bottom = Spacing.ExtraLarge
                 )

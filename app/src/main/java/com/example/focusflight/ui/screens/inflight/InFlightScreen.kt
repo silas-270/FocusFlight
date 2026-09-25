@@ -18,6 +18,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.indication
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
@@ -29,11 +30,14 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
-import androidx.compose.material.icons.outlined.AirplanemodeActive
+import androidx.compose.material.icons.outlined.Fullscreen
+import androidx.compose.material.icons.outlined.FullscreenExit
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Cloud
 import androidx.compose.material.icons.outlined.CloudOff
@@ -76,6 +80,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.clip
@@ -90,6 +95,7 @@ import com.example.focusflight.R
 import com.example.focusflight.data.model.Airport
 import com.example.focusflight.data.model.FlightMode
 import com.example.focusflight.ui.components.CaptionLabel
+import com.example.focusflight.ui.components.CloseSquareButton
 import com.example.focusflight.ui.components.BadgeStyle
 import com.example.focusflight.ui.components.BadgeVariant
 import com.example.focusflight.ui.components.FocusBadge
@@ -99,6 +105,9 @@ import com.example.focusflight.ui.components.FocusButton
 import com.example.focusflight.ui.components.ModalTitle
 import com.example.focusflight.ui.components.ScrimCardModal
 import com.example.focusflight.ui.components.SpeedMotionLayer
+import com.example.focusflight.ui.components.SheetHandle
+import com.example.focusflight.ui.components.sheetHandleHeight
+import com.example.focusflight.ui.components.toggle
 import com.example.focusflight.data.network.NetworkMode
 import com.example.focusflight.domain.NetworkNotice
 import kotlinx.coroutines.delay
@@ -121,6 +130,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.text.style.TextOverflow
 import android.content.res.Configuration
 import androidx.compose.ui.graphics.asAndroidPath
@@ -296,13 +306,13 @@ fun InFlightScreen(
         sheetMaxWidth = SheetMaxWidth,
         sheetSwipeEnabled = !scenicMode,
         sheetDragHandle = {
-            val density = androidx.compose.ui.platform.LocalDensity.current
-            Box(
-                modifier = Modifier
-                    .padding(top = 12.dp)
-                    .width(80.dp)
-                    .height(4.dp)
-                    .background(Border, RoundedCornerShape(2.dp))
+            // No 48dp minimum here: the peek right below it is a tap target of its own (see the
+            // timer Box), so together they already cover the whole peek.
+            SheetHandle(
+                sheetState = scaffoldState.bottomSheetState,
+                topPadding = PeekHandleTopPadding,
+                bottomPadding = 0.dp,
+                minTouchHeight = 0.dp
             )
         },
         sheetPeekHeight = if (scenicMode) 0.dp else 104.dp,
@@ -349,10 +359,12 @@ fun InFlightScreen(
             // the sheet grow to its content's height - so uncapped it slid up over the top-bar
             // buttons (the sheet and the buttons share the same centered 600dp span). Capped to
             // end just below them, scrolling when the content doesn't fit.
+            // The cap applies to this column only; the handle sits above it, so it comes off too.
             val landscapeSheetMaxHeight = (
                 LocalDesignScreenSize.current.height -
                     WindowInsets.statusBars.asPaddingValues().calculateTopPadding() -
-                    HudTopBarReservedHeight
+                    HudTopBarReservedHeight -
+                    sheetHandleHeight(PeekHandleTopPadding, 0.dp, minTouchHeight = 0.dp)
                 ).coerceAtLeast(104.dp)
             Column(
                 modifier = Modifier
@@ -367,7 +379,9 @@ fun InFlightScreen(
                         }
                     )
                     .padding(horizontal = Spacing.Large)
-                    .padding(bottom = 30.dp)
+                    // Height is the scarce axis in landscape, where a 30dp band under the cards
+                    // read as dead space.
+                    .padding(bottom = if (isLandscape) Spacing.Medium else 30.dp)
             ) {
                 // --- Collapsed Info Summary (Always Visible in peek mode) ---
                 // Both branches share the same fixed-height, center-aligned Box so the
@@ -379,7 +393,7 @@ fun InFlightScreen(
                 // sheetDragHandle), so simply centering within the remaining height
                 // below it already centers within the whole peek card.
                 val navBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-                val peekDragHandleHeight = 16.dp
+                val peekDragHandleHeight = sheetHandleHeight(PeekHandleTopPadding, 0.dp, minTouchHeight = 0.dp)
                 val peekContentHeight = (104.dp - peekDragHandleHeight - navBarInset).coerceAtLeast(24.dp)
 
                 // Feeds the scenic-mode pill's bottom margin (see timerBottomInsetFromScreen
@@ -394,10 +408,18 @@ fun InFlightScreen(
                         timerBottomInsetFromScreen = with(density) { gapPx.toDp() }
                     }
                 }
+                // Tapping the peek (the timer, and in landscape the readouts beside it) opens or
+                // closes the sheet, like the handle above it - a swipe used to be the only way.
+                val sheetScope = rememberCoroutineScope()
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(peekContentHeight),
+                        .height(peekContentHeight)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClickLabel = if (instrumentsVisible) "Collapse flight info" else "Expand flight info"
+                        ) { sheetScope.toggle(scaffoldState.bottomSheetState) },
                     contentAlignment = Alignment.Center
                 ) {
                     if (isLandscape) {
@@ -485,15 +507,19 @@ fun InFlightScreen(
 
                 if (isLandscape) {
                     // Wide screen: route hero + flight-time readout on the left, instrument
-                    // cluster on the right. Rather than stretching either side to match
-                    // the other (which just inserts gaps), the instrument faces are
-                    // sized to a fixed height tuned to equal the left column's height.
+                    // cluster on the right. The instruments take the left column's measured
+                    // height, so both sides always end level. (Not IntrinsicSize.Min: the route
+                    // track is a BoxWithConstraints, which can't answer intrinsic queries.)
+                    var leftColumnHeight by remember { mutableStateOf(0.dp) }
+                    val sheetDensity = LocalDensity.current
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(Spacing.Large)
                     ) {
                         Column(
-                            modifier = Modifier.weight(1.2f),
+                            modifier = Modifier
+                                .weight(1f)
+                                .onSizeChanged { leftColumnHeight = with(sheetDensity) { it.height.toDp() } },
                             verticalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
                             FlightRouteHero(
@@ -513,19 +539,20 @@ fun InFlightScreen(
                             )
                         }
 
-                        Box(
-                            modifier = Modifier
-                                .fillMaxHeight()
-                                .width(1.dp)
-                                .background(Border)
-                        )
-
+                        // The column divider is drawn by this Row, centered in the spacedBy gap to
+                        // its left: a fillMaxHeight Box here measured 0 inside the scrolling sheet.
                         Row(
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(leftColumnHeight)
+                                .drawBehind {
+                                    val x = -Spacing.Large.toPx() / 2
+                                    drawLine(Border, Offset(x, 0f), Offset(x, size.height), 1.dp.toPx())
+                                },
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            AltitudeGauge(altitudeFt = altitudeFt, faceHeight = LandscapeInstrumentFaceHeight, modifier = Modifier.weight(1f))
-                            SpeedInstrument(speedMph = speedMph, animate = instrumentsVisible, faceHeight = LandscapeInstrumentFaceHeight, modifier = Modifier.weight(1f))
+                            AltitudeGauge(altitudeFt = altitudeFt, faceHeight = null, modifier = Modifier.weight(1f))
+                            SpeedInstrument(speedMph = speedMph, animate = instrumentsVisible, faceHeight = null, modifier = Modifier.weight(1f))
                         }
                     }
                 } else {
@@ -583,6 +610,15 @@ fun InFlightScreen(
             // (Removed 2D canvas, the Rust wgpu engine renders underneath this Compose layer)
 
             // --- Layer 2: Cockpit HUD Top Bar controls ---
+            // A soft dark scrim under the top bar, so its buttons sit on a steady backdrop
+            // whatever the engine draws up there - over bright sky the top edge otherwise
+            // turned into a hard white strip right behind them.
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + HudTopScrimHeight)
+                    .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.35f), Color.Transparent)))
+            )
             val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
             // On wide landscape screens the bottom sheet is centered and capped at
             // SheetMaxWidth, so its right border sits inset from the screen edge by
@@ -633,8 +669,10 @@ fun InFlightScreen(
                         onClick = { scenicMode = !scenicMode },
                         surface = hudButtonSurface(scenicMode)
                     ) {
+                        // Fullscreen glyphs rather than the eye: the eye is the CHASE camera and the
+                        // crossed-out eye the HIDDEN route line in the settings panel.
                         Icon(
-                            imageVector = if (scenicMode) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                            imageVector = if (scenicMode) Icons.Outlined.FullscreenExit else Icons.Outlined.Fullscreen,
                             contentDescription = if (scenicMode) "Show flight HUD" else "Hide flight HUD",
                             tint = if (scenicMode) Silver else OffWhite,
                             modifier = Modifier.size(20.dp)
@@ -649,8 +687,10 @@ fun InFlightScreen(
                         surface = hudButtonSurface(scenicMode),
                         enabled = !landing
                     ) {
+                        // Tune, not an airplane: the airplane read as "flight mode" and is also
+                        // the COCKPIT camera icon inside the panel this opens.
                         Icon(
-                            imageVector = Icons.Outlined.AirplanemodeActive,
+                            imageVector = Icons.Outlined.Tune,
                             contentDescription = "Flight Settings",
                             tint = if (scenicMode) Silver else OffWhite,
                             modifier = Modifier.size(20.dp)
@@ -679,9 +719,12 @@ fun InFlightScreen(
                         .padding(bottom = pillBottomPadding),
                     contentAlignment = Alignment.BottomCenter
                 ) {
+                    // Drawn like the glass buttons, so it acts like one: a tap brings the
+                    // flight HUD back.
                     Box(
                         modifier = Modifier
                             .glassSurface(RoundedCornerShape(50))
+                            .clickable(onClickLabel = "Show flight HUD") { scenicMode = false }
                             .padding(horizontal = 24.dp, vertical = pillTextVerticalPadding)
                     ) {
                         Text(
@@ -689,7 +732,8 @@ fun InFlightScreen(
                             style = MaterialTheme.typography.displaySmall.copy(
                                 fontWeight = FontWeight.Black,
                                 fontFamily = FontFamily.Monospace,
-                                letterSpacing = 2.sp
+                                letterSpacing = 2.sp,
+                                shadow = GlassTextShadow
                             ),
                             color = Silver
                         )
@@ -1250,6 +1294,7 @@ private fun FlightSettingsOverlay(
                     onMapStyleSelected = onMapStyleSelected,
                     onRouteLineModeSelected = onRouteLineModeSelected,
                     onEngineSoundToggled = onEngineSoundToggled,
+                    onDismiss = onDismiss,
                     onLeaveRequested = onLeaveRequested
                 )
             }
@@ -1257,8 +1302,130 @@ private fun FlightSettingsOverlay(
     }
 }
 
+// --- Header shared by both layouts: title plus a visible close. Portrait used to have
+// neither, so tapping the dimmed area around it was the only (invisible) way out. ---
+@Composable
+private fun FlightSettingsHeader(onDismiss: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "FLIGHT SETTINGS",
+            style = MaterialTheme.typography.labelLarge.copy(
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace,
+                letterSpacing = 1.5.sp
+            ),
+            color = OffWhite,
+            modifier = Modifier.weight(1f)
+        )
+        CloseSquareButton(onClick = onDismiss, contentDescription = "Close flight settings")
+    }
+}
+
+// --- Engine sound on/off. The whole row is the switch: its label used to sit on a plate
+// that looked like the tappable options above it while only the small switch responded. ---
+@Composable
+private fun EngineSoundRow(enabled: Boolean, onToggle: (Boolean) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(Slate)
+            .toggleable(value = enabled, role = Role.Switch, onValueChange = onToggle)
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            text = "ENGINE SOUND",
+            color = OffWhite,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            fontFamily = FontFamily.Monospace
+        )
+        Switch(
+            checked = enabled,
+            onCheckedChange = null,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = Amber,
+                checkedTrackColor = Amber.copy(alpha = 0.4f)
+            )
+        )
+    }
+}
+
+// --- The scrolling middle of a settings panel, between the fixed header and the fixed
+// SLIDE TO LEAVE footer. A short fade at the bottom edge shows there is more below. ---
+@Composable
+private fun ColumnScope.SettingsScrollBody(
+    spacing: Dp,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    val scrollState = rememberScrollState()
+    Box(modifier = Modifier.weight(1f, fill = false)) {
+        Column(
+            modifier = Modifier.verticalScroll(scrollState),
+            verticalArrangement = Arrangement.spacedBy(spacing),
+            content = content
+        )
+        if (scrollState.canScrollForward) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .height(24.dp)
+                    .background(Brush.verticalGradient(listOf(Color.Transparent, DeepNavy)))
+            )
+        }
+    }
+}
+
+// --- Map style picker: three thumbnail tiles in a row, used by both layouts. ---
+@Composable
+private fun MapStyleTileRow(
+    mapStyle: MapStylePickerState,
+    onMapStyleSelected: (Int) -> Unit,
+    thumbnailHeight: Dp? = null
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        MapStyleOptions.forEach { (styleName, styleMode) ->
+            val isActive = mapStyle.isActive(styleMode)
+            val available = mapStyle.isAvailable(styleMode)
+            SettingsTile(
+                isActive = isActive,
+                onClick = { onMapStyleSelected(styleMode) },
+                enabled = available,
+                contentPadding = PaddingValues(8.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                MapStyleThumbnail(
+                    style = styleMode,
+                    isActive = isActive,
+                    unavailable = !available,
+                    height = thumbnailHeight ?: Dp.Unspecified
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = styleName,
+                    color = if (isActive) Amber else OffWhite,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace
+                )
+            }
+        }
+    }
+    mapStyle.offlineHint?.let { MapStyleOfflineHint(it) }
+}
+
 // --- Portrait: a compact floating card below the top bar, options stacked as
-// icon-over-label tiles. ---
+// icon-over-label tiles. Header and SLIDE TO LEAVE are fixed; the options scroll between
+// them when the card is capped short of the bottom edge. ---
 @Composable
 private fun PortraitFlightSettingsCard(
     selectedCamera: Int,
@@ -1269,8 +1436,14 @@ private fun PortraitFlightSettingsCard(
     onMapStyleSelected: (Int) -> Unit,
     onRouteLineModeSelected: (Int) -> Unit,
     onEngineSoundToggled: (Boolean) -> Unit,
+    onDismiss: () -> Unit,
     onLeaveRequested: () -> Unit
 ) {
+    val topOffset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 80.dp
+    // Always a clean gap below the card, rather than ending a few dp above the screen edge
+    // and slicing through the dimmed sheet underneath.
+    val maxCardHeight = LocalDesignScreenSize.current.height - topOffset -
+        WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() - Spacing.Large
     Column(
         modifier = Modifier
             // widthIn before fillMaxWidth so the cap actually wins: fillMaxWidth pins
@@ -1278,140 +1451,98 @@ private fun PortraitFlightSettingsCard(
             // that back down again.
             .widthIn(max = 420.dp)
             .fillMaxWidth()
-            .padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 80.dp)
+            .padding(top = topOffset)
             .padding(horizontal = Spacing.Large)
+            .heightIn(max = maxCardHeight)
             .background(DeepNavy, RoundedCornerShape(20.dp))
             .border(1.dp, Border, RoundedCornerShape(20.dp))
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+            .padding(16.dp)
     ) {
-        CaptionLabel("CAMERA VIEW")
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            cameraViewOptions().forEach { option ->
-                val isActive = selectedCamera == option.mode
-                SettingsTile(
-                    isActive = isActive,
-                    onClick = { onCameraSelected(option.mode) },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Icon(
-                        imageVector = option.icon,
-                        contentDescription = option.label,
-                        tint = if (isActive) Amber else OffWhite,
-                        modifier = Modifier.size(28.dp)
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = option.label,
-                        color = if (isActive) Amber else OffWhite,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace
-                    )
+        FlightSettingsHeader(onDismiss = onDismiss)
+        Spacer(modifier = Modifier.height(8.dp))
+
+        SettingsScrollBody(spacing = 16.dp) {
+            CaptionLabel("CAMERA VIEW")
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                cameraViewOptions().forEach { option ->
+                    val isActive = selectedCamera == option.mode
+                    SettingsTile(
+                        isActive = isActive,
+                        onClick = { onCameraSelected(option.mode) },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(
+                            imageVector = option.icon,
+                            contentDescription = option.label,
+                            tint = if (isActive) Amber else OffWhite,
+                            modifier = Modifier.size(28.dp)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = option.label,
+                            color = if (isActive) Amber else OffWhite,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
                 }
             }
-        }
 
-        HorizontalDivider(color = Border, thickness = 1.dp)
+            HorizontalDivider(color = Border, thickness = 1.dp)
 
-        CaptionLabel("ROUTE LINE")
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            routeLineOptions().forEach { option ->
-                val isActive = selectedRouteLineMode == option.mode
-                SettingsTile(
-                    isActive = isActive,
-                    onClick = { onRouteLineModeSelected(option.mode) },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Icon(
-                        imageVector = option.icon,
-                        contentDescription = option.label,
-                        tint = if (isActive) Amber else OffWhite,
-                        modifier = Modifier.size(28.dp)
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = option.label,
-                        color = if (isActive) Amber else OffWhite,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace
-                    )
+            CaptionLabel("ROUTE LINE")
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                routeLineOptions().forEach { option ->
+                    val isActive = selectedRouteLineMode == option.mode
+                    SettingsTile(
+                        isActive = isActive,
+                        onClick = { onRouteLineModeSelected(option.mode) },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(
+                            imageVector = option.icon,
+                            contentDescription = option.label,
+                            tint = if (isActive) Amber else OffWhite,
+                            modifier = Modifier.size(28.dp)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = option.label,
+                            color = if (isActive) Amber else OffWhite,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
                 }
             }
+
+            HorizontalDivider(color = Border, thickness = 1.dp)
+
+            CaptionLabel("MAP STYLE")
+            MapStyleTileRow(mapStyle = mapStyle, onMapStyleSelected = onMapStyleSelected)
+
+            HorizontalDivider(color = Border, thickness = 1.dp)
+
+            EngineSoundRow(enabled = engineSoundEnabled, onToggle = onEngineSoundToggled)
         }
 
-        HorizontalDivider(color = Border, thickness = 1.dp)
-
-        CaptionLabel("MAP STYLE")
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            MapStyleOptions.forEach { (styleName, styleMode) ->
-                val isActive = mapStyle.isActive(styleMode)
-                val available = mapStyle.isAvailable(styleMode)
-                SettingsTile(
-                    isActive = isActive,
-                    onClick = { onMapStyleSelected(styleMode) },
-                    enabled = available,
-                    chrome = TileChrome.None,
-                    contentPadding = PaddingValues(0.dp),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    MapStyleThumbnail(style = styleMode, isActive = isActive, unavailable = !available)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = styleName,
-                        color = if (isActive) Amber else OffWhite,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace
-                    )
-                }
-            }
-        }
-        mapStyle.offlineHint?.let { MapStyleOfflineHint(it) }
-
-        HorizontalDivider(color = Border, thickness = 1.dp)
-
-        CaptionLabel("ENGINE SOUND")
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(
-                text = "Jet engine noise",
-                color = OffWhite,
-                fontSize = 13.sp,
-                fontFamily = FontFamily.Monospace
-            )
-            Switch(
-                checked = engineSoundEnabled,
-                onCheckedChange = onEngineSoundToggled,
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = Amber,
-                    checkedTrackColor = Amber.copy(alpha = 0.4f)
-                )
-            )
-        }
-
+        Spacer(modifier = Modifier.height(16.dp))
         SlideToLeaveControl(onSlideCompleted = onLeaveRequested)
     }
 }
 
-// --- Landscape: a right-anchored, full-height drawer. Every option is a single
-// short row (leading visual + label) so a section costs ~40dp of height instead of
-// the ~90dp a stacked tile costs, and the two sections sit beside each other rather
-// than one under the other. Anchoring right also puts the panel under the thumb
+// --- Landscape: a right-anchored, full-height drawer. Camera and route options are single
+// short rows side by side; map style is one row of three thumbnail tiles with engine sound
+// under it. SLIDE TO LEAVE is pinned at the foot so it's never scrolled out of sight - on
+// short screens only the options scroll. Anchoring right also puts the panel under the thumb
 // that just tapped the top-bar button. ---
 @Composable
 private fun LandscapeFlightSettingsPanel(
@@ -1443,200 +1574,89 @@ private fun LandscapeFlightSettingsPanel(
             // camera on this side still needs clearing. Start is left out - the drawer's
             // left edge is mid-screen, so a cutout on the far side isn't its concern.
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Vertical + WindowInsetsSides.End))
-            // Height is the scarce axis here: scroll rather than clip if a device's
-            // usable height is shorter than the content.
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 14.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+            .padding(horizontal = 20.dp, vertical = 14.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "FLIGHT SETTINGS",
-                style = MaterialTheme.typography.labelLarge.copy(
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace,
-                    letterSpacing = 1.5.sp
-                ),
-                color = OffWhite,
-                modifier = Modifier.weight(1f)
-            )
-            // 32dp square drawn inside a 48dp touch target; the offset keeps the visible
-            // square's right edge where it was, flush with the column below.
-            val closeInteraction = remember { MutableInteractionSource() }
-            Box(
+        FlightSettingsHeader(onDismiss = onDismiss)
+        Spacer(modifier = Modifier.height(6.dp))
+
+        SettingsScrollBody(spacing = 14.dp) {
+            Row(
+                // Min intrinsic height so the divider between the columns spans exactly
+                // the taller of the two, with no fixed height to keep in sync.
                 modifier = Modifier
-                    .offset(x = (HudTouchTarget - 32.dp) / 2)
-                    .size(HudTouchTarget)
-                    .clickable(
-                        interactionSource = closeInteraction,
-                        indication = null,
-                        onClick = onDismiss
-                    ),
-                contentAlignment = Alignment.Center
+                    .fillMaxWidth()
+                    .height(IntrinsicSize.Min),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    CaptionLabel("CAMERA VIEW")
+                    cameraViewOptions().forEach { option ->
+                        SettingsOptionRow(
+                            label = option.label,
+                            isActive = selectedCamera == option.mode,
+                            onClick = { onCameraSelected(option.mode) }
+                        ) { isActive ->
+                            Icon(
+                                imageVector = option.icon,
+                                contentDescription = null,
+                                tint = if (isActive) Amber else OffWhite,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                }
+
                 Box(
                     modifier = Modifier
-                        .size(32.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(Slate)
-                        .indication(closeInteraction, ripple()),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Close,
-                        contentDescription = "Close flight settings",
-                        tint = Haze,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-            }
-        }
+                        .fillMaxHeight()
+                        .width(1.dp)
+                        .background(Border)
+                )
 
-        Row(
-            // Min intrinsic height so the divider between the columns spans exactly
-            // the taller of the two, with no fixed height to keep in sync.
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(IntrinsicSize.Min),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                CaptionLabel("CAMERA VIEW")
-                cameraViewOptions().forEach { option ->
-                    SettingsOptionRow(
-                        label = option.label,
-                        isActive = selectedCamera == option.mode,
-                        onClick = { onCameraSelected(option.mode) }
-                    ) { isActive ->
-                        Icon(
-                            imageVector = option.icon,
-                            contentDescription = null,
-                            tint = if (isActive) Amber else OffWhite,
-                            modifier = Modifier.size(20.dp)
-                        )
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    CaptionLabel("ROUTE LINE")
+                    routeLineOptions().forEach { option ->
+                        SettingsOptionRow(
+                            label = option.label,
+                            isActive = selectedRouteLineMode == option.mode,
+                            onClick = { onRouteLineModeSelected(option.mode) }
+                        ) { isActive ->
+                            Icon(
+                                imageVector = option.icon,
+                                contentDescription = null,
+                                tint = if (isActive) Amber else OffWhite,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
                     }
                 }
             }
 
-            Box(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .width(1.dp)
-                    .background(Border)
+            HorizontalDivider(color = Border, thickness = 1.dp)
+
+            CaptionLabel("MAP STYLE")
+            MapStyleTileRow(
+                mapStyle = mapStyle,
+                onMapStyleSelected = onMapStyleSelected,
+                thumbnailHeight = 42.dp
             )
 
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                CaptionLabel("ROUTE LINE")
-                routeLineOptions().forEach { option ->
-                    SettingsOptionRow(
-                        label = option.label,
-                        isActive = selectedRouteLineMode == option.mode,
-                        onClick = { onRouteLineModeSelected(option.mode) }
-                    ) { isActive ->
-                        Icon(
-                            imageVector = option.icon,
-                            contentDescription = null,
-                            tint = if (isActive) Amber else OffWhite,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
-            }
+            EngineSoundRow(enabled = engineSoundEnabled, onToggle = onEngineSoundToggled)
         }
 
-        HorizontalDivider(color = Border, thickness = 1.dp)
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(IntrinsicSize.Min),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Column(
-                modifier = Modifier.weight(1.1f),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                CaptionLabel("MAP STYLE")
-                MapStyleOptions.forEach { (styleName, styleMode) ->
-                    val available = mapStyle.isAvailable(styleMode)
-                    SettingsOptionRow(
-                        label = styleName,
-                        isActive = mapStyle.isActive(styleMode),
-                        onClick = { onMapStyleSelected(styleMode) },
-                        enabled = available,
-                        contentPadding = PaddingValues(6.dp),
-                        spacing = 10.dp
-                    ) { isActive ->
-                        MapStyleThumbnail(
-                            style = styleMode,
-                            isActive = isActive,
-                            unavailable = !available,
-                            width = 64.dp,
-                            height = 42.dp
-                        )
-                    }
-                }
-                mapStyle.offlineHint?.let { MapStyleOfflineHint(it) }
-            }
-
-            Box(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .width(1.dp)
-                    .background(Border)
-            )
-
-            Column(
-                modifier = Modifier.weight(0.9f),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                CaptionLabel("ENGINE SOUND")
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(Slate)
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = "NOISE",
-                        color = OffWhite,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace
-                    )
-                    Switch(
-                        checked = engineSoundEnabled,
-                        onCheckedChange = onEngineSoundToggled,
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = Amber,
-                            checkedTrackColor = Amber.copy(alpha = 0.4f)
-                        )
-                    )
-                }
-            }
-        }
-
-        HorizontalDivider(color = Border, thickness = 1.dp)
-
+        HorizontalDivider(color = Border, thickness = 1.dp, modifier = Modifier.padding(vertical = 12.dp))
         SlideToLeaveControl(onSlideCompleted = onLeaveRequested, trackHeight = 48.dp)
     }
 }
 
-// --- Compact horizontal option row used by the landscape drawer: a leading visual
-// (camera icon or map preview) beside its label. The active row is tinted amber and
-// ringed, matching the affordance the portrait tiles use. ---
+// --- Compact horizontal option row used by the landscape drawer: a leading icon beside
+// its label. The active row is tinted amber and ringed, matching the portrait tiles. ---
 @Composable
 private fun SettingsOptionRow(
     label: String,
@@ -1644,7 +1664,9 @@ private fun SettingsOptionRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    contentPadding: PaddingValues = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
+    // Compact on purpose: on a phone in landscape the next section (MAP STYLE) should just
+    // peek above the fold, so it's clear the drawer scrolls.
+    contentPadding: PaddingValues = PaddingValues(horizontal = 12.dp, vertical = 7.dp),
     spacing: Dp = 12.dp,
     leading: @Composable (isActive: Boolean) -> Unit
 ) {
@@ -1683,44 +1705,34 @@ private fun SettingsOptionRow(
     }
 }
 
-// --- Shared chrome for the settings-modal option tiles (camera view / map style).
-// Fill draws the classic amber-tint-vs-slate background (camera row); None draws no
-// chrome of its own, for tiles (map style) whose content manages its own active
-// affordance (a border around the thumbnail, not the whole tile). ---
-private enum class TileChrome { Fill, None }
-
+// --- Option tile shared by the camera, route-line and map-style pickers. Every tile in a
+// row is the same size; the active one is marked by an amber tint and ring (the same
+// affordance as the landscape rows), not by scaling it up - the old 0.94 shrink of the
+// inactive tiles made rows look jagged and put labels at different heights. ---
 @Composable
 private fun SettingsTile(
     isActive: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    chrome: TileChrome = TileChrome.Fill,
     contentPadding: PaddingValues = PaddingValues(vertical = 16.dp),
     content: @Composable ColumnScope.() -> Unit
 ) {
-    val scale by animateFloatAsState(
-        targetValue = if (isActive) 1f else 0.94f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
-        label = "settingsTileScale"
+    val shape = RoundedCornerShape(12.dp)
+    val background by animateColorAsState(
+        targetValue = if (isActive) Amber.copy(alpha = 0.15f) else Slate,
+        label = "settingsTileBackground"
+    )
+    val borderColor by animateColorAsState(
+        targetValue = if (isActive) Amber else Color.Transparent,
+        label = "settingsTileBorder"
     )
 
     Column(
         modifier = modifier
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-            }
-            .then(
-                if (chrome == TileChrome.Fill) {
-                    Modifier.background(
-                        if (isActive) Amber.copy(alpha = 0.15f) else Slate,
-                        RoundedCornerShape(12.dp)
-                    )
-                } else {
-                    Modifier
-                }
-            )
+            .clip(shape)
+            .background(background)
+            .border(1.dp, borderColor, shape)
             .clickable(enabled = enabled, onClick = onClick)
             .alpha(if (enabled) 1f else DisabledOptionAlpha)
             .padding(contentPadding),
@@ -1744,8 +1756,8 @@ private fun MapStyleThumbnail(
     modifier: Modifier = Modifier,
     // Marks a network style that can't be picked while offline.
     unavailable: Boolean = false,
-    // Unspecified fills the available width at the artwork's own 400x264 aspect ratio.
-    width: Dp = Dp.Unspecified,
+    // Fills the available width; Unspecified height keeps the artwork's own 400x264 aspect
+    // ratio, a fixed height crops it to a shorter strip (the landscape drawer).
     height: Dp = Dp.Unspecified
 ) {
     val borderWidth by animateDpAsState(
@@ -1761,10 +1773,10 @@ private fun MapStyleThumbnail(
     Box(
         modifier = modifier
             .then(
-                if (width == Dp.Unspecified) {
+                if (height == Dp.Unspecified) {
                     Modifier.fillMaxWidth().aspectRatio(400f / 264f)
                 } else {
-                    Modifier.size(width = width, height = height)
+                    Modifier.fillMaxWidth().height(height)
                 }
             )
             .clip(thumbnailShape)
@@ -1832,8 +1844,9 @@ private fun SlideToLeaveControl(onSlideCompleted: () -> Unit, trackHeight: Dp = 
         val progress = if (maxOffsetPx > 0f) (animatedOffsetPx / maxOffsetPx).coerceIn(0f, 1f) else 0f
         val armed = progress >= commitThreshold
 
-        // Trailing fill behind the thumb, growing with drag progress.
-        Box(
+        // Trailing fill behind the thumb, growing with drag progress. Only once the thumb has
+        // moved: at rest it would be half a thumb wide and peek out of the thumb's inset.
+        if (animatedOffsetPx > 0.5f) Box(
             modifier = Modifier
                 .fillMaxHeight()
                 .width(with(density) { (animatedOffsetPx + thumbSizePx / 2f).toDp() })
@@ -1983,10 +1996,9 @@ private fun FlightRouteHero(
     progress: () -> Float,
     modifier: Modifier = Modifier
 ) {
+    // Flat on the sheet, no plate: it's a display, and plates mark the tappable readout.
     Row(
-        modifier = modifier
-            .background(Slate.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
-            .padding(18.dp),
+        modifier = modifier.padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(horizontalAlignment = Alignment.Start) {
@@ -2063,11 +2075,13 @@ private fun RouteProgressTrack(progress: () -> Float, modifier: Modifier = Modif
                 strokeWidth = 3.dp.toPx(),
                 cap = StrokeCap.Round
             )
+            // Haze rather than Border: Border is nearly the sheet's own tone, so early in a
+            // flight the route ahead all but vanished.
             drawLine(
-                color = Border,
+                color = Haze.copy(alpha = 0.55f),
                 start = Offset(flownEndX, y),
                 end = Offset(size.width, y),
-                strokeWidth = 3.dp.toPx(),
+                strokeWidth = 2.dp.toPx(),
                 cap = StrokeCap.Round,
                 pathEffect = dashEffect
             )
@@ -2103,13 +2117,9 @@ private fun RouteProgressTrack(progress: () -> Float, modifier: Modifier = Modif
     }
 }
 
-// Shared frame for the two instrument cards so they always match in size: a face
-// that fills the card's width (so its margin matches the card's own padding on
-// every side) at a given height, a spacer, then a label caption underneath.
-private val InstrumentFaceHeight = 108.dp
-// Tuned to the landscape left column (route hero + flight-time readout) so both sides of
-// the expanded panel end level.
-private val LandscapeInstrumentFaceHeight = 100.dp
+// Height of an instrument face in portrait. In landscape the faces fill the height the
+// sheet gives them instead (faceHeight = null), matching the column beside them.
+private val InstrumentFaceHeight = 120.dp
 
 // The bottom sheet is centered and capped at this width on wide landscape screens
 // (Material3's own default is 640.dp; kept explicit here so the HUD top bar can
@@ -2125,7 +2135,13 @@ private val HudTouchInset = (HudTouchTarget - HudButtonSize) / 2
 
 // How far down from the top edge (below any status-bar inset) the top-bar buttons reach, plus
 // a small gap - the landscape bottom sheet is capped to stop here so it can't cover them.
-private val HudTopBarReservedHeight = Spacing.Large + HudButtonSize + 4.dp
+private val HudTopBarReservedHeight = Spacing.Large + HudButtonSize + Spacing.Small
+
+// How far below the status bar the top-bar scrim fades out.
+private val HudTopScrimHeight = 96.dp
+
+// Space above the sheet's grab bar; the bar itself is SheetHandle's.
+private val PeekHandleTopPadding = 12.dp
 
 // How far the scenic-mode timer pill sits above the physical bottom edge. Chosen to
 // approximate where the timer already sits in the normal collapsed sheet peek.
@@ -2135,10 +2151,15 @@ private val ScenicPillBottomPadding = 36.dp
 // and timer pill in scenic mode. A real backdrop blur isn't possible here: the 3D
 // engine renders into a SurfaceView, composited by SurfaceFlinger outside the
 // Compose/View draw pass, so no Compose-based blur can see it.
+// Fill and border are strong enough to hold up over the pale landscape sky and offline map,
+// where the earlier 35 % fill washed out.
 private fun Modifier.glassSurface(shape: Shape): Modifier = this
     .clip(shape)
-    .background(Dim.copy(alpha = 0.35f), shape)
-    .border(1.dp, Haze.copy(alpha = 0.4f), shape)
+    .background(Dim.copy(alpha = 0.55f), shape)
+    .border(1.dp, Haze.copy(alpha = 0.5f), shape)
+
+// Soft shadow under glass-surface text, for the same bright-sky legibility.
+private val GlassTextShadow = Shadow(color = Color.Black.copy(alpha = 0.35f), blurRadius = 6f)
 
 // Debug affordance, wired into the HUD top bar. Jumps straight to the landing pipeline so the
 // post-flight beats (rank stamp, challenge tick-up, challenge completion) can be exercised
@@ -2163,35 +2184,31 @@ private fun SkipFlightDebugButton(viewModel: InFlightViewModel) {
     }
 }
 
+// An instrument is just its dark display face - no card plate around it. Plates are what the
+// sheet's one tappable element (the flight-time readout) wears, so a plated instrument looked
+// like a button that did nothing. [faceHeight] null fills the height the caller gives it.
 @Composable
 private fun InstrumentCard(
     modifier: Modifier = Modifier,
-    faceHeight: Dp = InstrumentFaceHeight,
+    faceHeight: Dp? = InstrumentFaceHeight,
     face: @Composable BoxScope.() -> Unit
 ) {
-    Column(
+    Box(
         modifier = modifier
-            .background(Slate.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
-            .padding(12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(faceHeight)
-                .clip(RoundedCornerShape(12.dp))
-                .background(Midnight.copy(alpha = 0.35f)),
-            contentAlignment = Alignment.Center,
-            content = face
-        )
-    }
+            .fillMaxWidth()
+            .then(if (faceHeight != null) Modifier.height(faceHeight) else Modifier.fillMaxHeight())
+            .clip(RoundedCornerShape(12.dp))
+            .background(Midnight.copy(alpha = 0.6f)),
+        contentAlignment = Alignment.Center,
+        content = face
+    )
 }
 
 // --- Altimeter tape: a vertical scrolling ruler of altitude values, like a real
 // primary flight display. The current reading sits fixed at the centre, enlarged,
 // amber, with a caret pointing at it; the rest of the tape scrolls past behind it. ---
 @Composable
-private fun AltitudeGauge(altitudeFt: Int, modifier: Modifier = Modifier, faceHeight: Dp = InstrumentFaceHeight) {
+private fun AltitudeGauge(altitudeFt: Int, modifier: Modifier = Modifier, faceHeight: Dp? = InstrumentFaceHeight) {
     val stepFt = 500
     val exactIndex = altitudeFt / stepFt.toFloat()
     val animatedIndexState = animateFloatAsState(targetValue = exactIndex, label = "altitudeTape")
@@ -2209,6 +2226,9 @@ private fun AltitudeGauge(altitudeFt: Int, modifier: Modifier = Modifier, faceHe
     val baseIdx by remember { derivedStateOf { animatedIndexState.value.roundToInt() } }
 
     InstrumentCard(modifier = modifier, faceHeight = faceHeight) {
+      // The tape centers in the space right of the caret, so the current reading never
+      // touches it, even on the narrow landscape faces.
+      Box(modifier = Modifier.matchParentSize().padding(start = 18.dp)) {
         val centerIdx = baseIdx
         for (offset in -3..3) {
             val idx = centerIdx + offset
@@ -2244,6 +2264,7 @@ private fun AltitudeGauge(altitudeFt: Int, modifier: Modifier = Modifier, faceHe
                     }
             )
         }
+      }
 
         // Fade the tape toward the top/bottom edges, like a picker wheel losing focus.
         // Uses the face's own background color so the fade blends in rather than
@@ -2254,10 +2275,10 @@ private fun AltitudeGauge(altitudeFt: Int, modifier: Modifier = Modifier, faceHe
                 .background(
                     Brush.verticalGradient(
                         colors = listOf(
-                            Midnight.copy(alpha = 0.35f),
+                            Midnight.copy(alpha = 0.6f),
                             Color.Transparent,
                             Color.Transparent,
-                            Midnight.copy(alpha = 0.35f)
+                            Midnight.copy(alpha = 0.6f)
                         )
                     )
                 )
@@ -2269,6 +2290,7 @@ private fun AltitudeGauge(altitudeFt: Int, modifier: Modifier = Modifier, faceHe
             tint = Amber,
             modifier = Modifier
                 .align(Alignment.CenterStart)
+                .padding(start = 4.dp)
                 .size(16.dp)
         )
     }
@@ -2281,7 +2303,7 @@ private fun SpeedInstrument(
     speedMph: Int,
     animate: Boolean,
     modifier: Modifier = Modifier,
-    faceHeight: Dp = InstrumentFaceHeight
+    faceHeight: Dp? = InstrumentFaceHeight
 ) {
     val maxSpeedMph = 600f
     val intensity = (speedMph / maxSpeedMph).coerceIn(0f, 1f)
@@ -2293,7 +2315,8 @@ private fun SpeedInstrument(
             // is on screen. Leaving composition disposes its infinite transition, so a
             // parked aircraft — or a collapsed sheet — costs zero per-frame animation
             // callbacks; this previously ran at full display refresh unconditionally.
-            SpeedMotionLayer(intensity = { intensity })
+            // Streaks stay out of the band behind the "mph" readout below.
+            SpeedMotionLayer(intensity = { intensity }, clearBand = 0.62f..0.86f)
         } else {
             Icon(
                 imageVector = Icons.Outlined.Flight,
@@ -2322,9 +2345,9 @@ private fun SpeedInstrument(
 }
 
 // --- Flight time as elapsed / total; tap it to swap the readout for miles left / total
-// miles, with a swap glyph hinting it's interactive. It used to carry a fill bar too, but
-// the route track's travelling plane above already shows progress, so the bar was a third
-// copy of the same fact. ---
+// miles. The only tappable element in the sheet, so it's the only one drawn as a plated,
+// outlined control, with the swap glyph in the accent colour at the trailing end. It used to
+// carry a fill bar too, but the route track's travelling plane above already shows progress. ---
 @Composable
 private fun FlightTimeReadout(
     elapsedSec: Long,
@@ -2334,44 +2357,46 @@ private fun FlightTimeReadout(
     modifier: Modifier = Modifier
 ) {
     var showDistance by remember { mutableStateOf(false) }
+    val shape = RoundedCornerShape(16.dp)
 
     Row(
         modifier = modifier
-            .clip(RoundedCornerShape(16.dp))
+            .clip(shape)
             .background(Slate.copy(alpha = 0.5f))
+            .border(1.dp, Border, shape)
             .clickable(onClickLabel = if (showDistance) "Show flight time" else "Show distance") {
                 showDistance = !showDistance
             }
-            .padding(16.dp),
+            .padding(horizontal = 16.dp, vertical = 14.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
+        Text(
+            text = if (showDistance) "DISTANCE" else "FLIGHT TIME",
+            style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.5.sp),
+            color = Haze
+        )
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = if (showDistance) "DISTANCE" else "FLIGHT TIME",
-                style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.5.sp),
-                color = Haze
+                text = if (showDistance) {
+                    "${formatMiles(distanceLeftKm)} / ${formatMiles(totalDistanceKm)}"
+                } else {
+                    "${formatRemainingTime(elapsedSec)} / ${formatRemainingTime(totalSec)}"
+                },
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace
+                ),
+                color = OffWhite
             )
-            Spacer(modifier = Modifier.width(6.dp))
+            Spacer(modifier = Modifier.width(10.dp))
             Icon(
                 imageVector = Icons.Outlined.SwapHoriz,
                 contentDescription = null,
-                tint = Haze,
-                modifier = Modifier.size(14.dp)
+                tint = Amber,
+                modifier = Modifier.size(20.dp)
             )
         }
-        Text(
-            text = if (showDistance) {
-                "${formatMiles(distanceLeftKm)} / ${formatMiles(totalDistanceKm)}"
-            } else {
-                "${formatRemainingTime(elapsedSec)} / ${formatRemainingTime(totalSec)}"
-            },
-            style = MaterialTheme.typography.labelMedium.copy(
-                fontWeight = FontWeight.Bold,
-                fontFamily = FontFamily.Monospace
-            ),
-            color = OffWhite
-        )
     }
 }
 

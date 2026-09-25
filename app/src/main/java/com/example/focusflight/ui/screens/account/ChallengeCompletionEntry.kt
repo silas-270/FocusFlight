@@ -76,9 +76,8 @@ internal fun ChallengeCompletionEntry(challenge: Challenge, entryNumber: Int) {
                 FocusBadge(
                     text = challengeTypeLabel(challenge.type),
                     variant = BadgeVariant.Danger,
-                    style = BadgeStyle.Outlined,
-                    size = BadgeSize.Compact,
-                    shape = RoundedCornerShape(3.dp)
+                    style = BadgeStyle.Stamp,
+                    size = BadgeSize.Compact
                 )
             }
 

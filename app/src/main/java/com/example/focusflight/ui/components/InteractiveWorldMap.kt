@@ -6,7 +6,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -144,16 +147,32 @@ fun InteractiveWorldMap(
     originAirport: Airport? = null,
     routes: List<FlightRoute> = emptyList(),
     selectedRoute: FlightRoute? = null,
-    animationProgress: Float = 0f
+    animationProgress: Float = 0f,
+    // Zoom in on origin + selected route instead of always showing the whole world, where a
+    // short hop is a few pixels. Glides between selections.
+    focusOnSelection: Boolean = false
 ) {
     val merged = remember(mapPaths, visitedCountries, countryToContinent, completedContinents) {
         MergedMapPathsCache.get(mapPaths, visitedCountries, countryToContinent, completedContinents)
     }
 
+    // Framing target in SVG units: the view's center and zoom (1 = whole world).
+    val focus = remember(focusOnSelection, originAirport, selectedRoute) {
+        if (focusOnSelection && originAirport != null && selectedRoute != null) {
+            routeFraming(originAirport, selectedRoute)
+        } else {
+            MapFraming(MapSvgLeft + MapSvgWidth / 2f, MapSvgTop + MapSvgHeight / 2f, 1f)
+        }
+    }
+    val framingSpec = tween<Float>(durationMillis = 450)
+    val zoom by animateFloatAsState(focus.zoom, framingSpec, label = "mapZoom")
+    val centerX by animateFloatAsState(focus.centerX, framingSpec, label = "mapCenterX")
+    val centerY by animateFloatAsState(focus.centerY, framingSpec, label = "mapCenterY")
+
     Box(
         modifier = modifier
             .background(MapOcean)
-            .aspectRatio(784.077f / 458.627f) // Keep SVG aspect ratio
+            .aspectRatio(MapSvgWidth / MapSvgHeight) // Keep SVG aspect ratio
     ) {
         Canvas(
             modifier = Modifier
@@ -167,8 +186,8 @@ fun InteractiveWorldMap(
         ) {
             if (mapPaths.isEmpty()) return@Canvas
 
-            val mapWidth = 784.077f
-            val mapHeight = 458.627f
+            val mapWidth = MapSvgWidth
+            val mapHeight = MapSvgHeight
 
             val scaleX = size.width / mapWidth
             val scaleY = size.height / mapHeight
@@ -177,9 +196,15 @@ fun InteractiveWorldMap(
             val offsetX = (size.width - mapWidth * scale) / 2f
             val offsetY = (size.height - mapHeight * scale) / 2f
 
+            // Everything below is sized in SVG units, so strokes and markers divide by the
+            // total scale (fit x zoom) to stay the same on-screen size at any zoom.
+            val totalScale = scale * zoom
+
             translate(left = offsetX, top = offsetY) {
                 scale(scale = scale, pivot = androidx.compose.ui.geometry.Offset.Zero) {
-                    translate(left = -30.767f, top = -241.591f) {
+                    translate(left = mapWidth / 2f, top = mapHeight / 2f) {
+                    scale(scale = zoom, pivot = androidx.compose.ui.geometry.Offset.Zero) {
+                    translate(left = -centerX, top = -centerY) {
                         // 1. Draw all country fills (one merged path per fill color)
                         drawPath(path = merged.unvisitedFill, color = MapUnvisitedLand)
                         drawPath(path = merged.visitedFill, color = MapVisitedLand)
@@ -188,17 +213,17 @@ fun InteractiveWorldMap(
                         drawPath(
                             path = merged.unvisitedStroke,
                             color = MapUnvisitedStroke,
-                            style = Stroke(width = 0.7f / scale)
+                            style = Stroke(width = 0.7f / totalScale)
                         )
                         drawPath(
                             path = merged.visitedStroke,
                             color = MapVisitedStroke,
-                            style = Stroke(width = 0.7f / scale)
+                            style = Stroke(width = 0.7f / totalScale)
                         )
                         drawPath(
                             path = merged.completedStroke,
                             color = MapCompletedContinentStroke,
-                            style = Stroke(width = 1.8f / scale) // Thicker outline
+                            style = Stroke(width = 1.8f / totalScale) // Thicker outline
                         )
 
                         // 3. Draw routes if origin is present
@@ -218,10 +243,7 @@ fun InteractiveWorldMap(
 
                                     val path = androidx.compose.ui.graphics.Path().apply {
                                         moveTo(cxOrigin, cyOrigin)
-                                        val dx = cxDest - cxOrigin
-                                        val midX = (cxOrigin + cxDest) / 2f
-                                        val midY = (cyOrigin + cyDest) / 2f
-                                        val controlY = midY - kotlin.math.abs(dx) * 0.15f - 20f
+                                        val (midX, controlY) = arcControlPoint(cxOrigin, cyOrigin, cxDest, cyDest)
                                         quadraticTo(midX, controlY, cxDest, cyDest)
                                     }
 
@@ -229,9 +251,9 @@ fun InteractiveWorldMap(
                                         path = path,
                                         color = MapGraticule.copy(alpha = 0.4f),
                                         style = Stroke(
-                                            width = 1.5f / scale,
+                                            width = 1.5f / totalScale,
                                             pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(
-                                                floatArrayOf(10f / scale, 10f / scale), 0f
+                                                floatArrayOf(10f / totalScale, 10f / totalScale), 0f
                                             ),
                                             cap = androidx.compose.ui.graphics.StrokeCap.Round
                                         )
@@ -239,7 +261,7 @@ fun InteractiveWorldMap(
 
                                     drawCircle(
                                         color = MapGraticule.copy(alpha = 0.6f),
-                                        radius = 2.5f / scale,
+                                        radius = 2.5f / totalScale,
                                         center = androidx.compose.ui.geometry.Offset(cxDest, cyDest)
                                     )
                                 }
@@ -254,10 +276,7 @@ fun InteractiveWorldMap(
 
                                 val path = androidx.compose.ui.graphics.Path().apply {
                                     moveTo(cxOrigin, cyOrigin)
-                                    val dx = cxDest - cxOrigin
-                                    val midX = (cxOrigin + cxDest) / 2f
-                                    val midY = (cyOrigin + cyDest) / 2f
-                                    val controlY = midY - kotlin.math.abs(dx) * 0.15f - 20f
+                                    val (midX, controlY) = arcControlPoint(cxOrigin, cyOrigin, cxDest, cyDest)
                                     quadraticTo(midX, controlY, cxDest, cyDest)
                                 }
 
@@ -266,7 +285,7 @@ fun InteractiveWorldMap(
                                     path = path,
                                     color = MapRouteArc.copy(alpha = 0.2f),
                                     style = Stroke(
-                                        width = 6f / scale,
+                                        width = 6f / totalScale,
                                         cap = androidx.compose.ui.graphics.StrokeCap.Round
                                     )
                                 )
@@ -276,7 +295,7 @@ fun InteractiveWorldMap(
                                     path = path,
                                     color = MapRouteArc,
                                     style = Stroke(
-                                        width = 3f / scale,
+                                        width = 3f / totalScale,
                                         cap = androidx.compose.ui.graphics.StrokeCap.Round
                                     )
                                 )
@@ -293,14 +312,14 @@ fun InteractiveWorldMap(
 
                                         drawCircle(
                                             color = MapRouteArc.copy(alpha = 0.8f),
-                                            radius = 2.5f / scale,
+                                            radius = 2.5f / totalScale,
                                             center = androidx.compose.ui.geometry.Offset(dotX, dotY)
                                         )
                                         drawCircle(
                                             color = MapRouteArc.copy(alpha = 0.2f),
-                                            radius = (2.5f + 4f * (1f - animationProgress)) / scale,
+                                            radius = (2.5f + 4f * (1f - animationProgress)) / totalScale,
                                             center = androidx.compose.ui.geometry.Offset(dotX, dotY),
-                                            style = Stroke(width = 1f / scale)
+                                            style = Stroke(width = 1f / totalScale)
                                         )
                                     }
                                 } catch (e: Exception) {
@@ -310,32 +329,77 @@ fun InteractiveWorldMap(
                                 // Target ring
                                 drawCircle(
                                     color = MapRouteArc,
-                                    radius = 3.5f / scale,
+                                    radius = 3.5f / totalScale,
                                     center = androidx.compose.ui.geometry.Offset(cxDest, cyDest)
                                 )
                                 drawCircle(
                                     color = MapRouteArc,
-                                    radius = 7.5f / scale,
+                                    radius = 7.5f / totalScale,
                                     center = androidx.compose.ui.geometry.Offset(cxDest, cyDest),
-                                    style = Stroke(width = 1.2f / scale)
+                                    style = Stroke(width = 1.2f / totalScale)
                                 )
                             }
 
                             // Draw origin airport marker
                             drawCircle(
                                 color = OffWhite,
-                                radius = 4f / scale,
+                                radius = 4f / totalScale,
                                 center = androidx.compose.ui.geometry.Offset(cxOrigin, cyOrigin)
                             )
                             drawCircle(
                                 color = MapRouteArc,
-                                radius = 2f / scale,
+                                radius = 2f / totalScale,
                                 center = androidx.compose.ui.geometry.Offset(cxOrigin, cyOrigin)
                             )
                         }
+                    }
+                    }
                     }
                 }
             }
         }
     }
+}
+
+// Bounds of the world map artwork in its own SVG coordinate space.
+private const val MapSvgLeft = 30.767f
+private const val MapSvgTop = 241.591f
+private const val MapSvgWidth = 784.077f
+private const val MapSvgHeight = 458.627f
+
+private const val MaxRouteZoom = 14f
+
+private data class MapFraming(val centerX: Float, val centerY: Float, val zoom: Float)
+
+/**
+ * Control point of a route arc: above the midpoint by a lift proportional to the route's length,
+ * so every arc has the same shape. A fixed extra lift used to turn short hops into loops far
+ * bigger than the route itself.
+ */
+private fun arcControlPoint(x0: Float, y0: Float, x1: Float, y1: Float): Pair<Float, Float> {
+    val distance = kotlin.math.hypot(x1 - x0, y1 - y0)
+    return (x0 + x1) / 2f to (y0 + y1) / 2f - distance * 0.18f
+}
+
+/** Center and zoom that fit origin, destination and the arc between them, with some margin. */
+private fun routeFraming(origin: Airport, route: FlightRoute): MapFraming {
+    val (ox, oy) = RobinsonProjection.toSvgCoordinates(origin.lat.toFloat(), origin.lon.toFloat())
+    val (dx, dy) = RobinsonProjection.toSvgCoordinates(route.destLat.toFloat(), route.destLon.toFloat())
+    val (_, arcTopY) = arcControlPoint(ox, oy, dx, dy)
+    val minX = minOf(ox, dx)
+    val maxX = maxOf(ox, dx)
+    // The curve peaks halfway to its control point.
+    val minY = minOf(oy, dy, (minOf(oy, dy) + arcTopY) / 2f)
+    val maxY = maxOf(oy, dy)
+    val span = maxOf(maxX - minX, maxY - minY)
+    val pad = maxOf(span * 0.6f, 12f)
+    val boxW = maxX - minX + 2 * pad
+    val boxH = maxY - minY + 2 * pad
+    val zoom = minOf(MapSvgWidth / boxW, MapSvgHeight / boxH).coerceIn(1f, MaxRouteZoom)
+    // Keep the view inside the map, so zooming never shows empty space past its edge.
+    val halfW = MapSvgWidth / zoom / 2f
+    val halfH = MapSvgHeight / zoom / 2f
+    val cx = ((minX + maxX) / 2f).coerceIn(MapSvgLeft + halfW, MapSvgLeft + MapSvgWidth - halfW)
+    val cy = ((minY + maxY) / 2f).coerceIn(MapSvgTop + halfH, MapSvgTop + MapSvgHeight - halfH)
+    return MapFraming(cx, cy, zoom)
 }

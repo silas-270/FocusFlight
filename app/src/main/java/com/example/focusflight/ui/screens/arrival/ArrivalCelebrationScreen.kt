@@ -1,5 +1,6 @@
 package com.example.focusflight.ui.screens.arrival
 
+import com.example.focusflight.util.formatDuration
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
@@ -385,9 +386,7 @@ fun ArrivalCelebrationScreen(
             Spacer(modifier = Modifier.weight(1f))
 
             // 3. Flight Duration: Clean minimal telemetry presentation (positioned between stamp and button)
-            val hours = durationMin / 60
-            val mins = durationMin % 60
-            val timeString = if (hours > 0) "${hours}h ${mins}m" else "${mins}m"
+            val timeString = formatDuration(durationMin)
 
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,

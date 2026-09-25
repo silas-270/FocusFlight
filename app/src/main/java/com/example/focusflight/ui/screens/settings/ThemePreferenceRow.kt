@@ -2,7 +2,6 @@ package com.example.focusflight.ui.screens.settings
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.LightMode
-import androidx.compose.material.icons.outlined.NightsStay
 import androidx.compose.runtime.Composable
 import com.example.focusflight.data.model.ThemeMode
 
@@ -15,10 +14,12 @@ internal fun ThemePreferenceRow(
     isLightMode: Boolean,
     onToggle: (Boolean) -> Unit
 ) {
+    // Named after what switching it on does. "Sky mode" with the current state as subtitle
+    // ("Night cockpit" while off) left it unclear what the switch would change.
     PreferenceToggleRow(
-        icon = if (isLightMode) Icons.Outlined.LightMode else Icons.Outlined.NightsStay,
-        title = "Sky mode",
-        subtitle = if (isLightMode) "Light skies" else "Night cockpit",
+        icon = Icons.Outlined.LightMode,
+        title = "Light skies",
+        subtitle = "Bright theme for daytime",
         checked = isLightMode,
         onToggle = onToggle
     )

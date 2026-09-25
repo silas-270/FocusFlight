@@ -32,7 +32,7 @@ import com.example.focusflight.ui.theme.Spacing
  */
 @Composable
 internal fun AchievementStackModal(stack: AchievementStack, onDismiss: () -> Unit) {
-    ScrimCardModal(onScrimTap = onDismiss) {
+    ScrimCardModal(onScrimTap = onDismiss, onClose = onDismiss) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()

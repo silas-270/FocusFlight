@@ -90,7 +90,11 @@ class CesiumHeadlessMapRenderer(private val cacheDir: File) {
 
     companion object {
         private const val TAG = "CesiumHeadlessMapRenderer"
-        /** Reference size: an exact 1:1 fit for the Hub globe box on the S23 it was tuned on. */
+        /**
+         * Reference size: an exact 1:1 fit for the Hub globe box on the S23 it was tuned on. The
+         * Hub lifts the image by `GlobeLiftFraction` (HubScreen.kt) to hide the empty space above
+         * the horizon - revisit that value if the render's framing changes.
+         */
         internal const val RENDER_WIDTH = 1080
         internal const val RENDER_HEIGHT = 1670
 
