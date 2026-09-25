@@ -19,3 +19,6 @@ app/src/main/jniLibs/
 
 # Perfetto traces + memory logs from tools/run_perf_scenario.sh (~100 MB per capture)
 perf_runs/
+
+# Python bytecode from the tools/ scripts
+__pycache__/
