@@ -9,7 +9,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -24,6 +24,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.focusflight.ui.theme.Accent
@@ -50,8 +51,8 @@ enum class ButtonStyle {
 }
 
 enum class ButtonSize {
-    Standard,    // 54.dp height, main CTA
-    Compact      // 42.dp height, modals and compact actions
+    Standard,    // 54.dp min height, main CTA
+    Compact      // 42.dp min height, modals and compact actions
 }
 
 /**
@@ -60,6 +61,15 @@ enum class ButtonSize {
  * Enforces consistent sizing (54dp standard / 42dp compact), 14dp rounded corners,
  * bold monospace typography, and WCAG-contrast-safe text colors across both Dark
  * and Light ("Sky") themes.
+ *
+ * The heights are minimums, not fixed: at large font scales a label like "CONFIRM SELECTION"
+ * wraps, and a fixed height clipped the second line. At font scale 1.0 every label fits on one
+ * line well inside the minimum, so the button is exactly 54/42dp as designed.
+ *
+ * A Compact button is 42dp tall visually, but its touch target is still 48dp: Compose expands a
+ * pointer target smaller than `ViewConfiguration.minimumTouchTargetSize` (48dp) to that size
+ * for touch input, as long as the expansion doesn't land on another target. So the visual
+ * height isn't padded out here - that would add 6dp to every modal's layout.
  */
 @Composable
 fun FocusButton(
@@ -119,7 +129,7 @@ fun FocusButton(
     Box(
         modifier = modifier
             .then(if (fillMaxWidth) Modifier.fillMaxWidth() else Modifier)
-            .height(height)
+            .heightIn(min = height)
             .clip(shape)
             .then(borderModifier)
             .background(containerColor)
@@ -129,7 +139,9 @@ fun FocusButton(
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center,
-            modifier = Modifier.padding(horizontal = Spacing.Medium)
+            // The vertical padding only matters once a label wraps - a one-line label and its
+            // 24dp icon sit well inside even the 42dp compact minimum.
+            modifier = Modifier.padding(horizontal = Spacing.Medium, vertical = Spacing.Small)
         ) {
             if (icon != null) {
                 Icon(
@@ -146,7 +158,8 @@ fun FocusButton(
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 1.sp
                 ),
-                color = contentColor
+                color = contentColor,
+                textAlign = TextAlign.Center
             )
         }
     }

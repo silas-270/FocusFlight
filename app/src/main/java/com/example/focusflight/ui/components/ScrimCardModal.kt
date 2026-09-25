@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -56,6 +57,11 @@ fun ScrimCardModal(
         Column(
             modifier = Modifier
                 .align(Alignment.Center)
+                // Centre the card in the space above the keyboard, not the whole screen - the
+                // window is edge-to-edge, so the IME overlays rather than resizes it, and a modal
+                // with a text field (Create Challenge's search and distance forms) otherwise had
+                // its field and buttons under the keyboard. A no-op for every modal without one.
+                .imePadding()
                 .padding(horizontal = Spacing.Large)
                 .fillMaxWidth()
                 // clip (not just a rounded background) so content that draws or translates past

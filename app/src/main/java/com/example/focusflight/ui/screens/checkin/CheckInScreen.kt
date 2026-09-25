@@ -69,6 +69,8 @@ fun CheckInScreen(
     val originAirport by viewModel.originAirport.collectAsState()
     val destAirport by viewModel.destAirport.collectAsState()
     val routeDetails by viewModel.routeDetails.collectAsState()
+    val routeMissing by viewModel.routeMissing.collectAsState()
+    val pilotName by viewModel.pilotName.collectAsState()
 
     Scaffold(
         topBar = {
@@ -111,10 +113,11 @@ fun CheckInScreen(
                 DashedDivider(color = Border, thickness = 1.dp)
                 Spacer(modifier = Modifier.height(Spacing.Large))
 
-                // Passenger Info
+                // Pilot Info - the pilot's own name rather than a fixed rank (ranks are earned
+                // per flight on arrival). Labelled PILOT, not PASSENGER: the app's player flies.
                 FocusInfoRow(
-                    label = "PASSENGER",
-                    value = "Captain",
+                    label = "PILOT",
+                    value = pilotName ?: "Pilot",
                     modifier = Modifier.padding(horizontal = Spacing.Large)
                 )
 
@@ -251,6 +254,18 @@ fun CheckInScreen(
 
             Spacer(modifier = Modifier.height(Spacing.Large))
 
+            if (routeMissing) {
+                Text(
+                    text = "This route couldn't be loaded. Go back and pick your flight again.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Amber,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = Spacing.Small)
+                )
+            }
+
             // Action: Start Flight
             FocusButton(
                 text = "START FLIGHT",
@@ -285,24 +300,34 @@ fun DashedDivider(
             start = Offset(0f, size.height / 2),
             end = Offset(size.width, size.height / 2),
             strokeWidth = thickness.toPx(),
-            pathEffect = PathEffect.dashPathEffect(floatArrayOf(15f, 10f), 0f)
+            // In dp, not raw px, so the dashes are the same size on every screen density. 5dp and
+            // 3.33dp are what the original 15px/10px came to on the S23 (density 3.0).
+            pathEffect = PathEffect.dashPathEffect(floatArrayOf(5.dp.toPx(), (10f / 3f).dp.toPx()), 0f)
         )
     }
 }
+
+/** How many bar units [BoardingPassBarcode] pre-generates - far wider than any portrait screen
+ *  needs, so the pattern always reaches the full width. */
+private const val BarcodeUnits = 2000
 
 @Composable
 fun BoardingPassBarcode(
     color: Color = OffWhite,
     modifier: Modifier = Modifier
 ) {
-    // Generate barcode bars with a stable seed to prevent jitter
+    // Bar and gap widths in units of 1dp, from a fixed seed so the pattern never jitters. These
+    // used to be raw pixels with generation stopping at 600px - on the S23 that filled only about
+    // three quarters of the ticket, and on any other density it was a different size again.
+    // Measured in dp, the bars are the same widths the S23 always showed (3px = 1dp there), and
+    // the pattern is drawn to the full width on every screen.
     val barConfig = remember {
         val random = java.util.Random(12345)
-        val bars = mutableListOf<Pair<Float, Float>>() // Pair of (bar width, gap)
-        var total = 0f
-        while (total < 600f) {
-            val barWidth = (random.nextInt(3) + 1) * 3f
-            val gap = (random.nextInt(2) + 1) * 3f
+        val bars = mutableListOf<Pair<Int, Int>>() // Pair of (bar width, gap), in dp
+        var total = 0
+        while (total < BarcodeUnits) {
+            val barWidth = random.nextInt(3) + 1
+            val gap = random.nextInt(2) + 1
             bars.add(Pair(barWidth, gap))
             total += barWidth + gap
         }
@@ -314,23 +339,31 @@ fun BoardingPassBarcode(
             .fillMaxWidth()
             .height(48.dp)
     ) {
+        val unit = 1.dp.toPx()
         val width = size.width
         val height = size.height
-        var x = 0f
-        var index = 0
-        while (x < width && index < barConfig.size) {
-            val config = barConfig[index]
-            val barWidth = config.first
-            val gap = config.second
-            if (x + barWidth <= width) {
-                drawRect(
-                    color = color,
-                    topLeft = Offset(x, 0f),
-                    size = Size(barWidth, height)
-                )
-            }
-            x += barWidth + gap
-            index++
+
+        // Take as many bars as fit, then centre them, so both ends of the barcode sit an equal
+        // (sub-bar-width) distance from the edges instead of a ragged gap on the right only.
+        var used = 0f
+        var count = 0
+        while (count < barConfig.size) {
+            val barEnd = used + barConfig[count].first * unit
+            if (barEnd > width) break
+            used = barEnd + barConfig[count].second * unit
+            count++
+        }
+        val lastGap = if (count > 0) barConfig[count - 1].second * unit else 0f
+        var x = (width - (used - lastGap)) / 2f
+
+        for (index in 0 until count) {
+            val (barWidth, gap) = barConfig[index]
+            drawRect(
+                color = color,
+                topLeft = Offset(x, 0f),
+                size = Size(barWidth * unit, height)
+            )
+            x += (barWidth + gap) * unit
         }
     }
 }

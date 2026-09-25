@@ -394,7 +394,7 @@ class CesiumGameActivity : GameActivity() {
                             // ── Hub ──
                             composable(Screen.Hub.route) { entry ->
                                 val viewModel: HubViewModel = viewModel(
-                                    factory = HubViewModelFactory(airportRepository, preferencesRepository, userRepository, flightLogRepository, challengeRepository, pilotProgressRepository, offlineModeController, cacheDir)
+                                    factory = HubViewModelFactory(airportRepository, preferencesRepository, userRepository, challengeRepository, pilotProgressRepository, offlineModeController, cacheDir)
                                 )
                                 val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
                                 com.example.focusflight.ui.screens.hub.HubScreen(
@@ -556,7 +556,7 @@ class CesiumGameActivity : GameActivity() {
                                 }
 
                                 val viewModel: CheckInViewModel = viewModel(
-                                    factory = CheckInViewModelFactory(airportRepository, originIata, destIata, flightNo)
+                                    factory = CheckInViewModelFactory(airportRepository, userRepository, originIata, destIata, flightNo)
                                 )
                                 val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
 
