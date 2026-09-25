@@ -20,15 +20,16 @@ data class ChallengeSetDefinition(
  * exhaustive content authoring (that's later content work, not this phase's job).
  */
 object CuratedChallengeSets {
-    /** The seven standard continent codes, matching what
-     *  `AirportRepository.getContinentCountryMap()` already keys by. */
+    /** The six inhabited continents, matching what `AirportRepository.getContinentCountryMap()`
+     *  keys by. Antarctica is left out on purpose: no Antarctic airport has a route, so a set that
+     *  included it could never complete. Rows started while it was a member still resolve against
+     *  this definition - see `LocalChallengeRepository`'s set handling. */
     val ALL_CONTINENTS = ChallengeSetDefinition(
         catalogId = "all_continents",
         displayName = "Visit All Continents",
         memberKind = SetMemberKind.CONTINENT,
         memberItems = listOf(
             SetMember("AF", "Africa"),
-            SetMember("AN", "Antarctica"),
             SetMember("AS", "Asia"),
             SetMember("EU", "Europe"),
             SetMember("NA", "North America"),

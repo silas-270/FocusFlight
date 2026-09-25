@@ -26,4 +26,10 @@ class LocalAirportRepository(
     override fun getContinentCountryMap(): Map<String, Set<String>> = dataSource.getContinentCountryMap()
 
     override fun getCountriesForAirports(iatas: List<String>): Set<String> = dataSource.getCountriesForAirports(iatas)
+
+    override fun findRoute(originIata: String, destIata: String): FlightRoute? = dataSource.findRoute(originIata, destIata)
+
+    override fun isInRouteNetwork(iataCode: String): Boolean = dataSource.isInRouteNetwork(iataCode)
+
+    override fun nearestNetworkAirport(lat: Double, lon: Double): Airport? = dataSource.nearestNetworkAirport(lat, lon)
 }

@@ -10,12 +10,18 @@ from [achievements.md](achievements.md), and it is what makes "start fresh" mean
 |---|---|---|---|
 | `ROUTE` | Progress toward a destination | ✅ its own, isolated | curated or custom |
 | `SET_COMPLETION` | Members reached / total members | — | curated only |
-| `DISTANCE` | Cumulative km flown while active / target | — | curated or custom |
+| `DISTANCE` | Cumulative distance flown while active / target (stored in km, shown and entered in miles) | — | curated or custom |
 | `STREAK` | Consecutive local calendar days with a flight / target | — | curated or custom |
 
 **Set-completion is curated-only** because a set has to be authored to mean anything.
 A player-defined "visit these five airports" is just a checklist; the curated
 definitions in `ChallengeSetDefinition` are the authoring seam.
+
+Every member of a set must be reachable through the main route network, or the set can never
+complete ("Visit All Continents" lost Antarctica for exactly this reason). A row stores its
+`setTotalMembers` at start, but active rows are read — and completion judged — against the
+*current* definition (`withSetDefinitionResolved`, and "every current member credited" in
+`creditSetCompletion`), so shrinking a definition never strands a challenge in progress.
 
 **Streak is deliberately short and unforgiving** — targets of 3–5 days, not 30. It
 covers the final push before an exam, where breaking on a miss is the point. It can

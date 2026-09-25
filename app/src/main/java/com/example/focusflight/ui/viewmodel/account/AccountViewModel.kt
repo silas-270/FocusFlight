@@ -76,6 +76,9 @@ data class AccountUiState(
     // AccountViewModel's doc comment on refreshHomeBaseCooldowns() for why that's an acceptable
     // simplification here.
     val currentAirportIata: String = "",
+    /** Destination of a paused Story flight that returning home would discard (it departs from
+     *  somewhere other than home), or null if there is none - the confirm modal warns about it. */
+    val returnHomeDiscardsFlightTo: String? = null,
     val returnHomeEligible: Boolean = true,
     val returnHomeRemainingMillis: Long = 0L,
     val changeHomeBaseEligible: Boolean = true,
@@ -270,9 +273,12 @@ class AccountViewModel(
             val currentIata =
                 com.example.focusflight.domain.resolveCurrentAirportIata(preferencesRepository, userRepository)
                     .orEmpty()
+            val homeIata = com.example.focusflight.domain.resolveHomeAirportIata(userRepository)
+            val discardedDest = pausedStoryFlightStrandedByReturnHome(homeIata)?.destIata
             _uiState.update { state ->
                 state.copy(
                     currentAirportIata = currentIata,
+                    returnHomeDiscardsFlightTo = discardedDest,
                     returnHomeEligible = HomeBaseCooldown.isEligible(now, lastReturnHome, HomeBaseCooldown.RETURN_HOME_COOLDOWN_DAYS),
                     returnHomeRemainingMillis = HomeBaseCooldown.remainingMillis(now, lastReturnHome, HomeBaseCooldown.RETURN_HOME_COOLDOWN_DAYS),
                     changeHomeBaseEligible = HomeBaseCooldown.isEligible(now, lastHomeBaseChanged, HomeBaseCooldown.CHANGE_HOME_BASE_COOLDOWN_DAYS),
@@ -309,11 +315,26 @@ class AccountViewModel(
                 return@launch
             }
 
+            // A paused Story flight departs from where the pilot *was*. Leaving it resumable after
+            // the teleport would let the Hub offer "RESUME FLIGHT" from the old airport, and
+            // landing it would break the origin lock. The confirm modal says so beforehand
+            // (ReturnHomeConfirmModal). Cleared before the move, so a failure between the two
+            // leaves the pilot where they were with nothing to resume rather than the reverse.
+            if (pausedStoryFlightStrandedByReturnHome(homeIata) != null) {
+                preferencesRepository.pausedStoryFlightStore.clear()
+            }
             preferencesRepository.setCurrentAirport(homeIata)
             preferencesRepository.setLastReturnHomeAt(now)
             refreshHomeBaseCooldowns()
             _homeBaseActionResult.value = HomeBaseActionResult.ReturnedHome
         }
+    }
+
+    /** The paused Story flight a return home would strand - one departing from anywhere but
+     *  [homeIata] - or null. A flight paused *at* home stays valid after the teleport. */
+    private suspend fun pausedStoryFlightStrandedByReturnHome(homeIata: String?): com.example.focusflight.data.model.PausedFlight? {
+        if (homeIata == null) return null
+        return preferencesRepository.pausedStoryFlightStore.get()?.takeIf { it.originIata != homeIata }
     }
 
     /**
@@ -326,6 +347,9 @@ class AccountViewModel(
      * The cooldown timestamp still lives in prefs, and is now written only *after* the Room write
      * succeeds: burning the 30-day cooldown for a change that did not happen would be the worst
      * of both outcomes.
+     *
+     * Unlike [returnHome], this leaves a paused Story flight alone: it moves home, not the pilot,
+     * so a flight paused at the current airport still departs from where the pilot is.
      *
      * Like [returnHome], the re-checked cooldown means this can refuse work the picker already
      * asked for, so every exit path reports through [homeBaseActionResult] and the "HOME BASE SET"

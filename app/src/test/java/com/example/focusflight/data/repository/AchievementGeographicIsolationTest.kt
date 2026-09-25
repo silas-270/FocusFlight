@@ -111,4 +111,25 @@ class AchievementGeographicIsolationTest {
         assertEquals(2.0, allContinents.target, 0.001)
         assert(allContinents.isUnlocked)
     }
+
+    @Test
+    fun `a STORY flight's origin counts as visited, so an old home base is never un-visited`() {
+        val repo = FakeAirportRepository()
+        // Departed from JFK (the old home) in Story Mode; home has since moved to CDG.
+        val history = listOf(flight("LHR", FlightMode.STORY).copy(originIata = "JFK"))
+
+        val geo = repo.getVisitedGeography(history, homeAirportIata = "CDG")
+
+        assertEquals(setOf("US", "GB", "FR"), geo.visitedCountries)
+    }
+
+    @Test
+    fun `a FREE flight's origin does not count as visited`() {
+        val repo = FakeAirportRepository()
+        val history = listOf(flight("LHR", FlightMode.FREE).copy(originIata = "JFK"))
+
+        val geo = repo.getVisitedGeography(history, homeAirportIata = null)
+
+        assertFalse("US" in geo.visitedCountries)
+    }
 }

@@ -145,6 +145,7 @@ fun SettingsScreen(
             ReturnHomeConfirmModal(
                 homeAirportIata = uiState.homeAirportIata,
                 currentAirportIata = uiState.currentAirportIata,
+                discardsPausedFlightTo = uiState.returnHomeDiscardsFlightTo,
                 onConfirm = {
                     showReturnHomeModal = false
                     showReturningHomeModal = true

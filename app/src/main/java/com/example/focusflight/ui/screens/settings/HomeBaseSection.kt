@@ -43,11 +43,9 @@ import com.example.focusflight.ui.viewmodel.account.AccountUiState
  * is. They live on the Passport rather than the Challenges screen because neither is a *session*:
  * return-home is an instant teleport, and changing home base is an identity edit.
  *
- * They are also deliberately *inside* [ProfileHeroCard]'s expanded state rather than sitting in
- * the page as their own section. Both are gated by long cooldowns (7 and 30 days) and are close to
- * never used, so giving them permanent real estate at the top of the screen overstated them badly.
- * The hero card already shows the home airport as a chip, which makes it the natural thing to open
- * for anything home-related.
+ * They sit under their own "HOME BASE" header on the Settings screen rather than at the top of the
+ * Passport: both are gated by long cooldowns (7 and 30 days) and are close to never used, so
+ * permanent real estate on the Passport overstated them badly.
  */
 @Composable
 internal fun HomeBaseActions(state: AccountUiState, onReturnHomeClick: () -> Unit, onChangeHomeBaseClick: () -> Unit) {
@@ -151,7 +149,10 @@ internal fun ReturnHomeConfirmModal(
     homeAirportIata: String,
     currentAirportIata: String,
     onConfirm: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    /** Destination of the paused Story flight this teleport discards, if any
+     *  (see `AccountViewModel.returnHome`). */
+    discardsPausedFlightTo: String? = null
 ) {
     ScrimCardModal(onScrimTap = onDismiss) {
         Text(
@@ -169,6 +170,14 @@ internal fun ReturnHomeConfirmModal(
             style = MaterialTheme.typography.bodyMedium,
             color = Haze
         )
+        if (discardsPausedFlightTo != null) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Your paused flight to $discardsPausedFlightTo departs from your current airport, so it will be cancelled.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Amber
+            )
+        }
         Spacer(modifier = Modifier.height(24.dp))
         HomeBaseModalButtonRow(dismissText = "CANCEL", confirmText = "TELEPORT", onDismiss = onDismiss, onConfirm = onConfirm)
     }

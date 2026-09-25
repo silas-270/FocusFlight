@@ -342,6 +342,11 @@ class InFlightViewModel(
                 var justCompleted = false
 
                 _uiState.update { state ->
+                    // The screen can start the timer (ON_START) before init's paused-flight read
+                    // has filled in the duration. Ticking against a zero total would push a NaN
+                    // progress (0 / 0) into the engine and could even "complete" the flight after
+                    // the 3 s hold, so wait for the real duration instead.
+                    if (state.totalDurationSeconds <= 0L) return@update state
                     val newElapsedMs = state.timeElapsedMs + deltaMs
                     val totalMs = state.totalDurationSeconds * 1000L
 
@@ -569,7 +574,7 @@ class InFlightViewModel(
     // checked/persisted here after every landing - there's no "just unlocked" flag to set, and
     // no new Room migration needed for this feature.
     private suspend fun checkAchievementsAndChallenges(loggedFlight: FlightLog?) {
-        val distanceKm = _routeDetails.value?.distanceKm ?: 0.0
+        val distanceKm = flownDistanceKm()
 
         // Every exit path from here MUST leave [landingResultChannel] resolved. The arrival
         // screen's "continue" awaits `first { it != Pending }` with no fallback of its own, so an
@@ -623,6 +628,19 @@ class InFlightViewModel(
     }
 
     /**
+     * The flight's distance for the logbook and for challenge credit: the route's own figure, or,
+     * if the route lookup came back empty, the great-circle distance between the two airports.
+     * Logging 0 km for a flight that really was flown would quietly shortchange every Distance
+     * achievement and challenge.
+     */
+    private fun flownDistanceKm(): Double {
+        _routeDetails.value?.distanceKm?.let { return it }
+        val origin = _originAirport.value ?: return 0.0
+        val dest = _destAirport.value ?: return 0.0
+        return com.example.focusflight.data.model.ChallengeProgress.haversineKm(origin.lat, origin.lon, dest.lat, dest.lon)
+    }
+
+    /**
      * Writes the logbook entry and returns it, or null if the write failed - the caller gates the
      * position write on that, so this must never report success it didn't achieve. Body only; the
      * caller owns the scope.
@@ -632,8 +650,7 @@ class InFlightViewModel(
      * flight on the wrong side of midnight.
      */
     private suspend fun saveFlightLog(): FlightLog? = try {
-        val route = _routeDetails.value
-        val distanceKm = route?.distanceKm ?: 0.0
+        val distanceKm = flownDistanceKm()
 
         flightLogRepository.logFlight(
             flightNumber = flightNumber,

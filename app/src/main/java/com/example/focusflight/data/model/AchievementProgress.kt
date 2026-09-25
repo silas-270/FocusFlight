@@ -1,5 +1,6 @@
 package com.example.focusflight.data.model
 
+import com.example.focusflight.util.kmToMiles
 import java.util.Calendar
 
 /** The three progress-bar-shaped achievement categories, grouped for display - see
@@ -58,8 +59,11 @@ object AchievementProgress {
                     )
                 }
                 is GeographicAchievementGoal.AllContinents -> {
+                    // Only continents the route network actually reaches (the map has no country
+                    // for a continent with no reachable airport), so the target and the checklist
+                    // are the same list.
                     val total = geo.continentStats.size
-                    val current = geo.continentStats.count { it.visitedCountries.isNotEmpty() }
+                    val current = geo.continentStats.count { it.continentCode in geo.reachedContinents }
                     goal.toStatus(
                         category = AchievementCategory.GEOGRAPHIC,
                         current = current.toDouble(),
@@ -70,8 +74,12 @@ object AchievementProgress {
                     )
                 }
                 is GeographicAchievementGoal.AllCountries -> {
-                    val total = geo.continentStats.sumOf { it.totalCountries }
-                    val current = geo.visitedCountries.size
+                    // Distinct reachable countries. A sum over continents used to count the six
+                    // countries listed under two continents twice, so the target (239) was larger
+                    // than the number of countries that exist and this could never unlock.
+                    val world = geo.countryToContinent.keys
+                    val total = world.size
+                    val current = geo.visitedCountries.count { it in world }
                     goal.toStatus(
                         category = AchievementCategory.GEOGRAPHIC,
                         current = current.toDouble(),
@@ -104,11 +112,13 @@ object AchievementProgress {
         // The catalog is ordered ascending by target, so the index *is* the ladder rank - see
         // DistanceAchievementCatalog.ALL's doc.
         return DistanceAchievementCatalog.ALL.mapIndexed { index, milestone ->
+            // Stored and compared in km (what the flight log holds); reported in miles, the unit
+            // every distance in the UI uses.
             milestone.toStatus(
                 category = AchievementCategory.DISTANCE,
-                current = storyDistanceKm,
-                target = milestone.targetKm,
-                unitLabel = "km",
+                current = kmToMiles(storyDistanceKm),
+                target = kmToMiles(milestone.targetKm),
+                unitLabel = "mi",
                 isUnlocked = storyDistanceKm >= milestone.targetKm,
                 familyId = DistanceAchievementCatalog.FAMILY_ID,
                 familyRank = index
@@ -176,7 +186,7 @@ object AchievementProgress {
         )
 
         val hasEquatorCross = story.any {
-            // Distance over 3000km between long-haul flights or known trans-hemisphere routes
+            // Distance over 5000 km between long-haul flights or known trans-hemisphere routes
             it.distanceKm >= 5000.0 && (it.originIata in setOf("LHR", "CDG", "FRA", "JFK", "DEL", "PEK", "HND") && it.destIata in setOf("JNB", "CPT", "SYD", "MEL", "EZE", "GRU", "SCL")) ||
             (it.originIata in setOf("JNB", "CPT", "SYD", "MEL", "EZE", "GRU", "SCL") && it.destIata in setOf("LHR", "CDG", "FRA", "JFK", "DEL", "PEK", "HND"))
         }

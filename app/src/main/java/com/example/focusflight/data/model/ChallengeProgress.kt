@@ -117,6 +117,24 @@ fun Challenge.withStreakEvaluatedAt(today: LocalDate): Challenge =
     else currentStreak(today).let { if (it == streakDays) this else copy(streakDays = it) }
 
 /**
+ * This row with its Set-completion totals resolved against the *current* curated definition. A
+ * no-op for every other type, and for finished challenges.
+ *
+ * The row stores `setTotalMembers` at start time, but completion has always been judged against
+ * the live definition. When a definition shrinks (Visit All Continents dropped the unreachable
+ * Antarctica), a row started earlier would otherwise keep reading "x / 7" while completing at 6.
+ * Like [withStreakEvaluatedAt], this is the same facts read through today's catalog; the stored
+ * row catches up on the next credited landing.
+ */
+fun Challenge.withSetDefinitionResolved(): Challenge {
+    if (type != ChallengeType.SET_COMPLETION || status != ChallengeStatus.ACTIVE) return this
+    val definition = setCatalogId?.let { CuratedChallengeSets.find(it) } ?: return this
+    val visited = visitedSetMembers.filterTo(LinkedHashSet()) { it in definition.members }
+    return if (definition.members.size == setTotalMembers && visited == visitedSetMembers) this
+    else copy(setTotalMembers = definition.members.size, visitedSetMembers = visited)
+}
+
+/**
  * Resolves the member checklist for a Set Completion challenge.
  * Returns null if the challenge is not a Set Completion challenge or its set definition is unknown.
  */

@@ -67,7 +67,7 @@ class LocalFlightLogRepository(
     /**
      * `airportsVisited` is deliberately the size of exactly the set
      * [AirportRepository.getVisitedGeography][com.example.focusflight.data.repository.AirportRepository.getVisitedGeography]
-     * builds - `distinct(STORY destinations + home)` - because the two are drawn side by side on
+     * builds - `distinct(STORY origins + STORY destinations + home)` - because the two are drawn side by side on
      * the Passport and any other definition makes the number contradict its own map.
      *
      * It used to be `COUNT(DISTINCT dest_iata) over every mode, + 1 for home`, which was wrong
@@ -87,7 +87,7 @@ class LocalFlightLogRepository(
         val totalMinutes = flightLogDao.getTotalMinutes(userId)
         val homeIata = homeAirportIata?.takeIf { it.isNotBlank() }
         val distinctStoryDest =
-            flightLogDao.getDistinctDestinationsInMode(userId, FlightMode.STORY, homeIata)
+            flightLogDao.getDistinctAirportsInMode(userId, FlightMode.STORY, homeIata)
         return FlightStats(
             totalFlights = totalFlights,
             totalMinutes = totalMinutes,

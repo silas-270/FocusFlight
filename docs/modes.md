@@ -55,7 +55,7 @@ callers cannot forget:
 | Boundary | Filters |
 |---|---|
 | `AirportRepository.getVisitedGeography` | `STORY` only, for the map and geography |
-| `FlightLogDao.getDistinctDestinationsInMode` | scoped by mode in SQL |
+| `FlightLogDao.getDistinctAirportsInMode` | scoped by mode in SQL |
 | `AchievementProgress.evaluate*` | takes the *full* history and filters to `STORY` internally |
 
 `AchievementProgress` taking unfiltered history and filtering inside is deliberate: a
@@ -72,7 +72,9 @@ the world map worth filling in.
 
 **Home base.** Chosen during onboarding and stored in `user_profile.home_airport_iata`,
 which is its sole owner. It counts as a visited country, so a wrong value here silently
-changes both the map and Geographic achievements. A blank field means "no home base";
+changes both the map and Geographic achievements. So does the **origin of every `STORY`
+flight**: under the origin lock a Story origin is always somewhere the pilot really was, and
+counting it means changing home base never un-visits the old home's country. A blank field means "no home base";
 `resolveHomeAirportIata` and `getVisitedGeography` both normalise blank to null so the two
 read paths cannot disagree.
 
@@ -83,11 +85,16 @@ conflated. Both live in `HomeBaseCooldown`.
 
 | Action | Cooldown | Timestamp key | Effect |
 |---|---|---|---|
-| **Return home** | 7 days | `last_return_home_at` | Moves `current_airport_iata` back to the home base. Home does not change. |
+| **Return home** | 7 days | `last_return_home_at` | Moves `current_airport_iata` back to the home base. Home does not change. Discards a paused Story flight that departs from anywhere but home (the confirm modal says so first). |
 | **Change home base** | 30 days | `last_home_base_changed_at` | Rewrites `user_profile.home_airport_iata`. |
 
 Both are direct state mutations — the only two in the app that move the pilot without a
 flight — which is exactly why they are gated at all.
+
+**A paused Story flight and return home.** The paused flight departs from where the pilot was.
+Left resumable after a teleport, the Hub would offer "RESUME FLIGHT" from the old airport and
+landing it would break the origin lock, so return home clears it (Free and challenge slots are
+untouched). Change home base leaves it alone: it moves home, not the pilot.
 
 **Write order matters in both, in the same direction.** The real change lands first, and
 the cooldown is stamped only after it succeeds. Burning a 30-day cooldown for a change
@@ -102,8 +109,6 @@ Return home also pins the home base's route map in the disk cache
 (`MapImageCache.pinnedIatas`). With a 7-day cooldown, returning home would otherwise
 always find a cold cache.
 
-> `DEV_FEATURES_TO_REVERT.md`: both cooldowns are currently disabled by a dev override at
-> the top of `HomeBaseCooldown.isEligible()`. One line disables both.
 
 ## Free Mode
 

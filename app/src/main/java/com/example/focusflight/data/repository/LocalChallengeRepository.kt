@@ -16,6 +16,7 @@ import com.example.focusflight.data.model.PredefinedRoute
 import com.example.focusflight.data.model.PredefinedRouteCatalog
 import com.example.focusflight.data.model.predefinedRoute
 import com.example.focusflight.data.model.SetMemberKind
+import com.example.focusflight.data.model.withSetDefinitionResolved
 import com.example.focusflight.data.model.withStreakEvaluatedAt
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emitAll
@@ -73,7 +74,7 @@ class LocalChallengeRepository(
      */
     private fun List<Challenge>.withStreaksEvaluated(): List<Challenge> {
         val today = LocalDate.now(clock)
-        return map { it.withStreakEvaluatedAt(today) }
+        return map { it.withStreakEvaluatedAt(today).withSetDefinitionResolved() }
     }
 
     override suspend fun listActiveChallenges(): List<Challenge> =
@@ -101,7 +102,7 @@ class LocalChallengeRepository(
     }
 
     override suspend fun getChallenge(id: Int): Challenge? =
-        challengeDao.getById(id)?.withStreakEvaluatedAt(LocalDate.now(clock))
+        challengeDao.getById(id)?.withStreakEvaluatedAt(LocalDate.now(clock))?.withSetDefinitionResolved()
 
     override suspend fun listCompletedChallenges(): List<Challenge> =
         challengeDao.getCelebratedCompletedOrderedByCompletedAt(userProfileDao.requireProfileId())
@@ -400,14 +401,18 @@ class LocalChallengeRepository(
         // definition, not just against whatever's already been credited.
         val definition = CuratedChallengeSets.find(challenge.setCatalogId ?: return) ?: return
         val memberValue = destAirport?.let { memberValueFor(kind, it) } ?: return
-        if (memberValue !in definition.members) return // lands somewhere, but not a relevant member
-        if (memberValue in challenge.visitedSetMembers) return // already credited this instance
-
-        val updatedMembers = challenge.visitedSetMembers + memberValue
-        val completed = updatedMembers.size >= definition.members.size
+        val credited = challenge.visitedSetMembers.filterTo(LinkedHashSet()) { it in definition.members }
+        val updatedMembers = if (memberValue in definition.members) credited + memberValue else credited
+        // Judged as "every current member credited" rather than by count, and checked even when
+        // this landing adds nothing new: a row whose definition shrank (Visit All Continents lost
+        // Antarctica) may already hold every remaining member, and must complete on its next
+        // eligible landing rather than stay stuck one unreachable member short forever.
+        val completed = updatedMembers.containsAll(definition.members)
+        if (updatedMembers == challenge.visitedSetMembers && !completed) return // nothing new
         challengeDao.update(
             challenge.copy(
                 visitedSetMembers = updatedMembers,
+                setTotalMembers = definition.members.size,
                 status = if (completed) ChallengeStatus.COMPLETED else ChallengeStatus.ACTIVE,
                 completedAt = if (completed) System.currentTimeMillis() else null
             )

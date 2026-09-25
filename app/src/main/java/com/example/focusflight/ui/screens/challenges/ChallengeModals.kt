@@ -485,7 +485,7 @@ private fun CustomDistanceModalForm(onCreate: (Double) -> Unit) {
 
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
-            text = "Enter a custom target distance to fly in kilometers.",
+            text = "Enter a custom target distance to fly in miles.",
             style = MaterialTheme.typography.bodySmall,
             color = Haze
         )
@@ -493,8 +493,8 @@ private fun CustomDistanceModalForm(onCreate: (Double) -> Unit) {
         OutlinedTextField(
             value = customText,
             onValueChange = { customText = it.filter(Char::isDigit) },
-            label = { Text("Target distance (km)") },
-            placeholder = { Text("e.g. 15000", color = Haze.copy(alpha = 0.5f)) },
+            label = { Text("Target distance (mi)") },
+            placeholder = { Text("e.g. 10000", color = Haze.copy(alpha = 0.5f)) },
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             modifier = Modifier.fillMaxWidth(),
@@ -510,11 +510,12 @@ private fun CustomDistanceModalForm(onCreate: (Double) -> Unit) {
         )
         Spacer(modifier = Modifier.height(Spacing.Large))
         PrimaryActionButton(
-            text = if (target > 0) "START CHALLENGE (${formatKm(target)})" else "START CHALLENGE",
+            text = if (target > 0) "START CHALLENGE (${String.format(java.util.Locale.US, "%,.0f mi", target)})" else "START CHALLENGE",
             size = ButtonSize.Compact,
             enabled = target > 0
         ) {
-            onCreate(target)
+            // Typed in miles, stored in km like every other distance in the database.
+            onCreate(com.example.focusflight.util.milesToKm(target))
         }
     }
 }

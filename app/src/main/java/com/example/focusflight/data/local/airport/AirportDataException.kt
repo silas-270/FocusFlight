@@ -14,7 +14,7 @@ package com.example.focusflight.data.local.airport
  *   passport and reset every geographic achievement to 0/N with no error anywhere.
  * - [AirportRouteSqliteDataSource.getOutboundRoutes], where an empty result is a perfectly
  *   ordinary answer but not an inert one: Story Mode responds to a routeless origin by rehoming
- *   the pilot to LHR and persisting that to `currentAirport`. A swallowed failure could therefore
+ *   the pilot to another airport and persisting that to `currentAirport`. A swallowed failure could therefore
  *   move someone out of their airport, permanently, because a query briefly broke.
  *
  * That distinction becomes load-bearing once these results are cached: caching an empty set

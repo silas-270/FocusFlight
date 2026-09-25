@@ -16,6 +16,8 @@ import com.example.focusflight.data.repository.PilotProgressRepository
 import com.example.focusflight.domain.AirportSearchController
 import com.example.focusflight.domain.resolveCurrentAirportIata
 import com.example.focusflight.ui.components.airportpicker.resolveSuggestedAirports
+import com.example.focusflight.util.countryDisplayName
+import com.example.focusflight.util.normalizeForSearch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -226,11 +228,15 @@ class FlightSearchViewModel(
         _airportSearchQuery.value = query
         if (query.trim().isNotEmpty()) {
             val originIata = _originAirport.value?.iataCode
+            // Accent-insensitive on both sides, so "dusseldorf" finds Düsseldorf - see
+            // util/SearchText.kt.
+            val q = normalizeForSearch(query)
             val filtered = _allRoutes.value.filter { route ->
                 route.destIata != originIata && (
-                    route.destIata.contains(query, ignoreCase = true) ||
-                    route.destName.contains(query, ignoreCase = true) ||
-                    route.destMunicipality.contains(query, ignoreCase = true)
+                    route.destIata.contains(query.trim(), ignoreCase = true) ||
+                    normalizeForSearch(route.destName).contains(q) ||
+                    normalizeForSearch(route.destMunicipality).contains(q) ||
+                    normalizeForSearch(countryDisplayName(route.destCountry)).startsWith(q)
                 )
             }
             _airportSearchResults.value = filtered
@@ -278,31 +284,36 @@ class FlightSearchViewModel(
                 selectRoute(null)
                 return@launch
             }
-            // STORY only: silently rehoming the player to LHR when their locked origin has no
-            // routes is a Story Mode convenience (their origin is a fixed value they didn't pick
-            // this session, so a total dead-end needs a way out). It writes `currentAirport` as
-            // a side effect, which must never happen for a FREE-tagged session (see the
-            // isolation matrix in docs/modes.md) - a Free Mode player who deliberately
-            // picked a routeless origin just sees the existing "No flights available" empty
-            // state instead, same as picking a duration with no matching routes today.
+            // STORY only: rehoming the player when their locked origin is a dead end is a Story
+            // Mode convenience (their origin is a fixed value they didn't pick this session, so a
+            // dead end needs a way out). A dead end is an origin with no routes into the main
+            // network - pickers and destination lists no longer offer such airports, so this only
+            // catches pilots who were already stranded before that. They go to the nearest large
+            // network airport (LHR if even that can't be resolved), with a notice on screen.
+            // It writes `currentAirport` as a side effect, which must never happen for a
+            // FREE-tagged session (see the isolation matrix in docs/modes.md) - a Free Mode
+            // player just sees the existing "No flights available" empty state instead.
             if (fetched.isEmpty() && mode == FlightMode.STORY) {
-                val fallbackAirport = airportRepository.getAirportByIata("LHR")
+                val fallbackAirport = airportRepository.nearestNetworkAirport(origin.lat, origin.lon)
+                    ?.takeIf { it.iataCode != origin.iataCode }
+                    ?: airportRepository.getAirportByIata("LHR")
                 if (fallbackAirport != null) {
+                    val fallbackIata = fallbackAirport.iataCode
                     Log.w(
                         "FlightSearchViewModel",
-                        "Origin ${origin.iataCode} has no outbound routes; rehoming to LHR and rewriting currentAirport"
+                        "Origin ${origin.iataCode} is a dead end; rehoming to $fallbackIata and rewriting currentAirport"
                     )
                     _originAirport.value = fallbackAirport
-                    preferencesRepository.setCurrentAirport("LHR")
-                    _originRehomedTo.value = "LHR"
+                    preferencesRepository.setCurrentAirport(fallbackIata)
+                    _originRehomedTo.value = fallbackIata
                     fetched = try {
                         airportRepository.getOutboundRoutes(
-                            originIata = "LHR",
+                            originIata = fallbackIata,
                             searchQuery = "",
                             sortBy = "Shortest"
                         )
                     } catch (e: AirportDataException) {
-                        Log.e("FlightSearchViewModel", "fetchRoutes: LHR fallback query failed", e)
+                        Log.e("FlightSearchViewModel", "fetchRoutes: $fallbackIata fallback query failed", e)
                         emptyList()
                     }
                 }

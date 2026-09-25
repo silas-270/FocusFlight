@@ -162,9 +162,11 @@ class ChallengesViewModel(
     }
 
     /** [origin]/[dest] named from city names, per challenges.md's "Where it comes from" for Route
-     *  ("Stuttgart → Beijing," not "STR → PEK"). */
+     *  ("Stuttgart → Beijing," not "STR → PEK"). Some airports have no city in the data, so the
+     *  airport name (or, failing that, the code) stands in rather than leaving " → ". */
     fun startCustomRoute(origin: Airport, dest: Airport) {
-        val name = "${origin.municipality} → ${dest.municipality}"
+        fun placeName(a: Airport) = a.municipality.ifBlank { a.name.ifBlank { a.iataCode } }
+        val name = "${placeName(origin)} → ${placeName(dest)}"
         viewModelScope.launch {
             val result = challengeRepository.startCustomRouteChallenge(origin.iataCode, dest.iataCode, name)
             _startResult.value = result
@@ -231,11 +233,12 @@ class ChallengesViewModel(
     }
 }
 
-/** "10,000 km" style formatting shared by the custom-distance naming above and the create form. */
-fun formatKm(km: Double): String {
-    val rounded = km.toLong()
-    return "${String.format(java.util.Locale.US, "%,d", rounded)} km"
-}
+/**
+ * Formats a distance *stored in km* for display - in miles, like every distance in the UI (see
+ * util/Units.kt). Kept under its old name because the Challenges screens call it throughout;
+ * the argument is still kilometres, only the output unit changed.
+ */
+fun formatKm(km: Double): String = com.example.focusflight.util.formatMiles(km)
 
 class ChallengesViewModelFactory(
     private val challengeRepository: ChallengeRepository,

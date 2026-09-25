@@ -732,10 +732,18 @@ class CesiumGameActivity : GameActivity() {
                                                     // A completed Route challenge is no longer ACTIVE, so it can
                                                     // no longer be focused - clear the pref rather than leave it
                                                     // stale (HubViewModel would self-heal this anyway, but this
-                                                    // avoids the round-trip).
-                                                    outcome.outcomes.filterIsInstance<ChallengeOutcome.Completed>()
-                                                        .filter { it.type == ChallengeType.ROUTE }
-                                                        .forEach { preferencesRepository.clearFocusedRouteChallengeId() }
+                                                    // avoids the round-trip). Only when the completed one *is* the
+                                                    // focused one: finishing some other Route challenge must not
+                                                    // unfocus the one the pilot picked.
+                                                    val focusedId = preferencesRepository.getFocusedRouteChallengeId()
+                                                    if (outcome.outcomes.any {
+                                                            it is ChallengeOutcome.Completed &&
+                                                                it.type == ChallengeType.ROUTE &&
+                                                                it.challengeId == focusedId
+                                                        }
+                                                    ) {
+                                                        preferencesRepository.clearFocusedRouteChallengeId()
+                                                    }
 
                                                     navController.navigateFrom(backStackEntry, Screen.ChallengeOutcome.route) {
                                                         popUpTo(Screen.ArrivalCelebration.route) { inclusive = true }

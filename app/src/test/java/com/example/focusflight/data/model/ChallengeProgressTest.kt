@@ -327,7 +327,7 @@ class ChallengeProgressTest {
         )
         val progress = continents.resolveSetMemberProgress()
         org.junit.Assert.assertNotNull(progress)
-        assertEquals(7, progress!!.size)
+        assertEquals(6, progress!!.size) // Antarctica is not a member: no route reaches it
 
         val eu = progress.find { it.id == "EU" }
         org.junit.Assert.assertNotNull(eu)
@@ -343,5 +343,25 @@ class ChallengeProgressTest {
         org.junit.Assert.assertNotNull(na)
         assertEquals("North America", na!!.displayName)
         org.junit.Assert.assertFalse(na.isVisited)
+    }
+}
+
+class SetDefinitionResolutionTest {
+    @org.junit.Test
+    fun `a set row started with seven continents resolves against the current six`() {
+        val row = Challenge(
+            userId = 1,
+            type = ChallengeType.SET_COMPLETION,
+            source = ChallengeSource.CURATED,
+            name = "Visit All Continents",
+            setCatalogId = CuratedChallengeSets.ALL_CONTINENTS.catalogId,
+            setMemberKind = SetMemberKind.CONTINENT,
+            setTotalMembers = 7,
+            visitedSetMembers = setOf("EU", "AS")
+        )
+        val resolved = row.withSetDefinitionResolved()
+        org.junit.Assert.assertEquals(6, resolved.setTotalMembers)
+        org.junit.Assert.assertEquals(setOf("EU", "AS"), resolved.visitedSetMembers)
+        org.junit.Assert.assertFalse(CuratedChallengeSets.ALL_CONTINENTS.members.contains("AN"))
     }
 }

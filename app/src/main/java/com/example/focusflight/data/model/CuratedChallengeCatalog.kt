@@ -121,7 +121,7 @@ object CuratedChallengeCatalog {
         CuratedChallengeTemplate(
             catalogId = "set_all_continents",
             name = CuratedChallengeSets.ALL_CONTINENTS.displayName,
-            description = "Land on all 7 continents across the globe.",
+            description = "Land on all six inhabited continents across the globe.",
             type = ChallengeType.SET_COMPLETION,
             iconName = "public",
             setDefinition = CuratedChallengeSets.ALL_CONTINENTS
@@ -187,7 +187,7 @@ object CuratedChallengeCatalog {
         CuratedChallengeTemplate(
             catalogId = "distance_planetary_core",
             name = "Planetary Core",
-            description = "Fly a cumulative 7,920 miles (12,742 km) under this challenge (the Earth's diameter).",
+            description = "Fly a cumulative 7,920 miles under this challenge (the Earth's diameter).",
             type = ChallengeType.DISTANCE,
             iconName = "public",
             targetDistanceKm = 12_742.0
@@ -195,7 +195,7 @@ object CuratedChallengeCatalog {
         CuratedChallengeTemplate(
             catalogId = "distance_around_the_earth",
             name = "Around the Earth",
-            description = "Fly a cumulative 24,901 miles (40,075 km) under this challenge (the Earth's circumference).",
+            description = "Fly a cumulative 24,901 miles under this challenge (the Earth's circumference).",
             type = ChallengeType.DISTANCE,
             iconName = "explore",
             targetDistanceKm = 40_075.0
@@ -203,7 +203,7 @@ object CuratedChallengeCatalog {
         CuratedChallengeTemplate(
             catalogId = "distance_50k_club",
             name = "50k Miles Club",
-            description = "Fly a cumulative 50,000 miles (80,467 km) under this challenge to earn gold airline status.",
+            description = "Fly a cumulative 50,000 miles under this challenge to earn gold airline status.",
             type = ChallengeType.DISTANCE,
             iconName = "military_tech",
             targetDistanceKm = 80_467.0

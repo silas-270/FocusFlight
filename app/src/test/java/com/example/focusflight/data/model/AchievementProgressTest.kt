@@ -69,7 +69,8 @@ class AchievementProgressTest {
     fun `all-continents progress counts continents with at least one visited country`() {
         val geo = VisitedGeography(
             visitedCountries = setOf("EU1", "AF1"),
-            countryToContinent = emptyMap(),
+            countryToContinent = listOf("EU1", "EU2", "EU3").associateWith { "EU" } +
+                listOf("AF1", "AF2", "AF3").associateWith { "AF" },
             continentStats = listOf(
                 continentStats("EU", 5, setOf("EU1")),
                 continentStats("AF", 5, setOf("AF1")),
@@ -142,7 +143,8 @@ class AchievementProgressTest {
     fun `all-countries progress is total visited over total countries across all continents`() {
         val geo = VisitedGeography(
             visitedCountries = setOf("EU1", "AF1"),
-            countryToContinent = emptyMap(),
+            countryToContinent = listOf("EU1", "EU2", "EU3").associateWith { "EU" } +
+                listOf("AF1", "AF2", "AF3").associateWith { "AF" },
             continentStats = listOf(
                 continentStats("EU", 3, setOf("EU1")),
                 continentStats("AF", 3, setOf("AF1"))
@@ -168,7 +170,7 @@ class AchievementProgressTest {
 
         val longHaul = AchievementProgress.evaluateDistance(history)
             .single { it.id == "dist_5000_long_haul" }
-        assertEquals(9000.0, longHaul.current, 0.001)
+        assertEquals(9000.0 * 0.621371, longHaul.current, 0.01) // reported in miles
         assertTrue(longHaul.isUnlocked)
     }
 
@@ -185,7 +187,8 @@ class AchievementProgressTest {
         val roundTheWorld = results.single { it.id == "dist_24901_around_the_earth" }
 
         // Only the STORY flight's 3,000 km counts - not the 100,000 km of FREE/CHALLENGE flying.
-        assertEquals(3000.0, longHaul.current, 0.001)
+        // Reported in miles.
+        assertEquals(3000.0 * 0.621371, longHaul.current, 0.01)
         assertFalse(longHaul.isUnlocked)
         assertFalse(roundTheWorld.isUnlocked)
     }
@@ -367,13 +370,16 @@ class AchievementProgressTest {
     }
 
     @Test
-    fun `all-continents members cover the seven standard continent codes`() {
-        val members = GeographicAchievementGoal.AllContinents.memberProgress(africaGeo())
+    fun `all-continents members are exactly the continents the geography contains`() {
+        val geo = africaGeo()
+        val members = GeographicAchievementGoal.AllContinents.memberProgress(geo)
 
+        // Only continents the route network reaches, so the checklist matches the progress target.
         assertEquals(
-            CuratedChallengeSets.ALL_CONTINENTS.members,
+            geo.continentStats.map { it.continentCode }.toSet(),
             members.map { it.id }.toSet()
         )
+        assertTrue(members.all { it.id in CuratedChallengeSets.ALL_CONTINENTS.members })
         // Africa has visits; nothing else in this geography does.
         assertEquals(listOf("AF"), members.filter { it.isVisited }.map { it.id })
     }

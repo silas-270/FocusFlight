@@ -32,8 +32,9 @@ suspend fun loadRouteContext(
     // process down - and neither has anything better to do with the failure than carry on.
     val route = if (origin != null && dest != null) {
         try {
-            airportRepository.getOutboundRoutes(originIata = origin.iataCode, searchQuery = destIata)
-                .find { it.destIata == destIata }
+            // findRoute, not the bookable list: this flight is already booked, and its destination
+            // may since have been hidden from new bookings (see AirportRepository.findRoute).
+            airportRepository.findRoute(origin.iataCode, destIata)
         } catch (e: AirportDataException) {
             android.util.Log.e("RouteContext", "Route lookup failed for $originIata->$destIata", e)
             null
