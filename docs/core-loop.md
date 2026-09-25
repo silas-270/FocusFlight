@@ -83,7 +83,14 @@ The screen also:
 - Offers camera modes (Free / Chase / Cockpit) and map styles (dark basemap / satellite).
 - Can be paused. A pause saves the camera pose and elapsed time so the flight resumes in
   the view it was left in. Which slot the paused flight is written to depends on the mode
-  — see [modes.md](modes.md).
+  — see [modes.md](modes.md). The pilot leaves through the settings panel's
+  SLIDE TO LEAVE control, or system back. Both open a "LEAVE FLIGHT?" dialog with RESUME as
+  the primary button. The dialog says where the flight can be resumed, which depends on the
+  mode: the Hub for Story, Free Mode on Challenges for Free, and the challenge itself for a
+  challenge leg.
+- Plays a ~3 s hold once the timer reaches 00:00, before landing. During the hold the timer
+  reads "LANDING…", and settings and back are disabled, so the pilot can't leave a flight
+  that has already been flown without it being logged.
 
 The rank shown on arrival is a pure function of duration, computed here:
 
@@ -159,7 +166,11 @@ regardless.
 The plane animates off the top of the screen; 750 ms later the rank stamp lands, scaling
 down from 5× with a spring and fading in, timed with a haptic touchdown pulse. A photo of
 the destination city, prefetched during the flight, is shown behind it when the Pexels
-call succeeded.
+call succeeded. The screen greets the pilot with "Welcome to <city>", looked up from the
+destination IATA, and labels the flight's duration "FOCUSED FOR". Its button reads
+CONTINUE, because it leads to the Challenge Outcome screen when a challenge moved. The button
+only responds once it has faded in, and it disables itself after the first tap while the
+landing result is awaited.
 
 ## What the loop does not do
 

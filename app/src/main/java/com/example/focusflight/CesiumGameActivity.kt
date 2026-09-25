@@ -684,6 +684,13 @@ class CesiumGameActivity : GameActivity() {
                                 // prefetch well before this screen is reached, same as how
                                 // landingResultChannel.result.value is read below at line ~639.
                                 val destPhotoUrl = destinationPhotoChannel.url.value
+                                // For "Welcome to <city>". Looked up rather than passed in the route,
+                                // where a free-text city name would need escaping.
+                                val destCity by androidx.compose.runtime.produceState<String?>(null, destIata) {
+                                    value = withContext(Dispatchers.IO) {
+                                        runCatching { airportRepository.getAirportByIata(destIata)?.municipality }.getOrNull()
+                                    }
+                                }
 
                                 ArrivalCelebrationScreen(
                                     flightNo = flightNo,
@@ -691,6 +698,7 @@ class CesiumGameActivity : GameActivity() {
                                     durationMin = durationMin,
                                     rank = rank,
                                     destPhotoUrl = destPhotoUrl,
+                                    destCity = destCity,
                                     onContinue = {
                                         // mechanics.md's post-landing pipeline step 5: the rank stamp above
                                         // always shows first, unchanged - this is the "always sequenced,
@@ -762,6 +770,7 @@ class CesiumGameActivity : GameActivity() {
                                 }
                                 ChallengeOutcomeScreen(
                                     outcomes = outcomes,
+                                    loadChallenge = challengeRepository::getChallenge,
                                     onContinue = {
                                         // Any completion (even mixed with merely-advanced
                                         // challenges) sends the pilot to Challenges instead of
