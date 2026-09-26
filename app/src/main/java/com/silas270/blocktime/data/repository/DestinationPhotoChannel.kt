@@ -5,7 +5,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * Bridges the prefetched Pexels destination photo URL across the InFlight -> ArrivalCelebration
+ * Bridges the prefetched Pexels destination photo (and its credit) across the InFlight -> ArrivalCelebration
  * navigation hop, the same way [LandingResultChannel] bridges the challenge-check result across
  * the same hop. A plain nav arg can't carry a photo URL - it contains `:`, `/`, `?`, `&`, which
  * would break `Screen.kt`'s un-encoded path-segment/query-param convention - and like the landing
@@ -14,22 +14,22 @@ import kotlinx.coroutines.flow.asStateFlow
  * caching layer exists here at all).
  *
  * Unlike [LandingResultChannel] there is no `Pending` sentinel: nothing ever awaits resolution
- * here. `ArrivalCelebrationScreen` takes a synchronous snapshot of [url] when composed and falls
+ * here. `ArrivalCelebrationScreen` takes a synchronous snapshot of [photo] when composed and falls
  * back to the flat background immediately if it's still null - not-yet-resolved, no match, and a
  * failed fetch are all indistinguishable and all just mean "no photo".
  */
 class DestinationPhotoChannel {
-    private val _url = MutableStateFlow<String?>(null)
-    val url: StateFlow<String?> = _url.asStateFlow()
+    private val _photo = MutableStateFlow<DestinationPhoto?>(null)
+    val photo: StateFlow<DestinationPhoto?> = _photo.asStateFlow()
 
     /** Call at the start of every new flight (`InFlightViewModel.init`), same as
      *  `LandingResultChannel.reset()`, so a stale photo from a previous flight's destination can
      *  never leak into this one's arrival screen. */
     fun reset() {
-        _url.value = null
+        _photo.value = null
     }
 
-    fun publish(url: String?) {
-        _url.value = url
+    fun publish(photo: DestinationPhoto?) {
+        _photo.value = photo
     }
 }

@@ -26,7 +26,12 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -35,6 +40,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.silas270.blocktime.ui.components.FocusButton
 import com.silas270.blocktime.ui.components.CaptionLabel
+import com.silas270.blocktime.data.repository.DestinationPhoto
+import androidx.compose.foundation.clickable
 import com.silas270.blocktime.ui.theme.*
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
@@ -57,8 +64,9 @@ fun ArrivalCelebrationScreen(
     rank: String,
     /** Prefetched by `InFlightViewModel` during the flight and handed off via
      *  `DestinationPhotoChannel` - null means "not resolved, no match, or fetch failed", all of
-     *  which look identical here: fall back to the flat [Midnight] background below, silently. */
-    destPhotoUrl: String? = null,
+     *  which look identical here: fall back to the flat [Midnight] background below, silently.
+     *  When present, its photographer credit is shown above CONTINUE (Pexels requires it). */
+    destPhoto: DestinationPhoto? = null,
     /** The destination's city for "Welcome to …", looked up by the caller from [destIata] (it
      *  can't travel in the route string). Null until resolved, or if unknown: the IATA code
      *  stands in. */
@@ -126,11 +134,11 @@ fun ArrivalCelebrationScreen(
         contentAlignment = Alignment.Center
     ) {
         // Fullscreen Destination Landmark Photo (bleeds edge-to-edge behind system bars)
-        if (destPhotoUrl != null) {
+        if (destPhoto != null) {
             val context = LocalContext.current
             AsyncImage(
                 model = ImageRequest.Builder(context)
-                    .data(destPhotoUrl)
+                    .data(destPhoto.imageUrl)
                     .allowHardware(false)
                     .build(),
                 contentDescription = null,
@@ -407,6 +415,18 @@ fun ArrivalCelebrationScreen(
 
             Spacer(modifier = Modifier.weight(1f))
 
+            if (destPhoto != null) {
+                PhotoCredit(
+                    photo = destPhoto,
+                    // Same gate as CONTINUE: no stray tap opens a browser before it has faded in.
+                    enabled = { fade >= 0.99f },
+                    modifier = Modifier
+                        .align(Alignment.Start)
+                        .graphicsLayer { alpha = fade }
+                )
+                Spacer(modifier = Modifier.height(Spacing.Small))
+            }
+
             // CONTINUE rather than "ENTER HUB": when the landing moved a challenge it leads to
             // the Challenge Outcome screen first. Taps only count once the button has faded in
             // - while it's still invisible a stray tap would skip the whole celebration.
@@ -420,5 +440,47 @@ fun ArrivalCelebrationScreen(
             )
         }
         }
+    }
+}
+
+/**
+ * The photographer credit Pexels' API guidelines require, set like a gallery placard on the
+ * photo's lower-left: one line of small serif - "Photo by *name* on Pexels", the name in the
+ * italic of "Welcome to …". Deliberately sentence case and small so it
+ * reads as part of the photo rather than as another all-caps label like "FOCUSED FOR". Tapping it
+ * opens the photo's own Pexels page (or Pexels itself when the response had no page).
+ */
+@Composable
+private fun PhotoCredit(photo: DestinationPhoto, enabled: () -> Boolean, modifier: Modifier = Modifier) {
+    val uriHandler = LocalUriHandler.current
+    val link = photo.photoPageUrl ?: "https://www.pexels.com"
+    val photographer = photo.photographer?.takeIf { it.isNotBlank() }
+    val credit = buildAnnotatedString {
+        if (photographer != null) {
+            append("Photo by ")
+            withStyle(SpanStyle(fontStyle = FontStyle.Italic, color = OffWhite.copy(alpha = 0.85f))) {
+                append(photographer)
+            }
+            append(" on Pexels")
+        } else {
+            append("Photo from Pexels")
+        }
+    }
+    Box(
+        modifier = modifier
+            .minimumInteractiveComponentSize()
+            .clickable(onClickLabel = "Open photo on Pexels") {
+                if (enabled()) runCatching { uriHandler.openUri(link) }
+            }
+            .padding(vertical = Spacing.Small),
+        contentAlignment = Alignment.CenterStart
+    ) {
+        Text(
+            text = credit,
+            style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Serif),
+            color = Haze,
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+        )
     }
 }

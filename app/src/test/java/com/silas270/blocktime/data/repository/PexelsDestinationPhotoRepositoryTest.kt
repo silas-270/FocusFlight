@@ -9,7 +9,7 @@ class PexelsDestinationPhotoRepositoryTest {
     private val repository = PexelsDestinationPhotoRepository(apiKey = "test-key")
 
     @Test
-    fun `parseHighResPhotoUrl returns large2x url when available`() {
+    fun `parseHighResPhoto returns large2x url when available`() {
         val json = """
             {
                 "photos": [
@@ -26,12 +26,12 @@ class PexelsDestinationPhotoRepositoryTest {
         """.trimIndent()
         assertEquals(
             "https://images.pexels.com/photos/1/large2x.jpeg",
-            repository.parseHighResPhotoUrl(json, "Lubango")
+            repository.parseHighResPhoto(json, "Lubango")?.imageUrl
         )
     }
 
     @Test
-    fun `parseHighResPhotoUrl prioritizes photo with matching city in alt description`() {
+    fun `parseHighResPhoto prioritizes photo with matching city in alt description`() {
         val json = """
             {
                 "photos": [
@@ -49,18 +49,52 @@ class PexelsDestinationPhotoRepositoryTest {
         """.trimIndent()
         assertEquals(
             "https://images.pexels.com/photos/lubango.jpeg",
-            repository.parseHighResPhotoUrl(json, "Lubango")
+            repository.parseHighResPhoto(json, "Lubango")?.imageUrl
         )
     }
 
     @Test
-    fun `parseHighResPhotoUrl returns null when photos array is empty`() {
-        assertNull(repository.parseHighResPhotoUrl("""{"photos":[],"total_results":0}""", "Lubango"))
+    fun `parseHighResPhoto carries the photographer and photo page for the credit`() {
+        val json = """
+            {
+                "photos": [
+                    {
+                        "alt": "Lubango skyline",
+                        "photographer": "Joey Farina",
+                        "url": "https://www.pexels.com/photo/lubango-skyline-2014422/",
+                        "src": { "large2x": "https://images.pexels.com/photos/1/large2x.jpeg" }
+                    }
+                ]
+            }
+        """.trimIndent()
+        assertEquals(
+            DestinationPhoto(
+                imageUrl = "https://images.pexels.com/photos/1/large2x.jpeg",
+                photographer = "Joey Farina",
+                photoPageUrl = "https://www.pexels.com/photo/lubango-skyline-2014422/"
+            ),
+            repository.parseHighResPhoto(json, "Lubango")
+        )
     }
 
     @Test
-    fun `parseHighResPhotoUrl returns null on malformed json`() {
-        assertNull(repository.parseHighResPhotoUrl("not json at all", "Lubango"))
+    fun `parseHighResPhoto leaves the credit fields null when the response has none`() {
+        val json = """
+            { "photos": [ { "photographer": "  ", "src": { "large2x": "https://images.pexels.com/photos/1/large2x.jpeg" } } ] }
+        """.trimIndent()
+        val photo = repository.parseHighResPhoto(json, "Lubango")
+        assertNull(photo?.photographer)
+        assertNull(photo?.photoPageUrl)
+    }
+
+    @Test
+    fun `parseHighResPhoto returns null when photos array is empty`() {
+        assertNull(repository.parseHighResPhoto("""{"photos":[],"total_results":0}""", "Lubango"))
+    }
+
+    @Test
+    fun `parseHighResPhoto returns null on malformed json`() {
+        assertNull(repository.parseHighResPhoto("not json at all", "Lubango"))
     }
 
     @Test
