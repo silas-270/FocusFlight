@@ -875,7 +875,7 @@ fun InFlightScreen(
             showExitConfirm = false
             viewModel.startTimer()
         }
-        ScrimCardModal(onScrimTap = resume) {
+        ScrimCardModal(onScrimTap = resume, portraitWidth = true) {
             ModalTitle("LEAVE FLIGHT?")
             Spacer(modifier = Modifier.height(8.dp))
             Text(
