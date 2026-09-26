@@ -1,21 +1,27 @@
-# Add project specific ProGuard rules here.
-# You can control the set of applied configuration files using the
-# proguardFiles setting in build.gradle.
-#
-# For more details, see
-#   http://developer.android.com/guide/developing/tools/proguard.html
+# R8 rules for the release build. The JNI bridge (CesiumLiveJniBridge's `external fun`s) needs
+# nothing here: the default proguard-android-optimize.txt keeps native method names, and the
+# Rust side never calls back into Java by name.
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+# JNA (engine/headless/CesiumHeadlessJnaBindings.kt) reflects on everything it touches: the
+# Library interface becomes a runtime proxy, and Structure fields are looked up by the names in
+# @FieldOrder. JNA's own classes are also looked up from its native dispatch code.
+-keep class com.sun.jna.** { *; }
+-keep class * extends com.sun.jna.Structure { *; }
+-keep interface * extends com.sun.jna.Library { *; }
+-dontwarn java.awt.**
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+# Gson fills PexelsDestinationPhotoRepository's response classes by field name, so those names
+# must match the Pexels JSON.
+-keep class com.silas270.blocktime.data.repository.PexelsSearchResponse { <fields>; <init>(...); }
+-keep class com.silas270.blocktime.data.repository.PexelsPhoto { <fields>; <init>(...); }
+-keep class com.silas270.blocktime.data.repository.PexelsPhotoSrc { <fields>; <init>(...); }
 
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
+# Debug logging stays out of release builds. Log.i/w/e are kept.
+-assumenosideeffects class android.util.Log {
+    public static int v(...);
+    public static int d(...);
+}
+
+# Readable crash stack traces in Play Console (the mapping file is uploaded with the bundle).
+-keepattributes SourceFile,LineNumberTable
+-renamesourcefileattribute SourceFile
