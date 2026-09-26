@@ -131,7 +131,7 @@ The Account screen ("passport") is the read-only view of everything derived:
 
 | Surface | Source |
 |---|---|
-| Visited-country map | `VisitedGeography` over `world-map.svg`, via `WorldMapParser` and a Robinson projection |
+| Visited-country map | `VisitedGeography` over `world-map.svg`, via `WorldMapParser` and `WorldMapProjection` |
 | Stats grid | `FlightStats` — `totalFlights`, `totalMinutes`, `airportsVisited` |
 | Highlights row | `FlightHighlights` — longest flight, most-visited airport, and total distance as a multiple of the equator's circumference |
 | Badge grid | `AchievementBoard`, families collapsed into tiers |
