@@ -38,8 +38,26 @@ android {
         )
     }
 
+    // The Play upload key. Its path and passwords live in local.properties (RELEASE_STORE_FILE,
+    // RELEASE_STORE_PASSWORD, RELEASE_KEY_ALIAS, RELEASE_KEY_PASSWORD), never in the repo. A
+    // machine without them still builds everything, just with an unsigned release.
+    val releaseSigningProperties = listOf(
+        "RELEASE_STORE_FILE", "RELEASE_STORE_PASSWORD", "RELEASE_KEY_ALIAS", "RELEASE_KEY_PASSWORD"
+    ).associateWith { localProperties.getProperty(it)?.takeIf { value -> value.isNotBlank() } }
+    val releaseSigning = if (releaseSigningProperties.values.all { it != null }) {
+        signingConfigs.create("release") {
+            storeFile = file(releaseSigningProperties.getValue("RELEASE_STORE_FILE")!!)
+            storePassword = releaseSigningProperties.getValue("RELEASE_STORE_PASSWORD")
+            keyAlias = releaseSigningProperties.getValue("RELEASE_KEY_ALIAS")
+            keyPassword = releaseSigningProperties.getValue("RELEASE_KEY_PASSWORD")
+        }
+    } else {
+        null
+    }
+
     buildTypes {
         release {
+            signingConfig = releaseSigning
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

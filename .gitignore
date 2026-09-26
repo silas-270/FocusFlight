@@ -22,3 +22,7 @@ perf_runs/
 
 # Python bytecode from the tools/ scripts
 __pycache__/
+
+# Release signing keys
+*.jks
+*.keystore
