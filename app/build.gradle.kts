@@ -31,6 +31,13 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
+        // Only the ABIs cargoNdkBuild compiles libcesium_rs.so for. Without this, JNA's 32-bit
+        // libjnidispatch.so pulls armeabi-v7a/x86 into the bundle, Play serves the app to 32-bit
+        // devices, and it crashes on launch looking for the engine library.
+        ndk {
+            abiFilters += listOf("arm64-v8a", "x86_64")
+        }
+
         buildConfigField(
             "String",
             "PEXELS_API_KEY",
@@ -208,7 +215,7 @@ ksp {
 }
 
 dependencies {
-    implementation("net.java.dev.jna:jna:5.14.0@aar")
+    implementation("net.java.dev.jna:jna:5.19.1@aar")
     implementation("androidx.games:games-activity:3.0.4")
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("androidx.core:core-splashscreen:1.2.0")
