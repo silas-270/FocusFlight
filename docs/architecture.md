@@ -143,10 +143,18 @@ Two things go outbound:
   and every headless render use the vector map built into the `.so` and need nothing.
   CARTO needs an API key, which `cargoNdkBuild` passes to the Rust build from
   `local.properties`; without it every Standard tile comes back stamped "API KEY REQUIRED".
+  Esri's licensed imagery service needs `ESRI_API_KEY` the same way; without it the engine
+  falls back to Esri's keyless service, which is not licensed for commercial use.
 - **Destination photo.** `PexelsDestinationPhotoRepository` fetches a photo of the
-  destination city for the arrival screen. The API key comes from `local.properties` via a
+  destination city for the arrival screen, with its photographer, which the arrival screen
+  credits above CONTINUE as Pexels requires. The API key comes from `local.properties` via a
   `buildConfigField`, so it never enters the repo. A failure is silent and the arrival
   screen renders without a photo.
+
+**Credits are part of adding a source.** Every third-party source the app shows is listed in
+`CreditsCatalog` (Settings → Credits & licenses), and a network map style also needs its on-map
+line in `InFlightScreen`'s `MapAttribution`, because CARTO and Esri require the credit on the map
+while their tiles show. A new source without both is not finished.
 
 **Offline mode.** `OfflineModeController` (`data/network/`) is the single source of truth.
 It combines two inputs:
@@ -217,7 +225,7 @@ resulting `.so` into `jniLibs/arm64-v8a/`. It needs a CesiumRS checkout — see
 [engine.md](engine.md) for the environment variables and the profiling build.
 
 Machine-local configuration lives in `local.properties` (gitignored): SDK paths,
-`PEXELS_API_KEY` and `CARTO_API_KEY`.
+`PEXELS_API_KEY`, `CARTO_API_KEY` and `ESRI_API_KEY`.
 
 ## Testing
 
