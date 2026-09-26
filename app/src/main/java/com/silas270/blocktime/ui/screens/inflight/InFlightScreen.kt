@@ -79,7 +79,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.input.pointer.pointerInteropFilter
+import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -157,6 +159,9 @@ fun InFlightScreen(
     // Scenic mode: clears the HUD down to a glass settings button and a timer-only
     // pill, so the view isn't cluttered by the full flight-info sheet.
     var scenicMode by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        InFlightDebugControl.scenicMode.collect { scenicMode = it }
+    }
 
     // Measured live from the standard-mode peek timer's actual on-screen position
     // (see its onGloballyPositioned below) so the scenic-mode pill can reproduce the
@@ -613,6 +618,7 @@ fun InFlightScreen(
             // (Removed 2D canvas, the Rust wgpu engine renders underneath this Compose layer)
 
             // --- Layer 2: Cockpit HUD Top Bar controls ---
+            val scrimAlpha by animateFloatAsState(if (scenicMode) 0f else 1f, label = "hudScrimAlpha")
             // A soft dark scrim under the top bar, so its buttons sit on a steady backdrop
             // whatever the engine draws up there - over bright sky the top edge otherwise
             // turned into a hard white strip right behind them.
@@ -620,6 +626,9 @@ fun InFlightScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + HudTopScrimHeight)
+                    // Scenic mode drops it: the bare shadowed icons there hold up on their own,
+                    // and a darkened sky is exactly what a clean screenshot shouldn't have.
+                    .alpha(scrimAlpha)
                     .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.35f), Color.Transparent)))
             )
             val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -658,26 +667,25 @@ fun InFlightScreen(
                         )
                     }
 
-                    // Scenic-mode toggle: clears the HUD down to a glass settings
-                    // button and a timer-only pill. Drawn on the same surface as the
-                    // settings button beside it - bare, its icon vanished against the
-                    // globe in the light theme, where OffWhite is navy.
+                    // Scenic-mode toggle: clears the HUD down to bare icons and the timer.
+                    // Drawn on the same surface as the settings button beside it - bare in
+                    // the full HUD, its icon vanished against the globe in the light theme,
+                    // where OffWhite is navy.
                     HudButton(
                         onClick = { scenicMode = !scenicMode },
                         surface = hudButtonSurface(scenicMode)
                     ) {
                         // Fullscreen glyphs rather than the eye: the eye is the CHASE camera and the
                         // crossed-out eye the HIDDEN route line in the settings panel.
-                        Icon(
+                        HudIcon(
                             imageVector = if (scenicMode) Icons.Outlined.FullscreenExit else Icons.Outlined.Fullscreen,
                             contentDescription = if (scenicMode) "Show flight HUD" else "Hide flight HUD",
-                            tint = if (scenicMode) Silver else OffWhite,
-                            modifier = Modifier.size(20.dp)
+                            scenic = scenicMode
                         )
                     }
 
                     // Flight settings button (camera view + leave slider).
-                    // Restyled to a grey glass look in scenic mode. Stands down while
+                    // Just the shadowed icon in scenic mode. Stands down while
                     // landing, since everything behind it is moot by then.
                     HudButton(
                         onClick = { showSettings = true },
@@ -686,11 +694,10 @@ fun InFlightScreen(
                     ) {
                         // Tune, not an airplane: the airplane read as "flight mode" and is also
                         // the COCKPIT camera icon inside the panel this opens.
-                        Icon(
+                        HudIcon(
                             imageVector = Icons.Outlined.Tune,
                             contentDescription = "Flight Settings",
-                            tint = if (scenicMode) Silver else OffWhite,
-                            modifier = Modifier.size(20.dp)
+                            scenic = scenicMode
                         )
                     }
                 }
@@ -709,29 +716,42 @@ fun InFlightScreen(
                 (timerBottomInsetFromScreen - ScenicPillTextVerticalPadding).coerceAtLeast(0.dp)
 
             // --- Map credit: CARTO and Esri require it on the map while their tiles show ---
-            // Just above the sheet's peek, or above the pill in scenic mode, left-aligned with the
-            // sheet's content so it never meets the centered timer. The settings overlay covers
-            // the map, so the credit goes with it.
+            // Barely there and left-aligned, like the credit on any map app. Just above the sheet's
+            // peek, in line with the sheet's content; in portrait scenic mode just above the timer.
+            // Landscape scenic mode tucks it into the bottom-left corner as a short stack, its last
+            // line level with the bottom of the timer's digits, so the centre stays clear. The
+            // settings overlay covers the map, so the credit goes with it.
             if (!showSettings) {
+                val cornerCredit = scenicMode && isLandscape
                 MapAttribution(
                     style = effectiveMapStyle,
+                    multiline = cornerCredit,
                     modifier = Modifier
                         .align(Alignment.BottomStart)
-                        .padding(
-                            start = sheetSideMargin + Spacing.Large,
-                            end = sheetSideMargin + Spacing.Large,
-                            bottom = if (scenicMode) {
-                                pillBottomPadding + scenicPillHeight + Spacing.Small
+                        .then(
+                            if (cornerCredit) {
+                                Modifier
+                                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
+                                    .padding(start = Spacing.Large, bottom = pillBottomPadding + ScenicPillTextVerticalPadding)
                             } else {
-                                // This Box already stops at the peek's top edge: the scaffold's
-                                // content padding is the peek height.
-                                Spacing.Small
+                                Modifier.padding(
+                                    start = sheetSideMargin + Spacing.Large,
+                                    end = sheetSideMargin + Spacing.Large,
+                                    bottom = if (scenicMode) {
+                                        // The timer box's own padding already spaces the two apart.
+                                        pillBottomPadding + scenicPillHeight
+                                    } else {
+                                        // This Box already stops at the peek's top edge: the
+                                        // scaffold's content padding is the peek height.
+                                        Spacing.Small
+                                    }
+                                )
                             }
                         )
                 )
             }
 
-            // --- Scenic mode: timer-only glass pill replacing the bottom sheet ---
+            // --- Scenic mode: the bare timer replacing the bottom sheet ---
             if (scenicMode) {
                 val scenicDensity = LocalDensity.current
                 Box(
@@ -740,24 +760,25 @@ fun InFlightScreen(
                         .padding(bottom = pillBottomPadding),
                     contentAlignment = Alignment.BottomCenter
                 ) {
-                    // Drawn like the glass buttons, so it acts like one: a tap brings the
-                    // flight HUD back.
+                    // No surface at all: light white digits straight on the map, held up by a soft
+                    // shadow. The padding is invisible touch area - a tap brings the flight HUD back.
                     Box(
                         modifier = Modifier
                             .onSizeChanged { scenicPillHeight = with(scenicDensity) { it.height.toDp() } }
-                            .glassSurface(RoundedCornerShape(50))
+                            .clip(RoundedCornerShape(50))
                             .clickable(onClickLabel = "Show flight HUD") { scenicMode = false }
                             .padding(horizontal = 24.dp, vertical = ScenicPillTextVerticalPadding)
                     ) {
                         Text(
                             text = if (landing) LandingLabel else formatRemainingTime(uiState.timeRemainingSeconds),
                             style = MaterialTheme.typography.displaySmall.copy(
-                                fontWeight = FontWeight.Black,
-                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Light,
+                                // Tabular digits, so the light face doesn't shuffle as it counts.
+                                fontFeatureSettings = "tnum",
                                 letterSpacing = 2.sp,
-                                shadow = GlassTextShadow
+                                shadow = ScenicTextShadow
                             ),
-                            color = Silver
+                            color = Color.White
                         )
                     }
                 }
@@ -1003,21 +1024,31 @@ private fun MapStyleOfflineHint(text: String) {
 /**
  * The on-map credit for the network map styles: CARTO's for Standard, Esri's for Satellite +
  * Terrain, nothing for the built-in offline map (Natural Earth, public domain). Deliberately
- * faint, one line and not clickable, so it reads like the credit line on any map app and never
- * takes a touch meant for the globe. Full credits live in Settings → Credits.
+ * small, barely visible, uncolored and not clickable - like the credit line on any map app - so it
+ * never competes with the view or takes a touch meant for the globe. [multiline] stacks it one
+ * party per line, for a corner. Full credits live in Settings → Credits.
  */
 @Composable
-private fun MapAttribution(style: Int, modifier: Modifier = Modifier) {
-    val text = when (style) {
+private fun MapAttribution(style: Int, multiline: Boolean, modifier: Modifier = Modifier) {
+    val credit = when (style) {
         CesiumLiveJniBridge.MAP_STYLE_STANDARD -> CreditsCatalog.CARTO_MAP_CREDIT
         CesiumLiveJniBridge.MAP_STYLE_SATELLITE_TERRAIN -> CreditsCatalog.ESRI_MAP_CREDIT
         else -> return
     }
+    // One line per party: "© CARTO" / "© OpenStreetMap contributors", "Powered by Esri" / sources.
+    val text = if (multiline) credit.replace(" © ", "\n© ").replace(" · ", "\n") else credit
     Text(
         text = text,
-        style = MaterialTheme.typography.labelSmall.copy(shadow = GlassTextShadow),
-        color = Silver.copy(alpha = 0.7f),
-        maxLines = 1,
+        style = MaterialTheme.typography.labelSmall.copy(
+            fontSize = 10.sp,
+            lineHeight = 13.sp,
+            fontWeight = FontWeight.Normal,
+            letterSpacing = 0.3.sp,
+            shadow = AttributionShadow
+        ),
+        color = Color.White.copy(alpha = 0.35f),
+        textAlign = TextAlign.Start,
+        maxLines = if (multiline) 2 else 1,
         overflow = TextOverflow.Ellipsis,
         modifier = modifier
     )
@@ -1027,7 +1058,7 @@ private fun MapAttribution(style: Int, modifier: Modifier = Modifier) {
  * The HUD's OFFLINE marker. Deliberately not shaped like the 40dp square buttons beside it (as
  * the shared [com.silas270.blocktime.ui.components.OfflineBadge] is, to sit in the Hub header):
  * a short, fully rounded pill with no click handler, so it reads as status rather than as a
- * control that does nothing. [iconOnly] is scenic mode's version - just the icon, on glass.
+ * control that does nothing. [iconOnly] is scenic mode's version - just the bare, shadowed icon.
  */
 @Composable
 private fun HudOfflineStatus(mode: NetworkMode, iconOnly: Boolean, modifier: Modifier = Modifier) {
@@ -1036,14 +1067,11 @@ private fun HudOfflineStatus(mode: NetworkMode, iconOnly: Boolean, modifier: Mod
     val description = if (dataSaver) "Offline: data saver on" else "Offline: no connection"
     val pill = RoundedCornerShape(50)
     if (iconOnly) {
-        Box(
-            modifier = modifier
-                .glassSurface(pill)
-                .padding(horizontal = 10.dp, vertical = 5.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(imageVector = icon, contentDescription = description, tint = Silver, modifier = Modifier.size(16.dp))
-        }
+        ShadowedIcon(
+            imageVector = icon,
+            contentDescription = description,
+            modifier = modifier.size(18.dp)
+        )
     } else {
         FocusBadge(
             text = "OFFLINE",
@@ -1056,15 +1084,49 @@ private fun HudOfflineStatus(mode: NetworkMode, iconOnly: Boolean, modifier: Mod
     }
 }
 
-/** The look of a top-bar button: solid in the full HUD, glass in scenic mode. */
+/** The look of a top-bar button: solid in the full HUD; in scenic mode no surface at all, just a
+ *  circle to clip the press ripple to. */
 private fun hudButtonSurface(scenicMode: Boolean): Modifier =
     if (scenicMode) {
-        Modifier.glassSurface(RoundedCornerShape(12.dp))
+        Modifier.clip(CircleShape)
     } else {
         Modifier
             .clip(RoundedCornerShape(12.dp))
             .background(DeepNavy)
     }
+
+/** A top-bar button's icon: OffWhite on the solid button, bare white with a shadow in scenic mode. */
+@Composable
+private fun HudIcon(imageVector: ImageVector, contentDescription: String, scenic: Boolean) {
+    if (scenic) {
+        ShadowedIcon(imageVector, contentDescription, Modifier.size(22.dp))
+    } else {
+        Icon(imageVector, contentDescription, tint = OffWhite, modifier = Modifier.size(20.dp))
+    }
+}
+
+/**
+ * A white icon with a soft dark halo, so it reads on bright sky and dark map alike without any
+ * surface behind it. The halo is a blurred black copy of the icon; blur needs API 31, and below
+ * that the copy sits exactly under the white icon and is simply hidden.
+ */
+@Composable
+private fun ShadowedIcon(imageVector: ImageVector, contentDescription: String, modifier: Modifier = Modifier) {
+    Box(modifier = modifier, contentAlignment = Alignment.Center) {
+        Icon(
+            imageVector = imageVector,
+            contentDescription = null,
+            tint = Color.Black.copy(alpha = 0.7f),
+            modifier = Modifier.matchParentSize().blur(4.dp, BlurredEdgeTreatment.Unbounded)
+        )
+        Icon(
+            imageVector = imageVector,
+            contentDescription = contentDescription,
+            tint = Color.White,
+            modifier = Modifier.matchParentSize()
+        )
+    }
+}
 
 /**
  * A 40dp top-bar button inside a 48dp touch target. The extra 4dp on each side is invisible and
@@ -2086,18 +2148,17 @@ private val HudTopScrimHeight = 96.dp
 // Space above the sheet's grab bar; the bar itself is SheetHandle's.
 private val PeekHandleTopPadding = 12.dp
 
-// How far the scenic-mode timer pill sits above the physical bottom edge. Chosen to
+// How far the scenic-mode timer sits above the physical bottom edge. Chosen to
 // approximate where the timer already sits in the normal collapsed sheet peek.
 private val ScenicPillBottomPadding = 36.dp
 
-// The scenic pill's vertical padding around its timer text.
+// The scenic timer's (invisible) vertical touch padding around its text.
 private val ScenicPillTextVerticalPadding = 10.dp
 
 // How much of the bottom sheet shows while collapsed (nav-bar inset included).
 private val SheetPeekHeight = 104.dp
 
-// Faked glassmorphism (translucent fill + grey border) used by the settings button
-// and timer pill in scenic mode. A real backdrop blur isn't possible here: the 3D
+// Faked glassmorphism (translucent fill + grey border) used by the network notice pill. A real backdrop blur isn't possible here: the 3D
 // engine renders into a SurfaceView, composited by SurfaceFlinger outside the
 // Compose/View draw pass, so no Compose-based blur can see it.
 // Fill and border are strong enough to hold up over the pale landscape sky and offline map,
@@ -2107,8 +2168,13 @@ private fun Modifier.glassSurface(shape: Shape): Modifier = this
     .background(Dim.copy(alpha = 0.55f), shape)
     .border(1.dp, Haze.copy(alpha = 0.5f), shape)
 
-// Soft shadow under glass-surface text, for the same bright-sky legibility.
-private val GlassTextShadow = Shadow(color = Color.Black.copy(alpha = 0.35f), blurRadius = 6f)
+// Soft shadow under text drawn straight on the map (the scenic timer and the map credit), so white
+// stays legible over bright sky with nothing behind it.
+private val ScenicTextShadow = Shadow(color = Color.Black.copy(alpha = 0.45f), blurRadius = 10f)
+
+// Just enough shadow to keep the faint map credit from vanishing on a bright sky - no more, or the
+// halo itself would make it stand out.
+private val AttributionShadow = Shadow(color = Color.Black.copy(alpha = 0.25f), blurRadius = 4f)
 
 // An instrument is just its dark display face - no card plate around it. Plates are what the
 // sheet's one tappable element (the flight-time readout) wears, so a plated instrument looked

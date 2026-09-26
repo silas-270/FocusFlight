@@ -867,6 +867,15 @@ class CesiumGameActivity : GameActivity() {
             androidx.core.content.ContextCompat.registerReceiver(this, object : android.content.BroadcastReceiver() {
                 override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
                     if (intent == null) return
+                    when (intent.getStringExtra("orientation")) {
+                        "landscape" -> requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                        "portrait" -> requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                        "auto" -> requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                    }
+                    if (intent.hasExtra("scenic")) {
+                        com.silas270.blocktime.ui.screens.inflight.InFlightDebugControl
+                            .setScenicMode(intent.getBooleanExtra("scenic", false))
+                    }
                     val navTarget = intent.getStringExtra("navigate")
                     if (!navTarget.isNullOrBlank()) {
                         Log.i("CesiumGameActivity", "Received broadcast to navigate to $navTarget")
