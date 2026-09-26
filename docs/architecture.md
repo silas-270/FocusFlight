@@ -225,7 +225,9 @@ resulting `.so` into `jniLibs/arm64-v8a/`. It needs a CesiumRS checkout — see
 [engine.md](engine.md) for the environment variables and the profiling build.
 
 Machine-local configuration lives in `local.properties` (gitignored): SDK paths,
-`PEXELS_API_KEY`, `CARTO_API_KEY` and `ESRI_API_KEY`.
+`PEXELS_API_KEY`, `CARTO_API_KEY` and `ESRI_API_KEY`, plus the Play upload key for release
+builds (`RELEASE_STORE_FILE`, `RELEASE_STORE_PASSWORD`, `RELEASE_KEY_ALIAS`,
+`RELEASE_KEY_PASSWORD`). Without those four the release build is simply left unsigned.
 
 ## Testing
 
