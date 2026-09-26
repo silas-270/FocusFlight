@@ -22,7 +22,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import com.silas270.blocktime.data.model.Airport
 import com.silas270.blocktime.data.model.FlightRoute
 import com.silas270.blocktime.ui.map.CountryPath
-import com.silas270.blocktime.ui.map.RobinsonProjection
+import com.silas270.blocktime.ui.map.WorldMapProjection
 import com.silas270.blocktime.ui.theme.MapCompletedContinentStroke
 import com.silas270.blocktime.ui.theme.MapGraticule
 import com.silas270.blocktime.ui.theme.MapOcean
@@ -133,7 +133,7 @@ private fun buildMergedMapPaths(
 }
 
 /**
- * World map drawn in Robinson projection using paths extracted from natural_earth_vectors.svg.
+ * World map drawn from paths extracted from natural_earth_vectors.svg.
  *
  * Visited countries are filled with Amber; unvisited countries are dark slate.
  */
@@ -228,7 +228,7 @@ fun InteractiveWorldMap(
 
                         // 3. Draw routes if origin is present
                         originAirport?.let { origin ->
-                            val (cxOrigin, cyOrigin) = RobinsonProjection.toSvgCoordinates(
+                            val (cxOrigin, cyOrigin) = WorldMapProjection.toSvgCoordinates(
                                 origin.lat.toFloat(),
                                 origin.lon.toFloat()
                             )
@@ -236,7 +236,7 @@ fun InteractiveWorldMap(
                             // Draw unselected routes
                             routes.forEach { route ->
                                 if (route.id != selectedRoute?.id) {
-                                    val (cxDest, cyDest) = RobinsonProjection.toSvgCoordinates(
+                                    val (cxDest, cyDest) = WorldMapProjection.toSvgCoordinates(
                                         route.destLat.toFloat(),
                                         route.destLon.toFloat()
                                     )
@@ -269,7 +269,7 @@ fun InteractiveWorldMap(
 
                             // Draw selected route
                             selectedRoute?.let { route ->
-                                val (cxDest, cyDest) = RobinsonProjection.toSvgCoordinates(
+                                val (cxDest, cyDest) = WorldMapProjection.toSvgCoordinates(
                                     route.destLat.toFloat(),
                                     route.destLon.toFloat()
                                 )
@@ -383,8 +383,8 @@ private fun arcControlPoint(x0: Float, y0: Float, x1: Float, y1: Float): Pair<Fl
 
 /** Center and zoom that fit origin, destination and the arc between them, with some margin. */
 private fun routeFraming(origin: Airport, route: FlightRoute): MapFraming {
-    val (ox, oy) = RobinsonProjection.toSvgCoordinates(origin.lat.toFloat(), origin.lon.toFloat())
-    val (dx, dy) = RobinsonProjection.toSvgCoordinates(route.destLat.toFloat(), route.destLon.toFloat())
+    val (ox, oy) = WorldMapProjection.toSvgCoordinates(origin.lat.toFloat(), origin.lon.toFloat())
+    val (dx, dy) = WorldMapProjection.toSvgCoordinates(route.destLat.toFloat(), route.destLon.toFloat())
     val (_, arcTopY) = arcControlPoint(ox, oy, dx, dy)
     val minX = minOf(ox, dx)
     val maxX = maxOf(ox, dx)
