@@ -132,6 +132,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.text.style.TextOverflow
+import com.silas270.blocktime.data.model.CreditsCatalog
 import android.content.res.Configuration
 import androidx.compose.ui.graphics.asAndroidPath
 import com.silas270.blocktime.audio.EngineSoundEngine
@@ -161,6 +162,8 @@ fun InFlightScreen(
     // (see its onGloballyPositioned below) so the scenic-mode pill can reproduce the
     // exact same gap to the bottom edge and the timer never jumps when toggling modes.
     var timerBottomInsetFromScreen by remember { mutableStateOf(ScenicPillBottomPadding) }
+    // The scenic pill's own height, so the map credit can sit just above it.
+    var scenicPillHeight by remember { mutableStateOf(0.dp) }
 
     // True from the moment the timer reads 00:00 until the arrival screen takes over: the
     // ~3 s end hold the ViewModel plays before it lands the flight (and the instant after a
@@ -315,7 +318,7 @@ fun InFlightScreen(
                 minTouchHeight = 0.dp
             )
         },
-        sheetPeekHeight = if (scenicMode) 0.dp else 104.dp,
+        sheetPeekHeight = if (scenicMode) 0.dp else SheetPeekHeight,
         containerColor = Color.Transparent, // Restored so globe is visible
         sheetContent = sheetContent@{
             if (scenicMode) return@sheetContent
@@ -365,7 +368,7 @@ fun InFlightScreen(
                     WindowInsets.statusBars.asPaddingValues().calculateTopPadding() -
                     HudTopBarReservedHeight -
                     sheetHandleHeight(PeekHandleTopPadding, 0.dp, minTouchHeight = 0.dp)
-                ).coerceAtLeast(104.dp)
+                ).coerceAtLeast(SheetPeekHeight)
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -394,7 +397,7 @@ fun InFlightScreen(
                 // below it already centers within the whole peek card.
                 val navBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
                 val peekDragHandleHeight = sheetHandleHeight(PeekHandleTopPadding, 0.dp, minTouchHeight = 0.dp)
-                val peekContentHeight = (104.dp - peekDragHandleHeight - navBarInset).coerceAtLeast(24.dp)
+                val peekContentHeight = (SheetPeekHeight - peekDragHandleHeight - navBarInset).coerceAtLeast(24.dp)
 
                 // Feeds the scenic-mode pill's bottom margin (see timerBottomInsetFromScreen
                 // above): measures the timer's actual on-screen bottom edge here so the pill
@@ -699,14 +702,38 @@ fun InFlightScreen(
                 onShown = viewModel::consumeNetworkNotice
             )
 
+            // Pill vertical padding sits between the scenic pill's own bottom edge and the text
+            // inside it, so back that out of the measured gap to land the text itself at the
+            // same screen-relative spot it occupied in standard mode.
+            val pillBottomPadding =
+                (timerBottomInsetFromScreen - ScenicPillTextVerticalPadding).coerceAtLeast(0.dp)
+
+            // --- Map credit: CARTO and Esri require it on the map while their tiles show ---
+            // Just above the sheet's peek, or above the pill in scenic mode, left-aligned with the
+            // sheet's content so it never meets the centered timer. The settings overlay covers
+            // the map, so the credit goes with it.
+            if (!showSettings) {
+                MapAttribution(
+                    style = effectiveMapStyle,
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(
+                            start = sheetSideMargin + Spacing.Large,
+                            end = sheetSideMargin + Spacing.Large,
+                            bottom = if (scenicMode) {
+                                pillBottomPadding + scenicPillHeight + Spacing.Small
+                            } else {
+                                // This Box already stops at the peek's top edge: the scaffold's
+                                // content padding is the peek height.
+                                Spacing.Small
+                            }
+                        )
+                )
+            }
+
             // --- Scenic mode: timer-only glass pill replacing the bottom sheet ---
             if (scenicMode) {
-                // Pill vertical padding (10dp) sits between the pill's own bottom edge and
-                // the text inside it, so back that out of the measured gap to land the text
-                // itself at the same screen-relative spot it occupied in standard mode.
-                val pillTextVerticalPadding = 10.dp
-                val pillBottomPadding =
-                    (timerBottomInsetFromScreen - pillTextVerticalPadding).coerceAtLeast(0.dp)
+                val scenicDensity = LocalDensity.current
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -717,9 +744,10 @@ fun InFlightScreen(
                     // flight HUD back.
                     Box(
                         modifier = Modifier
+                            .onSizeChanged { scenicPillHeight = with(scenicDensity) { it.height.toDp() } }
                             .glassSurface(RoundedCornerShape(50))
                             .clickable(onClickLabel = "Show flight HUD") { scenicMode = false }
-                            .padding(horizontal = 24.dp, vertical = pillTextVerticalPadding)
+                            .padding(horizontal = 24.dp, vertical = ScenicPillTextVerticalPadding)
                     ) {
                         Text(
                             text = if (landing) LandingLabel else formatRemainingTime(uiState.timeRemainingSeconds),
@@ -969,6 +997,29 @@ private fun MapStyleOfflineHint(text: String) {
         color = Haze,
         fontSize = 11.sp,
         fontFamily = FontFamily.Monospace
+    )
+}
+
+/**
+ * The on-map credit for the network map styles: CARTO's for Standard, Esri's for Satellite +
+ * Terrain, nothing for the built-in offline map (Natural Earth, public domain). Deliberately
+ * faint, one line and not clickable, so it reads like the credit line on any map app and never
+ * takes a touch meant for the globe. Full credits live in Settings → Credits.
+ */
+@Composable
+private fun MapAttribution(style: Int, modifier: Modifier = Modifier) {
+    val text = when (style) {
+        CesiumLiveJniBridge.MAP_STYLE_STANDARD -> CreditsCatalog.CARTO_MAP_CREDIT
+        CesiumLiveJniBridge.MAP_STYLE_SATELLITE_TERRAIN -> CreditsCatalog.ESRI_MAP_CREDIT
+        else -> return
+    }
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelSmall.copy(shadow = GlassTextShadow),
+        color = Silver.copy(alpha = 0.7f),
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = modifier
     )
 }
 
@@ -2038,6 +2089,12 @@ private val PeekHandleTopPadding = 12.dp
 // How far the scenic-mode timer pill sits above the physical bottom edge. Chosen to
 // approximate where the timer already sits in the normal collapsed sheet peek.
 private val ScenicPillBottomPadding = 36.dp
+
+// The scenic pill's vertical padding around its timer text.
+private val ScenicPillTextVerticalPadding = 10.dp
+
+// How much of the bottom sheet shows while collapsed (nav-bar inset included).
+private val SheetPeekHeight = 104.dp
 
 // Faked glassmorphism (translucent fill + grey border) used by the settings button
 // and timer pill in scenic mode. A real backdrop blur isn't possible here: the 3D

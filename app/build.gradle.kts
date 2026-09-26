@@ -9,7 +9,8 @@ plugins {
 
 // Untracked, gitignored dev-machine config (SDK paths etc.) - also where the API keys live, so
 // they never end up in the repo: PEXELS_API_KEY for the arrival-screen destination photo, and
-// CARTO_API_KEY for the engine's dark basemap (passed to the Rust build in cargoNdkBuild).
+// CARTO_API_KEY / ESRI_API_KEY for the engine's map tiles (passed to the Rust build in
+// cargoNdkBuild).
 val localProperties = Properties().apply {
     val localPropertiesFile = rootProject.file("local.properties")
     if (localPropertiesFile.exists()) {
@@ -143,11 +144,15 @@ tasks.register("cargoNdkBuild") {
             builder.directory(File(absoluteRustPath))
 
             builder.environment()["ANDROID_NDK_HOME"] = ndkDir
-            // CesiumRS reads this at compile time (`standard_imagery_url()`); without it the dark
-            // basemap's tiles come back stamped "API KEY REQUIRED". Left unset when the property
-            // is missing, so a CARTO_API_KEY exported in the shell still reaches cargo.
-            localProperties.getProperty("CARTO_API_KEY")?.takeIf { it.isNotBlank() }?.let {
-                builder.environment()["CARTO_API_KEY"] = it
+            // CesiumRS reads these at compile time: CARTO_API_KEY in `standard_imagery_url()`
+            // (without it the dark basemap's tiles come back stamped "API KEY REQUIRED") and
+            // ESRI_API_KEY in `satellite_imagery_url()` (without it satellite falls back to
+            // Esri's keyless, non-commercial service). Left unset when a property is missing, so
+            // a key exported in the shell still reaches cargo.
+            listOf("CARTO_API_KEY", "ESRI_API_KEY").forEach { name ->
+                localProperties.getProperty(name)?.takeIf { it.isNotBlank() }?.let {
+                    builder.environment()[name] = it
+                }
             }
             if (!isWindows) {
                 builder.environment()["PATH"] = "$userHome/.cargo/bin:" + System.getenv("PATH")

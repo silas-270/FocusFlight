@@ -15,7 +15,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -35,6 +39,7 @@ import com.silas270.blocktime.data.model.Airport
 import com.silas270.blocktime.data.model.ThemeMode
 import com.silas270.blocktime.ui.components.BackTopAppBar
 import com.silas270.blocktime.ui.components.SectionHeader
+import com.silas270.blocktime.ui.theme.Haze
 import com.silas270.blocktime.ui.theme.Midnight
 import com.silas270.blocktime.ui.theme.Spacing
 import com.silas270.blocktime.ui.viewmodel.account.AccountViewModel
@@ -70,6 +75,7 @@ fun SettingsScreen(
     var showReturningHomeModal by remember { mutableStateOf(false) }
     var showChangeHomeBase by remember { mutableStateOf(false) }
     var showWelcomeHome by remember { mutableStateOf(false) }
+    var showCredits by remember { mutableStateOf(false) }
     var homeBaseSetAirport by remember { mutableStateOf<Airport?>(null) }
     val homeBaseSearchQuery by viewModel.homeBaseSearchQuery.collectAsState()
     val homeBaseSearchResults by viewModel.homeBaseSearchResults.collectAsState()
@@ -142,6 +148,22 @@ fun SettingsScreen(
                         onChangeHomeBaseClick = { showChangeHomeBase = true }
                     )
                 }
+
+                item { SectionHeader(title = "ABOUT") }
+                item {
+                    SettingsRow(
+                        icon = Icons.Outlined.Info,
+                        title = "Credits & licenses",
+                        subtitle = "Maps, photos, flight data and 3D models",
+                        interaction = Modifier.clickable { showCredits = true }
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                            contentDescription = null,
+                            tint = Haze
+                        )
+                    }
+                }
             }
         }
 
@@ -187,6 +209,10 @@ fun SettingsScreen(
                 },
                 onBackClick = { showChangeHomeBase = false }
             )
+        }
+
+        if (showCredits) {
+            CreditsScreen(onBackClick = { showCredits = false })
         }
 
         // ── Celebrations ─────────────────────────────────────────────────
