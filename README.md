@@ -6,6 +6,12 @@
 
 **A focus timer shaped like a flight.**
 
+[![Platform](https://img.shields.io/badge/platform-Android-3DDC84?logo=android&logoColor=white)](https://developer.android.com)
+[![Kotlin](https://img.shields.io/badge/kotlin-2.0+-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org)
+[![Compose](https://img.shields.io/badge/ui-Jetpack%20Compose-4285F4?logo=jetpackcompose&logoColor=white)](https://developer.android.com/jetpack/compose)
+[![Engine](https://img.shields.io/badge/engine-CesiumRS-orange)](https://github.com/silas-270/CesiumRS)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
 Book a real route, and the flight *is* your study session.<br>
 Frankfurt to Stuttgart is a quick 45 minutes. London to Tokyo takes almost 14 hours.
 
