@@ -685,7 +685,7 @@ class CesiumGameActivity : GameActivity() {
                                     // Snapshot only - already resolved (or not) by InFlightViewModel's
                                     // prefetch well before this screen is reached, same as how
                                     // landingResultChannel.result.value is read below at line ~639.
-                                    val destPhotoUrl = destinationPhotoChannel.url.value
+                                    val destPhoto = destinationPhotoChannel.photo.value
                                     // For "Welcome to <city>". Looked up rather than passed in the route,
                                     // where a free-text city name would need escaping.
                                     val destCity by androidx.compose.runtime.produceState<String?>(null, destIata) {
@@ -699,7 +699,7 @@ class CesiumGameActivity : GameActivity() {
                                         destIata = destIata,
                                         durationMin = durationMin,
                                         rank = rank,
-                                        destPhotoUrl = destPhotoUrl,
+                                        destPhoto = destPhoto,
                                         destCity = destCity,
                                         onContinue = {
                                             // mechanics.md's post-landing pipeline step 5: the rank stamp above
@@ -893,6 +893,23 @@ class CesiumGameActivity : GameActivity() {
                                         )
                                     )
                                 )
+                            }
+                            // The arrival screen reads the photo InFlight prefetched; with no flight
+                            // behind it, fetch the destination's photo first so the credit shows too.
+                            val arrivalDest = navTarget.split("/").takeIf { it[0] == "arrival_celebration" }?.getOrNull(2)
+                            if (arrivalDest != null && destinationPhotoChannel.photo.value == null) {
+                                lifecycleScope.launch {
+                                    val photo = withContext(Dispatchers.IO) {
+                                        runCatching {
+                                            airportRepository.getAirportByIata(arrivalDest)?.let { airport ->
+                                                airport.municipality?.let { destinationPhotoRepository.fetchDestinationPhoto(it, airport.isoCountry) }
+                                            }
+                                        }.getOrNull()
+                                    }
+                                    destinationPhotoChannel.publish(photo)
+                                    activeNavController?.navigate(navTarget)
+                                }
+                                return
                             }
                             activeNavController?.navigate(navTarget)
                         } catch (e: Exception) {

@@ -319,8 +319,8 @@ class InFlightViewModel(
             context.dest?.let { dest ->
                 launch {
                     offlineModeController.isOffline.first { offline -> !offline }
-                    val photoUrl = destinationPhotoRepository.fetchDestinationPhotoUrl(dest.municipality, dest.isoCountry)
-                    destinationPhotoChannel.publish(photoUrl)
+                    val photo = destinationPhotoRepository.fetchDestinationPhoto(dest.municipality, dest.isoCountry)
+                    destinationPhotoChannel.publish(photo)
                 }
             }
 
