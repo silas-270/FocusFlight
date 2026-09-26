@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -17,6 +18,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.silas270.blocktime.ui.theme.DeepNavy
 import com.silas270.blocktime.ui.theme.Spacing
@@ -39,15 +42,24 @@ import com.silas270.blocktime.ui.theme.Spacing
  * [onClose] adds a visible ✕ in the card's top-right corner. Info-only modals (no action
  * buttons) pass it, since scrim tap and back are invisible ways out; modals whose buttons
  * already close them leave it null.
+ *
+ * [portraitWidth] caps the card at the width it has in portrait, so in landscape it stays a
+ * centred card instead of stretching across the whole screen.
  */
 @Composable
 fun ScrimCardModal(
     onScrimTap: () -> Unit,
     modifier: Modifier = Modifier,
     onClose: (() -> Unit)? = null,
+    portraitWidth: Boolean = false,
     content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit
 ) {
     BackHandler(onBack = onScrimTap)
+    val maxCardWidth = if (portraitWidth) {
+        LocalConfiguration.current.smallestScreenWidthDp.dp - Spacing.Large * 2
+    } else {
+        Dp.Unspecified
+    }
     Box(modifier = modifier.fillMaxSize()) {
         Box(
             modifier = Modifier
@@ -68,6 +80,7 @@ fun ScrimCardModal(
                 // its field and buttons under the keyboard. A no-op for every modal without one.
                 .imePadding()
                 .padding(horizontal = Spacing.Large)
+                .widthIn(max = maxCardWidth)
                 .fillMaxWidth()
                 // clip (not just a rounded background) so content that draws or translates past
                 // its own bounds - e.g. ReturningHomeModal's speed-line canvas - is cut off at the
