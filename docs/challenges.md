@@ -1,259 +1,284 @@
 # Challenges
 
-Long-running, quest-log style goals that run alongside normal play. A challenge is an
-*instance* with its own state, not a query over history — that is the core distinction
-from [achievements.md](achievements.md), and it is what makes "start fresh" meaningful.
+Long-running goals that run alongside normal play. A challenge is an **instance** with its own
+stored state, not a query over history. That is the core difference from an achievement
+([achievements.md](achievements.md#relationship-to-challenges)), and it is what makes "start
+fresh", abandoning, and completing the same challenge twice meaningful.
 
 ## The four types
 
-| Type | Metric | Position pointer | Source |
+| Type | Metric | Own position | Sources |
 |---|---|---|---|
-| `ROUTE` | Progress toward a destination | ✅ its own, isolated | curated or custom |
-| `SET_COMPLETION` | Members reached / total members | — | curated only |
-| `DISTANCE` | Cumulative distance flown while active / target (stored in km, shown and entered in miles) | — | curated or custom |
-| `STREAK` | Consecutive local calendar days with a flight / target | — | curated or custom |
+| `ROUTE` | Progress from an origin toward a destination | ✅ its own pointer | curated or custom |
+| `SET_COMPLETION` | Members reached / members in the set | none | curated only |
+| `DISTANCE` | Distance flown while active / target (stored in km, shown and entered in miles) | none | curated or custom |
+| `STREAK` | Consecutive local calendar days with a flight / target | none | curated or custom |
 
-**Set-completion is curated-only** because a set has to be authored to mean anything.
-A player-defined "visit these five airports" is just a checklist; the curated
-definitions in `ChallengeSetDefinition` are the authoring seam.
+All four share one table, `challenges`, with nullable per-type columns rather than one table per
+type. Every consumer (the slot row, the Hub card, the outcome screen, the completed log) wants one
+list to sort, filter and render, and the per-type columns are few.
 
-Every member of a set must be reachable through the main route network, or the set can never
-complete ("Visit All Continents" lost Antarctica for exactly this reason). A row stores its
-`setTotalMembers` at start, but active rows are read — and completion judged — against the
-*current* definition (`withSetDefinitionResolved`, and "every current member credited" in
-`creditSetCompletion`), so shrinking a definition never strands a challenge in progress.
+**Set completion is curated only**, because a set has to be authored to mean anything. A
+player-defined "visit these five airports" would just be a checklist; the definitions in
+`CuratedChallengeSets` (`ChallengeSetDefinition.kt`) are the authoring seam. A member is tested
+against a landed destination by continent code, ISO country code or IATA code
+(`SetMemberKind`).
 
-**Streak is deliberately short and unforgiving** — targets of 3–5 days, not 30. It
-covers the final push before an exam, where breaking on a miss is the point. It can
-afford that fragility precisely because [Tours](achievements.md#tours) cover the opposite
-horizon: tours are weeks long and never break. A long *unforgiving* streak would be the
-worst of both.
+Every member of a set has to be reachable through the main route network, or the set can never
+complete. That is why "Visit All Continents" has six members: Antarctica's only airport in the
+data has no routes ([route-network.md](route-network.md)). A row stores `setTotalMembers` when it
+starts, but active rows are read, and completion is judged, against the *current* definition
+(`withSetDefinitionResolved`, and "every current member credited" in `creditSetCompletion`), so
+shrinking a definition can never strand a challenge in progress one unreachable member short.
+
+**Streaks are meant to be short and unforgiving.** The curated streaks are three and five days.
+They cover the final push before an exam, where breaking on a missed day is the point. They can
+afford that fragility because [tours](achievements.md#tours) cover the opposite horizon: tours are
+weeks long and never break. A long unforgiving streak would combine the worst of both. The custom
+streak form accepts any positive number of days, so the short horizon is a property of the
+curated catalog rather than a limit the code enforces.
 
 ## Where it comes from
 
-Curated challenges are templates in `CuratedChallengeCatalog` — name, description, type
-and definition, but no instance state. `startCuratedChallenge` assigns an id, a position
-pointer where relevant, and zeroed progress when it instantiates a `challenges` row from
-one. Custom challenges are created directly by the player through
-`startCustomRouteChallenge`, `startCustomDistanceChallenge` and
-`startCustomStreakChallenge`.
+Curated challenges are templates in `CuratedChallengeCatalog`: name, description, icon, type and
+definition, but no instance state. `startCuratedChallenge` turns one into a row, assigning an id,
+a position pointer where relevant, and zeroed progress. The catalog holds ten Route templates
+(three of them predefined itineraries), eight sets, three distances (7,920, 24,901 and 50,000
+miles: the Earth's diameter and circumference, and a frequent-flyer status tier) and two streaks.
+
+Custom challenges come from `startCustomRouteChallenge`, `startCustomDistanceChallenge` and
+`startCustomStreakChallenge`. A custom Route is named from the two cities ("Stuttgart →
+Beijing") rather than their codes, falling back to the airport name or the code when the data has
+no city.
 
 ### The predefined-route submode
 
-A `ROUTE` challenge is normally free-form: an origin, a destination, and whatever path
-the pilot finds. The predefined submode instead references an authored itinerary in
-`PredefinedRouteCatalog` via `predefined_route_id`, and tracks `leg_index` through it.
+A Route challenge is normally free-form: an origin, a destination, and whatever path the pilot
+finds. The predefined submode instead names an authored itinerary in `PredefinedRouteCatalog`
+through `predefined_route_id`, and tracks how many of its legs are done in `leg_index`.
 
-**It exists because the free-form shape cannot express a circuit.** With
-`start == end`, the straight-line proxy's `originToDest <= 0.0` guard reports `1f` before
-a single leg is flown — and even without the guard, a pilot would satisfy "around the
-world" by never leaving the origin. Scoring by distance along a known itinerary, with
-completion as a leg count rather than a coordinate comparison, is what makes
-`waypoints.first() == waypoints.last()` a legitimate route.
+**It exists because a free-form route cannot express a circuit.** With the same airport at both
+ends, the straight-line formula below has a zero denominator and its guard reports 100% before a
+single leg is flown; without the guard, a pilot would satisfy "around the world" by never leaving.
+Scoring along a known itinerary, with completion as a leg count rather than a coordinate
+comparison, is what makes `waypoints.first() == waypoints.last()` a legitimate route. Two of the
+four itineraries are circuits:
 
-Progress is **distance-weighted, not leg-counted**, because legs are not interchangeable:
-on `AROUND_THE_WORLD`, Hong Kong→Tokyo is 2,962 km and Tokyo→Los Angeles is 8,772 km.
-Counting legs would pay both the same 12.5%, making the hardest leg feel like the
-cheapest. Leg distances are authored alongside the waypoints so `progressAt` stays a pure
-function — the slot ring, the Hub card and the info modal all call it while composing, and
-none can reach the airports database from there. An empty distance list is legal and means
-"score by leg count".
+| Itinerary | Waypoints | Legs (km) |
+|---|---|---|
+| Around the World in 80 Days | LHR → BOM → HKG → SFO → LHR | 7,220 · 4,280 · 11,144 · 8,639 |
+| Great Race of Mercy | ANC → FAI → ANC → OME | 420 · 420 · 866 |
+| Silk Road of Marco Polo | VCE → IST → SKD → XIY → PEK | 1,407 · 3,221 · 3,726 · 934 |
+| Pacific Rim | SIN → BKK → HKG → ICN → NRT → SIN | 1,409 · 1,689 · 2,063 · 1,260 · 5,349 |
 
-Predefined routes are **curated-only**; `startCustomRouteChallenge` keeps producing
-free-form ones.
+The first three are offered as curated challenges; Pacific Rim is defined in the catalog but no
+template uses it.
 
-The two are scored differently, and this matters:
+**Progress is weighted by distance, not by legs**, because legs are not interchangeable. On the
+circumnavigation, Hong Kong → San Francisco is 11,144 km and Bombay → Hong Kong is 4,280 km;
+counting legs would pay both the same 25% and make the hardest leg feel like the cheapest. The leg
+distances are authored next to the waypoints so that `PredefinedRoute.progressAt` stays a pure
+function: the slot ring, the Hub card and the info modal all call it while composing, and none of
+them can reach the database from there. `PredefinedRouteCatalogTest` checks that each authored
+distance matches `flights.db`, that every leg is a real route, and that every waypoint is a real
+airport. An empty distance list is legal and means "score by leg count".
 
-- Free-form uses the straight-line proxy below.
-- Predefined uses **kilometres flown along its own itinerary** (`PredefinedRoute.progressAt`),
-  which is the whole point of the submode.
+A predefined row still fills the free-form columns: `originIata` and `destIata` are the first and
+last waypoints, and `positionIata` is where the next leg departs. Every reader that only needs
+"where is this challenge" keeps working without knowing the submode exists; only scoring and
+advancing branch on it, through the single `Challenge.predefinedRoute()` accessor.
 
-`progressFraction()` derives a predefined route's progress live from the catalog rather
-than trusting the cached column, so editing an itinerary can never leave a live challenge
-reporting against legs that no longer exist.
+The submode also shortens the booking path. The next hop is authored, so `resolveNextLeg` books
+it and the pilot lands on the boarding pass, skipping a destination picker that would have
+exactly one correct answer ([navigation.md](navigation.md#shared-entry-points)). Legs keep their
+real scheduled durations: the ten-hour Pacific crossing is meant to be paused and resumed across
+several sittings, not shrunk.
 
-The submode also changes the UI path: a predefined challenge's next hop is authored, so
-`resolveNextLeg` books it directly and drops the pilot on the boarding card, skipping a
-destination picker that would have exactly one correct answer. See
-[navigation.md](navigation.md)'s `continueRouteChallenge`.
+Predefined routes are curated only; `startCustomRouteChallenge` always creates a free-form one.
 
 ## Which flights count
 
-The rule per type, applied in `processLandingForChallenges` at
-[core-loop.md](core-loop.md)'s post-landing pipeline step 4:
+Applied by `processLandingForChallenges` in step 4 of the
+[post-landing pipeline](core-loop.md#the-post-landing-pipeline):
 
-| | Advances a `ROUTE` pointer | Credits Distance / Set / Streak |
+| | Advances a Route challenge | Credits Distance, Set and Streak |
 |---|---|---|
 | `FREE` flight | ❌ | ❌ (returns before anything) |
-| `STORY` flight | ❌ | ✅ |
-| `CHALLENGE` flight, scoped to challenge *N* | ✅ challenge *N* only | ✅ all active |
+| `STORY` flight | ❌ | ✅ every active one |
+| `CHALLENGE` leg of challenge *N* | ✅ challenge *N* only | ✅ every active one |
 
-So a Route challenge moves **only** when a flight was explicitly flown under it. The
-other three types have no position pointer, so they credit passively from any eligible
-flight regardless of what it was scoped to — including one flown under a different Route
-challenge.
+So a Route challenge moves only when a leg was flown under it explicitly. The other three types
+have no position, so they credit passively from any eligible flight, including a leg flown under
+a different Route challenge.
 
-Crediting reads the landed flight's own `FlightLog.completedAt`, not a `now` read at
-credit time. They differ by microseconds in practice and by a whole calendar day either
-side of midnight — which is exactly when a streak is most likely to be riding on it.
+A predefined itinerary advances only when the landing is the itinerary's own next waypoint; a
+landing anywhere else is ignored rather than scored. The booking flow already guarantees this, but
+keeping the rule in the repository means the row itself decides what counts. On a circuit this is
+what makes landing at LHR do nothing after the first leg and complete the challenge after the last.
+
+Crediting uses the landed flight's own `FlightLog.completedAt`, not a fresh "now". The two differ
+by milliseconds in practice, and by a whole calendar day either side of midnight, which is exactly
+when a streak is most likely to depend on the answer.
+
+Streak crediting turns that timestamp into a local date in the device's zone. A second flight on
+a day already counted changes nothing; a flight on the day after the last one extends the run;
+anything else restarts it at one.
 
 ## Route progress formula
 
+A free-form Route challenge measures progress as the fraction of the straight-line distance
+already closed:
+
 ```
-progress = 1 − ( straight_line(current, destination) / straight_line(origin, destination) )
+progress = 1 − straight_line(current, destination) / straight_line(origin, destination)
 ```
 
-Clamped to `0f..1f`, using haversine great-circle distance (`ChallengeProgress.routeProgress`).
+clamped to 0..1, with haversine great-circle distances on a 6,371 km sphere
+(`ChallengeProgress.routeProgress`). Reaching the destination sets it to exactly 1 and completes
+the challenge.
 
-This is an **accepted v1 limitation**, not a bug: a straight line is only a proxy for real
-routing, so progress can legitimately *decrease* when a real onward flight happens to
-point away from the destination. Fixing it would mean modelling real route graphs, which
-is a much larger change than the display it would improve.
+This is a proxy, and knowingly so: real routing is not a straight line, so progress can go *down*
+when a genuine onward connection points away from the destination, for example via a hub behind
+the pilot. Measuring distance along the network instead would mean shortest-path searches over
+tens of thousands of edges for a number whose only job is to fill a bar. Several curated routes
+(JFK → CDG, MEL → LHR) have a direct flight and complete in one leg; the longer ones, like Stuttgart
+to Lubango, take three.
 
 ### Per-type metrics
 
-| Type | `progressFraction()` |
+`progressFraction()` computes the displayed fraction for any row:
+
+| Type | Fraction |
 |---|---|
-| `ROUTE`, predefined | `PredefinedRoute.progressAt(legIndex)` |
-| `ROUTE`, free-form | the cached `route_progress_fraction` above |
-| `SET_COMPLETION` | `visitedSetMembers.size / setTotalMembers` |
+| `ROUTE`, predefined | `PredefinedRoute.progressAt(legIndex)`, derived live from the catalog |
+| `ROUTE`, free-form | the stored `route_progress_fraction` |
+| `SET_COMPLETION` | credited members / `setTotalMembers` |
 | `DISTANCE` | `cumulativeDistanceKm / targetDistanceKm` |
 | `STREAK` | `streakDays / targetDays` |
 
-`progressFraction()` is an extension function rather than a member of `Challenge`, so
-Room's entity field-scanning never mistakes it for a column. The same applies to every
-other computed property on that entity.
+The predefined fraction is derived from the catalog rather than trusted from the stored column,
+so editing an itinerary can never leave a live challenge scored against legs that no longer
+exist; the column is still written on every advance so it never becomes a stale lie for a reader
+that trusts it. `progressFraction()` is an extension function rather than a member, so Room's
+entity scanning never mistakes it for a column; the same goes for every computed property of
+`Challenge`.
 
 ## Per-leg progress feedback
 
-Landing does not just update a number. `resolveLandingOutcome` diffs the challenge list
-from before and after the credit and produces, per challenge, either
-`Advanced(fromFraction, toFraction)` or `Completed`. The Challenge Outcome screen animates
-each tick-up from its old value, so the pilot sees the movement their flight caused
-rather than only its result. When nothing changed, the result is `LandingResult.None`
-and the screen is skipped entirely.
+A landing does not just update a number. `resolveLandingOutcome` diffs the challenges from before
+and after the credit and produces, per challenge, `Advanced(from, to)` or `Completed`. The
+Challenge Outcome screen animates each bar from its old value, so the pilot sees the movement
+their flight caused and not only where it ended up. When nothing changed, the result is
+`LandingResult.None` and the screen is skipped.
+
+The diff is a pure function, tested without Room or the engine. It requires the "after" list to be
+read by id, because a challenge completed by this landing is no longer active and would be missing
+from a re-listing of active challenges.
 
 ## Completion presentation
 
 Reaching `COMPLETED` and being *shown* that completion are two different moments, tracked by one
-column: `challenges.celebrated`, `false` by default. A challenge with `celebrated = false` keeps
-occupying its slot on the Challenges screen (and keeps counting against the active-challenge cap,
-`hasCapSlot`) and is excluded from the completed-challenges log — `ChallengeDao.getSlotDisplayFlow`
-and `getCelebratedCompletedOrderedByCompletedAt` are the two queries this splits across. Nothing
-else about completion (crediting, `status`, `completed_at`) waits on it; only the presentation does.
+column, `challenges.celebrated`, false by default. A completed but uncelebrated challenge keeps
+occupying its slot on the Challenges screen, keeps counting against the cap, and is left out of
+the completed log. `ChallengeDao.getSlotDisplayFlow` and `getCelebratedCompletedOrderedByCompletedAt`
+are the two queries this splits. Nothing else about completion (status, `completed_at`, crediting)
+waits for it; only the presentation does.
 
-Any landing that completes at least one challenge sends CONTINUE (from the Challenge Outcome
-screen) to the Challenges screen instead of Hub — see [navigation.md](navigation.md). There, each
-uncelebrated completion plays a short animation, left to right in slot order: the card duplicates
-from its slot and grows to center stage with a confetti burst while the slot row immediately
-compacts to slide remaining challenges left and reveal the newly opened empty slot, then — on tap
-or system back —
-flies up and vanishes into a new entry at the top of the log, at which point
-`LocalChallengeRepository.markCelebrated` finally flips the flag. `ChallengesViewModel.celebrationQueue`
-is computed **once**, from the database, when the ViewModel is constructed — not kept live — so a
-challenge already mid-animation this session is never re-queued, and the queue is naturally rebuilt
-correctly no matter when or how the app was last closed: any `COMPLETED, celebrated = false` row is
-still sitting in its slot the next time Challenges opens, regardless of what screen the pilot was on
-when they left.
+A landing that completes any challenge sends CONTINUE on the outcome screen to the Challenges
+screen instead of the Hub. There, each uncelebrated completion plays in slot order: the card
+duplicates out of its slot and grows to the centre while the slot row compacts to reveal the
+freed slot, confetti bursts once it settles, and on a tap (or system back) it smashes down into a
+new entry at the top of the completed log. At that moment `markCelebrated` flips the flag.
+
+`ChallengesViewModel.celebrationQueue` is computed **once**, from the database, when the
+ViewModel is created, not kept live. A challenge already mid-animation is therefore never
+re-queued by a later emission, and the queue is rebuilt correctly however the app was last left:
+any `COMPLETED` row with `celebrated = false` is still in its slot the next time Challenges opens,
+whichever screen the pilot was on when the process died. Migration 9 → 10 marked every completion
+that already existed as celebrated, so the column's introduction did not replay old completions.
 
 ## Isolation
 
-A `SET_COMPLETION` challenge starts **fresh**. It is never seeded from Story Mode's
-visited-set, even though the app already knows the pilot has been to half its members.
-The goal is "visit these while this challenge is running", and pre-filling it would make
-starting one meaningless. This is the sharpest difference from a Geographic *achievement*,
-which reads persistent state by design — see
-[achievements.md](achievements.md#relationship-to-challenges).
+A Set-completion challenge starts **fresh**. It is never seeded from Story Mode's visited set,
+even though the app already knows the pilot has been to half its members. The goal is "visit these
+while this challenge is running", and pre-filling it would make starting one meaningless. This is
+the sharpest difference from a geographic achievement, which reads persistent history by design
+([achievements.md](achievements.md#relationship-to-challenges)).
 
 ## Lifecycle
 
 ```
-(start) ──▶ ACTIVE ──▶ COMPLETED     final qualifying flight
+(start) ──▶ ACTIVE ──▶ COMPLETED      final qualifying landing
               │
-              └──────▶ (row deleted)  abandon
+              └──────▶ (row deleted)   abandon
 ```
 
-**Abandon, not reset.** Abandoning deletes the row entirely rather than storing an
-`ABANDONED` status. There is no in-place reset — restarting means starting a new
-instance, with a new id and genuinely zeroed progress.
+### Abandon, not reset
 
-**Active-challenge cap: 3**, shared across all four types and both sources
-(`MAX_ACTIVE_CHALLENGES`). `startCuratedChallenge` and the custom starters return
-`StartChallengeResult.CapReached` rather than throwing. Abandoning frees a slot.
+Abandoning deletes the row rather than storing an `ABANDONED` status. There is no in-place reset:
+trying again means starting a new instance, with a new id and genuinely zeroed progress, and the
+slot frees immediately.
 
-Completed challenges are not deleted — they stay as a flat log surfaced through
-`listCompletedChallenges`, and appear in the passport. That log is why "challenges
-completed" has no `AchievementStatus` representation: it is a list, not a progress bar.
+Completed challenges are never deleted. They stay as a flat, newest-first log, one row per
+completion, so completing the same curated challenge twice shows twice, like two flights on the
+same route in the logbook. That log is why "challenges completed" has no achievement
+representation: it is a list, not a progress bar.
+
+### Active-challenge cap
+
+At most three challenges occupy slots at once (`MAX_ACTIVE_CHALLENGES`), across all four types
+and both sources. "Occupying" means active, or completed but not yet celebrated. Starting returns
+`StartChallengeResult.CapReached` rather than throwing or evicting anything. The cap check is a
+count followed by an insert, which two quick taps could both pass; the repository's write mutex
+makes the pair atomic ([state.md](state.md#concurrent-writers)).
 
 ## Persistence & route scoping
 
-Challenge instances live in the Room `challenges` table, written **only** by
-`LocalChallengeRepository`. This is genuinely mutated state, correctly so: an instance
-starts fresh and is not derivable from history, which is why it is persisted at all while
-achievements are not.
+Challenge instances live in the Room `challenges` table and are written only by
+`LocalChallengeRepository`. This is genuinely mutated state: an instance starts at zero and is not
+derivable from history, which is why challenges are persisted while achievements are not.
 
-**Scoping a session to a challenge** works through the same nav-argument mechanism
-everything else uses. `challengeId` is threaded from Flight Search through Check-In into
-In-Flight, encoded as an `Int` with a `-1` sentinel for "none" — see
-[navigation.md](navigation.md). Check-In only passes it through; In-Flight reads it, and
-it is what tells step 4 which Route challenge to advance.
+**Scoping a flight to a challenge** uses the same route-argument mechanism as everything else.
+`challengeId` travels from Flight Search through Check-In into In-Flight, encoded as an `Int`
+with `-1` for "none" ([navigation.md](navigation.md#argument-threading)). In-Flight uses it to
+choose the paused-flight slot and to tell step 4 which Route challenge to advance.
 
-`focused_route_challenge_id` in `SharedPreferences` is a different thing and easy to
-confuse with it: a display-only pointer for which challenge the Hub highlights. It never
-mutates a challenge row.
+`focused_route_challenge_id` in `SharedPreferences` is a different thing that is easy to confuse
+with it: a display-only pointer to the Route challenge the Hub is showing. Starting a Route
+challenge focuses it and returns to the Hub; continuing one from the Challenges screen focuses it
+first. Pausing focus clears the pointer and changes nothing about the challenge itself. When the
+focused challenge completes, the pointer is cleared on the way through the arrival screen.
 
-**Each challenge has its own paused-flight slot**, `challenges.paused_flight`, independent
-of both the Story and Free global slots. A pilot can have a paused story flight, a paused
-free flight, and a paused leg of each active challenge, all at once.
+**Each Route challenge has its own paused-flight slot**, the `paused_flight` column, independent
+of the Story and Free slots. A pilot can hold a paused Story flight, a paused Free flight and a
+paused leg of every active Route challenge at once ([paused-flights.md](paused-flights.md)).
 
-### Concurrent writes
+### Reading through the clock
 
-The `challenges` row is the app's most contended piece of state, and the rules that keep
-it correct are load-bearing enough that they live in [state.md](state.md)'s
-*Concurrent writers* section rather than here. The short version, for anyone adding a
-write path:
+`streak_days` and `last_flown_day` record what happened, not what is true now, and nothing runs at
+midnight to notice a streak dying. A pilot who flew on Monday and Tuesday and skipped Wednesday
+still has `streak_days = 2` stored on Thursday, and that row is correct about the past.
 
-- **Never use a whole-row `@Update`.** Use a scoped statement
-  (`updatePausedFlight`, `updateRouteProgress`). A whole-row update writes every column,
-  so two racing ones are a lost update, never a merge.
-- All public writes go through `LocalChallengeRepository.writeMutex`. It is **not
-  reentrant** — every private helper below the public entry points is deliberately
-  lock-free.
-- The cap check is a count-then-insert, which two taps could otherwise both pass. The
-  mutex is what makes it safe.
-
-### Facts vs. the clock
-
-`streak_days` and `last_flown_day` record what happened, not what is true now: nothing
-runs at midnight to notice a streak dying. A pilot who flew Monday and Tuesday and
-skipped Wednesday still has `streak_days = 2` stored on Thursday, and that row is
-*correct* about the past.
-
-The resolution happens once, on read, at the database boundary:
-`LocalChallengeRepository` maps every active challenge through
-`Challenge.withStreakEvaluatedAt`, zeroing a run whose last day is older than yesterday.
-Everything downstream — `progressFraction()`, the Hub card, the slot row,
-`resolveLandingOutcome` — is handed an already-correct row and needs no clock of its own.
-The stored row catches up on the next credited flight.
+The resolution happens once, on read, at the repository boundary: every active row passes through
+`withStreakEvaluatedAt(today)`, which zeroes a run whose last day is older than yesterday. A last
+day in the *future* (a clock moved back, or a westward time-zone change) is treated as alive, since
+zeroing it would destroy real progress over something the pilot did not cause. Everything
+downstream (`progressFraction()`, the Hub card, the slot row, `resolveLandingOutcome`) receives an
+already-correct row and needs no clock of its own. The stored row catches up at the next credited
+flight. Completed streaks are left alone: their day count is a final score. The general principle
+is in [state.md](state.md#facts-and-the-clock).
 
 ## Entry & management surface
 
-The **Challenges screen** (`Screen.Challenges`) is a full destination, not a Hub bottom
-sheet. It carries:
+The **Challenges screen** is a full destination with two tabs. At the top sits the Free Mode row,
+with Resume when a Free flight is paused. The Challenges tab shows the three slots, each opening
+an info modal with continue or resume, pause focus, and abandon, followed by the completed log.
+An empty slot opens the picker of curated templates and custom forms.
 
-- the three active challenge slots, each with progress, a resume action for a paused leg,
-  and a continue action
-- Free Mode entry
-- the completed-challenge log
-- the still-unearned achievements tab
+The Hub keeps only the focused challenge's card ([core-loop.md](core-loop.md#1--hub)).
 
-It was a bottom sheet originally, which needed its own inner scroll and swapped five view
-states inside a single card. The Hub keeps only the focused-challenge card, pointed at by
-`focused_route_challenge_id` — see [core-loop.md](core-loop.md), since a focused challenge
-also changes which airport the Hub displays.
-
-**Achievements share this screen deliberately**, as its second tab (`ChallengesTab`). They
-are the same kind of thing from the pilot's side — a goal with progress — even though the
-two are implemented completely differently (instance vs. query, see
-[achievements.md](achievements.md#relationship-to-challenges)). The tab shows only
-still-unearned ones; earned badges live in the passport.
+**Achievements share this screen as its second tab**, showing only the still-unearned ones,
+grouped by category and ordered closest-to-done first. From the pilot's side an achievement and a
+challenge are the same kind of thing, a goal with progress, even though their implementations are
+opposite. Earned achievements live on the Passport instead, so the two surfaces never show the
+same item.

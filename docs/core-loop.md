@@ -1,188 +1,242 @@
 # The core loop
 
-One session: pick a route, board, fly for its real duration, land. Everything else in
-the app — modes, challenges, achievements, the passport — hangs off this and must not
-make it harder to reach.
+One session: pick a route, board, fly it for its real scheduled duration, land. Everything
+else in the app (modes, challenges, achievements, the passport) hangs off this loop, and none of
+it is allowed to make the loop harder to reach.
 
+```mermaid
+flowchart LR
+    Hub --> FS[Flight Search] --> CI[Check-In] --> IF[In-Flight] --> AR[Arrival]
+    AR -->|a challenge moved| CO[Challenge Outcome]
+    AR -->|nothing moved| Hub
+    CO -->|a challenge completed| CH[Challenges]
+    CO -->|only progress| Hub
+    Hub -->|Resume flight| IF
 ```
-Hub ──▶ Flight Search ──▶ Check-In ──▶ In-Flight ──▶ Arrival ──▶ [Outcome] ──▶ Hub
-```
+
+The navigation mechanics behind these arrows are in [navigation.md](navigation.md). This file
+follows what happens at each stop.
 
 ## 1 · Hub
 
-The home screen. Shows the pilot's current airport, a rendered map of its outbound
-routes as the background, aggregate stats, and — when one exists — a **Resume flight**
-button for a paused session.
+The home screen. It shows the pilot's current airport over a rendered globe of that airport's
+outbound routes, their flight count, total flight time and airports visited, and one primary
+button: **Resume flight** if a paused flight exists, otherwise **Book a flight**.
 
-**A focused Route challenge takes over the Hub's displayed airport.** When
-`focused_route_challenge_id` points at a live challenge, the Hub shows *that challenge's*
-`positionIata` and progress instead of the pilot's story-mode airport. The pointer is
-display-only and never mutates the challenge row, but it does mean the airport on the Hub
-is not always `current_airport_iata` — worth knowing before assuming the two agree.
+The globe is a pre-rendered PNG from the headless renderer, requested with `reuseCachedFile =
+true` so an airport the pilot has seen recently appears instantly instead of being re-rendered on
+every visit ([maps.md](maps.md#headless-globe-renders)). Tapping it books from here, like the
+button, because the arcs on it are exactly the destinations on offer.
 
-The route-map background comes from `CesiumHeadlessMapRenderer` with
-`reuseCachedFile = true`, so an already-rendered `hub_route_map_<IATA>.png` is used
-instantly instead of re-rendering on every open. A missing or zero-length file is deleted
-and re-rendered, with a solid colour shown in the interim. See [engine.md](engine.md).
+**A focused Route challenge takes over the Hub.** When `focused_route_challenge_id` points at an
+active Route challenge, the Hub shows that challenge's position (`positionIata`), its progress
+card and its own paused flight, instead of the Story-mode airport and slot. The pointer is a
+display preference and never changes the challenge row. `HubViewModel` validates it on every
+load and clears it if the challenge has been completed or abandoned elsewhere, so a stale id can
+never strand the Hub. Booking while a challenge is focused continues that challenge rather than
+Story Mode ([navigation.md](navigation.md#shared-entry-points)).
+
+If a paused flight exists and the pilot books a new one anyway, the Hub asks first: starting a
+new flight overwrites the paused one ([paused-flights.md](paused-flights.md)).
+
+Because the Hub's back-stack entry survives trips to other screens, and a screen like Settings
+can move the pilot (return home), the Hub reloads on every `ON_START` rather than only on first
+creation.
 
 ## 2 · Flight Search
 
-Picks the route. Two search modes the pilot toggles between:
+Picks the route. The origin is fixed by the mode: the pilot's current airport in Story Mode, the
+challenge's position pointer for a challenge leg, and a free choice (with the same airport picker
+as onboarding) in Free Mode.
 
-- **By time** — a horizontal timeline of duration intervals. Scrolling snaps to the
-  nearest interval and auto-selects the first route in it. This is the mode that matches
-  how the app is actually used: "I have 90 minutes" is the real question, not "where do I
-  want to go".
-- **By airport** — search a destination by name or IATA.
+Two ways to search, toggled at the top:
 
-Origin is the pilot's current airport in Story Mode, and a free choice in Free Mode.
-Selected routes are paged as cards, bidirectionally synced with the timeline: swiping the
-pager updates the selection, picking a new interval resets the pager to the first card.
-Tapping a partly visible neighbouring card pages to it; tapping the centred card books it,
-the same as **Confirm selection**.
+- **By time.** A horizontal timeline of ten-minute duration buckets, built only from buckets
+  that contain at least one route. Scrolling snaps to the nearest bucket and selects its first
+  route. This is the mode that matches how the app is used: "I have 90 minutes" is the real
+  question far more often than "where do I want to go".
+- **By airport.** Free-text search over the destinations on offer, matching IATA code, airport
+  name, city, and the start of the country name, all accent-insensitive.
 
-**Only the main network is offered.** Destination lists (every mode) and every airport picker
-contain only airports in the main route network — the ones reachable from everywhere and able to
-fly back out (`RouteNetwork.mainComponent`). About 730 IATA airports with no routes, no
-departures, or only a closed local cluster are hidden. Route lists also drop self-routes,
-duplicate pairs and physically impossible durations (`SANE_ROUTE` in
-`AirportRouteSqliteDataSource`). Airport search is accent- and case-insensitive and also matches
-ICAO codes and country names (`AirportSearchIndex`).
+The routes of the selected bucket are paged as cards, synced both ways with the timeline:
+swiping the pager changes the selection, and picking a bucket resets the pager to its first card.
+Tapping a partly visible neighbour pages to it; tapping the centred card books it, the same as
+**Confirm selection**.
 
-**The dead-end fallback.** If a Story Mode origin has no routes into the main network (a pilot
-stranded before dead ends were hidden), the ViewModel rehomes the pilot to the nearest large
-network airport and persists it, so the screen always has content. It fires only on a genuinely
-empty result, never on a *failed* query — a transient SQLite
-error used to silently teleport the pilot — and the screen now shows a notice when it
-happens rather than moving them in silence.
+Only destinations inside the main route network are offered, and only physically plausible
+routes, one per destination ([route-network.md](route-network.md)). If a Story-mode origin turns
+out to be a dead end with no routes at all, the pilot is moved to the nearest large network
+airport and told so on screen ([route-network.md](route-network.md#the-dead-end-rescue)).
 
-Confirming a route pushes it into the 3D engine via `PendingFlightLoader` and navigates
-to Check-In.
+Confirming pushes the route into the engine through `PendingFlightLoader` and navigates to
+Check-In.
 
 ## 3 · Check-In
 
-The boarding card: origin, destination, flight number, duration, distance. The 3D engine
-is rendering behind it — this is the first of the two routes where
-`nativeSetRenderingEnabled(true)` is on.
+The boarding pass: pilot name, origin and destination, flight number, date, duration and
+distance. The 3D engine starts rendering behind it; this is the first of the two routes on which
+native rendering is enabled.
 
-A route lookup that fails degrades rather than propagating: the ticket renders without a
-distance, and since starting needs the route's duration, **Start flight** stays disabled
-with a short note to go back and pick the flight again. `loadRouteContext` treats a failed query the same as "no such route", because
-both callers resolve it inside a plain `viewModelScope.launch` where an escaping throw
-would take the process down, and neither has anything better to do with the failure.
+A route lookup that fails degrades instead of crashing. `loadRouteContext` treats a failed query
+exactly like "no such route", because both of its callers run it in a plain
+`viewModelScope.launch` where an escaping exception would take down the process, and neither has
+anything better to do with it. The pass then renders without a distance, and since starting needs
+the route's duration, **Start flight** stays disabled with a note asking the pilot to go back and
+pick the flight again.
 
-Starting the flight navigates to In-Flight, popping Check-In.
+Starting writes a fresh paused-flight record into the session's slot, waits for the write to
+finish, and only then navigates to In-Flight, popping Check-In. The ordering matters: the write
+runs in the Check-In screen's coroutine scope, and popping the screen first would cancel it
+([paused-flights.md](paused-flights.md#starting-a-flight)).
 
 ## 4 · In-Flight
 
 The session itself, and the only screen that allows rotation.
 
-A coroutine timer ticks elapsed time and pushes `nativeSetProgress(elapsed / total)` to
-the engine, then reads `nativeGetTelemetry()` back for the HUD's live latitude,
-longitude, altitude and speed. Progress is the only thing the app tells the engine about
-time; position comes back from the engine, never from interpolating the route in Kotlin.
+### The clock
 
-The screen also:
+`InFlightViewModel` runs a timer coroutine that ticks every 33 ms and advances the elapsed time by
+the real time that passed (`SystemClock.elapsedRealtime()` deltas, not tick counts, so a late
+tick cannot slow the flight). Each tick it pushes `nativeSetProgress(elapsed / total)` to the
+engine and reads `nativeGetTelemetry()` back for the HUD's position, altitude and speed.
+**Progress is the only thing the app tells the engine about time.** Position, attitude, camera
+and lighting are all derived by the engine from that one number; the app never interpolates the
+route itself.
 
-- Holds a wakelock for the flight's duration (`FLAG_KEEP_SCREEN_ON`), in addition to the
-  Activity-wide one.
-- Generates procedural cabin rumble — a composite 80 Hz + 40 Hz sine plus white noise
-  streamed as raw PCM to an `AudioTrack`, on a background thread inside a
-  `DisposableEffect` bound to the sound toggle.
-- Offers camera modes (Free / Chase / Cockpit) and map styles (dark basemap / satellite).
-- Can be paused. A pause saves the camera pose and elapsed time so the flight resumes in
-  the view it was left in. Which slot the paused flight is written to depends on the mode
-  — see [modes.md](modes.md). The pilot leaves through the settings panel's
-  SLIDE TO LEAVE control, or system back. Both open a "LEAVE FLIGHT?" dialog with RESUME as
-  the primary button. The dialog says where the flight can be resumed, which depends on the
-  mode: the Hub for Story, Free Mode on Challenges for Free, and the challenge itself for a
-  challenge leg.
-- Plays a ~3 s hold once the timer reaches 00:00, before landing. During the hold the timer
-  reads "LANDING…", and settings and back are disabled, so the pilot can't leave a flight
-  that has already been flown without it being logged.
+A fresh flight starts with elapsed time at −3,000 ms. The first three seconds are a countdown
+overlay while progress is held at zero, giving the camera and the pilot a moment on the runway.
+At the other end the clock runs 3,000 ms past the total before it lands. During that end hold
+the timer reads "LANDING…", and both the settings panel and system back are disabled, because
+leaving in that window would exit without logging a flight that has already been flown.
 
-The rank shown on arrival is a pure function of duration, computed here:
+The HUD shows the local time at both airports: departure as the wall-clock moment the session
+effectively started, arrival as now plus the remaining time, so a pause pushes the arrival later
+just as a delay would ([time-zones.md](time-zones.md)).
+
+### Everything else on the screen
+
+- **Camera modes** Free, Chase and Cockpit. A new flight starts in Chase.
+- **Map styles** dark map, satellite with 3D terrain, and the built-in offline map, with the
+  network styles locked while the app is offline ([network.md](network.md#the-live-globe)).
+- **Route line** full, a window around the aircraft, or hidden ([engine.md](engine.md#the-call-surface)).
+- **Engine sound**, synthesised from the flight's own telemetry ([engine-sound.md](engine-sound.md)).
+- **Scenic mode**, which clears the HUD down to the bare timer.
+- The screen stays awake on Check-In and In-Flight only; `CesiumGameActivity` sets and clears
+  `FLAG_KEEP_SCREEN_ON` from the current route, so no screen can clear it for another.
+
+The pilot leaves through the settings panel's SLIDE TO LEAVE control or system back. Both pause
+the timer and open a "LEAVE FLIGHT?" dialog whose primary button is RESUME. The dialog says where
+the flight can be picked up again, which depends on the mode's paused-flight slot: the Hub for
+Story, Free Mode on the Challenges screen for Free, and the Hub or the challenge itself for a
+challenge leg ([paused-flights.md](paused-flights.md)).
+
+### Rank
+
+The rank stamped on arrival is a pure function of the booked duration, computed on the screen
+when the flight completes:
 
 | Duration | Rank |
 |---|---|
-| ≥ 8h | GLOBETROTTER |
-| ≥ 4h | COMMANDER |
-| ≥ 2h | CAPTAIN |
-| < 2h | CO-PILOT |
+| ≥ 8 h | GLOBETROTTER |
+| ≥ 4 h | COMMANDER |
+| ≥ 2 h | CAPTAIN |
+| < 2 h | CO-PILOT |
 
 ## The post-landing pipeline
 
-Landing is a five-step pipeline, and **its order is a correctness property, not an
-implementation detail**. It is referenced by step number from KDoc across the codebase.
+Landing is a five-step pipeline whose **order is a correctness property**. Several KDoc comments
+refer to its steps by number.
 
-`InFlightViewModel.completeFlight()` runs steps 2–4. It is reached from both the timer
-reaching zero and the debug skip shortcut, and is guarded by a `landingStarted` flag
-because a flight lands exactly once.
+```mermaid
+flowchart TD
+    S1["1 · engine snaps to arrival<br/>(destination globe render starts in parallel)"]
+    S2["2 · write the FlightLog row"]
+    S3["3 · STORY only: move current airport<br/>then clear the paused-flight slot"]
+    S4["4 · credit challenges, publish LandingResult"]
+    S5["5 · arrival screen, then outcome or Hub"]
+    S1 --> S2
+    S2 -->|logged| S3 --> S4
+    S2 -->|write failed| S4
+    S4 --> S5
+```
 
-> **Ordering assumption relied on for correctness:** `completeFlight()` must be called
-> before, or synchronously with, the `isCompleted = true` emission that triggers
-> navigation. `onCleared` cancels `landingScope`, so a landing launched after that point
-> is silently dropped. Both call sites satisfy this today with no suspension point in
-> between. Adding a suspending step before it breaks landings.
+`InFlightViewModel.completeFlight()` runs steps 1 to 4. It is reached when the timer passes the
+end hold and from the debug menu's skip button, and it is guarded by a `landingStarted` flag,
+because two landings would log the flight twice and credit challenges twice.
 
-**Step 1 — the engine snaps to arrival.** `nativeSetProgress(1.0)`, and
-`preRenderDestinationMap()` starts immediately in parallel. The render is by far the
-slowest part and is independent of every data write, so it runs alongside them rather
-than queueing behind them — the destination's map should be ready by the time the arrival
-animation ends.
+**Step 1: the engine snaps to arrival.** `nativeSetProgress(1.0)`, and the destination's globe
+render starts immediately. The render is the slowest part of the landing by far and depends on
+none of the data writes, so it runs alongside them; the destination's Hub globe is then usually
+ready when the pilot gets there.
 
-The remaining steps run **strictly sequentially** in `landingScope`, an IO scope separate
-from `viewModelScope` precisely so that popping the In-Flight screen does not cancel a
-landing mid-write.
+The remaining steps run strictly in sequence in `landingScope`, an IO scope the ViewModel does
+not own the lifetime of. Navigating to the arrival screen pops In-Flight and cancels
+`viewModelScope` within moments of the landing starting, so work launched there would race its
+own destruction. `onCleared()` instead waits for the landing and render jobs to finish and only
+then cancels `landingScope`. This does rely on one ordering: `completeFlight()` has to launch its
+jobs before, or in the same synchronous step as, the `isCompleted = true` emission that triggers
+navigation. Both call sites do, with no suspension point in between.
 
-**Step 2 — write the logbook entry.** The `FlightLog` row is the flight's only durable
-record, so it goes first and everything after is conditional on it.
+**Step 2: write the logbook entry.** The `FlightLog` row is the flight's only durable record,
+so it goes first and everything that follows is conditional on it. Its distance is the route's
+own figure, or the great-circle distance between the two airports if the route lookup came back
+empty, so a flight that really was flown is never logged as 0 km.
 
-**Step 3 — move the pilot.** Only for a `STORY`-tagged session, and only if step 2
-succeeded: `current_airport_iata` moves to the destination and the paused-flight slot is
-cleared.
+**Step 3: move the pilot.** Only if step 2 succeeded. For a Story session the current airport
+moves to the destination; for every session the paused-flight slot is cleared. If step 2 failed,
+both are left alone on purpose. A pilot still at the origin with a resumable flight is in a
+consistent state they can act on. A pilot standing at a destination with no flight explaining how
+they got there is not repairable, because the logbook is the only record of movement.
 
-If step 2 failed, both are deliberately left alone. A pilot still at their origin with a
-resumable flight is a consistent state they can act on. A pilot standing at a destination
-with no flight explaining it is not repairable — the logbook is the only record of how
-they got anywhere.
+**Step 4: credit challenges.** Always runs, even after a failed logbook write, because it is
+what resolves `LandingResultChannel`, and the arrival screen waits on that channel. A landing
+that could not be logged or a Free Mode landing publishes `LandingResult.None` straight away.
+Otherwise it snapshots the active challenges, runs `processLandingForChallenges`, re-reads each
+snapshotted challenge by id, and diffs the two with `resolveLandingOutcome`. The re-read is by id
+rather than "list the active ones again" because a challenge completed by this landing is no
+longer active and would vanish from the diff. The whole step sits in one `try`, and any failure,
+cancellation included, publishes `None`: a degraded result is always better than a channel that
+never resolves. The crediting rules are in [challenges.md](challenges.md#which-flights-count).
 
-**Step 4 — credit achievements and challenges.** Always runs, even when step 2 failed,
-because it is what resolves `LandingResultChannel`, and an unresolved channel hangs the
-arrival screen. A landing that could not be logged simply has nothing to credit.
+Achievements have no step here. Every achievement is a pure function of the flight log and the
+home airport, so the logbook write in step 2 is all it takes for them to update: Room re-emits
+the flight log, `PilotProgressRepository` recomputes, and unlock timestamps are stamped on that
+read path ([achievements.md](achievements.md)).
 
-The challenge half delegates to `processLandingForChallenges` — a standalone, JNI-free
-suspend function rather than a ViewModel method, so it is unit-testable without
-instantiating `InFlightViewModel` (which loads the native engine on first touch). Its
-rules are in [challenges.md](challenges.md).
+**Step 5: show the outcome.** The arrival screen always plays first. Its CONTINUE button waits
+for the channel to resolve, up to `LANDING_RESULT_TIMEOUT_MS` (5 s), and then:
 
-The result is computed by diffing the challenge list before and after
-(`resolveLandingOutcome`), producing per-challenge `Advanced(from, to)` or `Completed`
-outcomes, or `LandingResult.None`.
+- `LandingResult.ChallengesAffected` leads to the Challenge Outcome screen, which animates each
+  challenge's bar from its old value to its new one;
+- `LandingResult.None` goes straight to the Hub.
 
-**Step 5 — show the outcome.** The arrival celebration always plays the rank stamp. What
-follows depends on the channel:
-
-- `LandingResult.ChallengesAffected` → the Challenge Outcome screen, which animates each
-  tick-up or completion, then Hub.
-- `LandingResult.None` → straight to Hub.
-
-The arrival screen waits at most 5 seconds for the channel before continuing to the Hub
-regardless.
+The timeout bounds a pathological case rather than racing a healthy check, which resolves well
+within it. If it is ever reached, the pilot continues to the Hub and the event is logged.
 
 ## 5 · Arrival
 
-The plane animates off the top of the screen; 750 ms later the rank stamp lands, scaling
-down from 5× with a spring and fading in, timed with a haptic touchdown pulse. A photo of
-the destination city, prefetched during the flight, is shown behind it when the Pexels
-call succeeded. The screen greets the pilot with "Welcome to <city>", looked up from the
-destination IATA, and labels the flight's duration "FOCUSED FOR". Its button reads
-CONTINUE, because it leads to the Challenge Outcome screen when a challenge moved. The button
-only responds once it has faded in, and it disables itself after the first tap while the
-landing result is awaited.
+A full-screen destination photo when one was fetched during the flight
+([network.md](network.md#destination-photos)), "Welcome to <city>", and a passport-style rank
+stamp. 120 ms after the screen appears the stamp slams down from four times its size on a bouncy
+spring, the rest of the screen fades in over 300 ms, and the device gives a haptic pulse. Below
+it, "FOCUSED FOR" and the session length.
+
+The button reads CONTINUE rather than naming a destination, because it leads to the Challenge
+Outcome screen when a challenge moved. It only responds once it has fully faded in, so a stray
+tap cannot skip the celebration, and it disables itself after the first tap while the landing
+result is awaited. When a photo is shown, the photographer credit Pexels requires sits above it.
+
+## 6 · Challenge Outcome
+
+One card with one progress bar per affected challenge; a single landing can move up to three.
+Each bar animates from its old fraction to its new one, and completions end with confetti. The
+bars are labelled in each challenge's own units ("Leg 3/5", distances in miles) where the current
+row can be read, and as a percentage otherwise. If any challenge completed, CONTINUE opens the
+Challenges screen, where the completion presentation plays
+([challenges.md](challenges.md#completion-presentation)); otherwise it returns to the Hub.
 
 ## What the loop does not do
 
-There is no fast travel. The pilot's position only moves by flying, which is what makes
-the world map mean anything. The two exceptions are both deliberate, both cooldown-gated,
-and both live in [modes.md](modes.md): returning home, and changing the home base.
+There is no fast travel. Position moves only by flying, which is what gives the world map its
+meaning. The two exceptions, returning home and changing the home base, are both deliberate and
+both on cooldowns ([modes.md](modes.md#the-two-cooldowns)).

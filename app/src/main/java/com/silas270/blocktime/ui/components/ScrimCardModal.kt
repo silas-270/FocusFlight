@@ -18,20 +18,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.isSpecified
 import com.silas270.blocktime.ui.theme.DeepNavy
+import com.silas270.blocktime.ui.theme.LocalDesignScreenSize
 import com.silas270.blocktime.ui.theme.Spacing
 
 /**
- * The app's one modal convention (see docs/architecture.md): a full-screen scrim [Box] and
+ * The app's one modal convention (see docs/ui.md): a full-screen scrim [Box] and
  * a sibling centered card [Box] - never `AlertDialog`/`Dialog`. Originated in
  * `InFlightScreen.kt`'s exit/pause confirmation (scrim and card are siblings, not nested, so a tap
  * on the card can't also fall through to the scrim's dismiss handler underneath it - nesting was
  * tried and rejected per commit `fc160b0`). Pulled out here so Phase 3b's Route-continue
- * confirmation and abandon confirmation don't reinvent it a third and fourth time, per
- * codebase-map.md's explicit recommendation to extract and reuse this pattern.
+ * confirmation and abandon confirmation don't reinvent it a third and fourth time.
  *
  * [onScrimTap] is usually "dismiss", but callers that pause something while the modal is up (the
  * original exit-confirm resumes the flight timer on scrim-tap) can do that here too. System back
@@ -56,7 +56,10 @@ fun ScrimCardModal(
 ) {
     BackHandler(onBack = onScrimTap)
     val maxCardWidth = if (portraitWidth) {
-        LocalConfiguration.current.smallestScreenWidthDp.dp - Spacing.Large * 2
+        // Design dp, like every other size on screen: the system's `smallestScreenWidthDp` is
+        // measured at the unscaled density and would come out too wide on an upscaled phone.
+        val screen = LocalDesignScreenSize.current
+        if (screen.isSpecified) minOf(screen.width, screen.height) - Spacing.Large * 2 else Dp.Unspecified
     } else {
         Dp.Unspecified
     }

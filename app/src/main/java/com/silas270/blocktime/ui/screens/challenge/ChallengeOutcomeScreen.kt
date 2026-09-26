@@ -94,7 +94,7 @@ private const val StartBeatMs = 250
 
 /**
  * The post-landing challenge beat (docs/challenges.md's "Per-leg progress feedback" and
- * "Completion celebration") - shown after the existing rank-stamp `ArrivalCelebrationScreen`,
+ * "Completion presentation") - shown after the existing rank-stamp `ArrivalCelebrationScreen`,
  * never instead of it, whenever this landing changed one or more active challenges. Replaces what
  * used to be two separate screens (a single-bar tick-up screen and a single-bar completion
  * screen): a single landing can change up to 3 active challenges at once

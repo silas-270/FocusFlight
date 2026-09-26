@@ -71,6 +71,7 @@ interface AirportRepository {
             visitedIatas.add(homeIata)
         }
         val uniqueVisitedIatas = visitedIatas.distinct()
+        val airportByIata = uniqueVisitedIatas.mapNotNull { getAirportByIata(it) }.associateBy { it.iataCode }
 
         val visitedCountries = getCountriesForAirports(uniqueVisitedIatas)
 
@@ -103,15 +104,26 @@ interface AirportRepository {
             .filter { it.visitedCountries.isNotEmpty() }
             .mapTo(HashSet()) { it.continentCode }
         uniqueVisitedIatas.mapNotNullTo(reachedContinents) { iata ->
-            getAirportByIata(iata)?.continent?.takeIf { it in worldMap }
+            airportByIata[iata]?.continent?.takeIf { it in worldMap }
         }
+
+        val crossedEquator = storyFlights.any { flight ->
+            val origin = airportByIata[flight.originIata]
+            val dest = airportByIata[flight.destIata]
+            origin != null && dest != null && origin.lat * dest.lat < 0.0
+        }
+        val highestLandingElevationFt = storyFlights
+            .mapNotNull { airportByIata[it.destIata]?.elevationFt }
+            .maxOrNull() ?: 0.0
 
         return VisitedGeography(
             visitedCountries = visitedCountries,
             countryToContinent = countryToContinent,
             continentStats = continentStats,
             completedContinents = completedContinents,
-            reachedContinents = reachedContinents
+            reachedContinents = reachedContinents,
+            crossedEquator = crossedEquator,
+            highestLandingElevationFt = highestLandingElevationFt
         )
     }
 }

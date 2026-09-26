@@ -38,8 +38,8 @@ internal fun resolveNetworkMode(connected: Boolean, dataSaver: Boolean): Network
  * connectivity with the pilot's data-saver setting. Screens read [mode] or [isOffline]
  * and never ask the monitor directly, so both kinds of offline behave the same.
  *
- * Production code uses the process-wide [getInstance]. ViewModels outlive a recreated
- * Activity (e.g. a system dark-mode switch), so this can't be tied to the Activity's scope.
+ * Production code uses the process-wide [getInstance]. Its state is
+ * process-wide rather than per screen, so it isn't tied to the Activity's scope.
  */
 class OfflineModeController(
     isConnected: StateFlow<Boolean>,

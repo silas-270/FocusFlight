@@ -16,8 +16,8 @@ package com.silas270.blocktime.data.model
  * itinerary rather than a degenerate one.
  *
  * Distance-weighted rather than leg-counted because legs are not interchangeable: on
- * [PredefinedRouteCatalog.AROUND_THE_WORLD], Hong Kong to Tokyo is 2,962 km and Tokyo to Los
- * Angeles is 8,772 km. Counting legs would pay both the same 12.5%, which is wrong in the direction
+ * [PredefinedRouteCatalog.AROUND_THE_WORLD], Mumbai to Hong Kong is 4,280 km and Hong Kong to
+ * San Francisco is 11,144 km. Counting legs would pay both the same 25%, which is wrong in the direction
  * that matters - it makes the hardest leg of the route feel like the cheapest.
  *
  * The pilot never picks a destination under one of these: the next hop is already known, so the

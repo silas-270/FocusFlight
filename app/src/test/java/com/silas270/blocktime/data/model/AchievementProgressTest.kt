@@ -20,6 +20,13 @@ import org.junit.Test
  */
 class AchievementProgressTest {
 
+    private val noGeo = VisitedGeography(
+        visitedCountries = emptySet(),
+        countryToContinent = emptyMap(),
+        continentStats = emptyList(),
+        completedContinents = emptySet()
+    )
+
     private var nextId = 1
 
     private fun flight(
@@ -210,7 +217,7 @@ class AchievementProgressTest {
             flight(distanceKm = 100.0, durationMin = 600, mode = FlightMode.FREE), // longer, but FREE - excluded
             flight(distanceKm = 100.0, durationMin = 500, mode = FlightMode.STORY)
         )
-        val marathon = AchievementProgress.evaluateBehavioral(history).single { it.id == AchievementProgress.MARATHON_ID }
+        val marathon = AchievementProgress.evaluateBehavioral(history, noGeo).single { it.id == AchievementProgress.MARATHON_ID }
         assertEquals(500.0, marathon.current, 0.001)
         assertTrue(marathon.isUnlocked) // 500 >= MARATHON_TARGET_MIN (480)
     }
@@ -218,25 +225,36 @@ class AchievementProgressTest {
     @Test
     fun `red-eye-pilot achievement unlocks only for a STORY flight landing between midnight and 5am local`() {
         val daytimeOnly = listOf(flight(distanceKm = 100.0, mode = FlightMode.STORY, completedAt = epochAtHour(14)))
-        assertFalse(AchievementProgress.evaluateBehavioral(daytimeOnly).single { it.id == AchievementProgress.RED_EYE_ID }.isUnlocked)
+        assertFalse(AchievementProgress.evaluateBehavioral(daytimeOnly, noGeo).single { it.id == AchievementProgress.RED_EYE_ID }.isUnlocked)
 
         val withRedEye = daytimeOnly + flight(distanceKm = 100.0, mode = FlightMode.STORY, completedAt = epochAtHour(2))
-        assertTrue(AchievementProgress.evaluateBehavioral(withRedEye).single { it.id == AchievementProgress.RED_EYE_ID }.isUnlocked)
+        assertTrue(AchievementProgress.evaluateBehavioral(withRedEye, noGeo).single { it.id == AchievementProgress.RED_EYE_ID }.isUnlocked)
     }
 
     @Test
     fun `red-eye-pilot achievement ignores a FREE-mode flight landing at 2am`() {
         val history = listOf(flight(distanceKm = 100.0, mode = FlightMode.FREE, completedAt = epochAtHour(2)))
-        assertFalse(AchievementProgress.evaluateBehavioral(history).single { it.id == AchievementProgress.RED_EYE_ID }.isUnlocked)
+        assertFalse(AchievementProgress.evaluateBehavioral(history, noGeo).single { it.id == AchievementProgress.RED_EYE_ID }.isUnlocked)
     }
 
     @Test
-    fun `high-altitude achievement unlocks when landing at a high elevation airport`() {
-        val normalFlight = listOf(flight(distanceKm = 100.0, mode = FlightMode.STORY).copy(originIata = "LHR", destIata = "CDG"))
-        assertFalse(AchievementProgress.evaluateBehavioral(normalFlight).single { it.id == AchievementProgress.HIGH_ALTITUDE_ID }.isUnlocked)
+    fun `high-altitude achievement unlocks from the highest landing elevation`() {
+        val history = listOf(flight(distanceKm = 100.0, mode = FlightMode.STORY))
+        fun highAltitude(ft: Double) = AchievementProgress
+            .evaluateBehavioral(history, noGeo.copy(highestLandingElevationFt = ft))
+            .single { it.id == AchievementProgress.HIGH_ALTITUDE_ID }
+        assertFalse(highAltitude(9_999.0).isUnlocked)
+        assertTrue(highAltitude(AchievementProgress.HIGH_ALTITUDE_MIN_FT).isUnlocked)
+    }
 
-        val highFlight = listOf(flight(distanceKm = 100.0, mode = FlightMode.STORY).copy(originIata = "DEL", destIata = "IXL"))
-        assertTrue(AchievementProgress.evaluateBehavioral(highFlight).single { it.id == AchievementProgress.HIGH_ALTITUDE_ID }.isUnlocked)
+    @Test
+    fun `equator-crossing achievement follows the geography's crossing flag`() {
+        val history = listOf(flight(distanceKm = 100.0, mode = FlightMode.STORY))
+        fun equator(crossed: Boolean) = AchievementProgress
+            .evaluateBehavioral(history, noGeo.copy(crossedEquator = crossed))
+            .single { it.id == AchievementProgress.EQUATOR_CROSSING_ID }
+        assertFalse(equator(false).isUnlocked)
+        assertTrue(equator(true).isUnlocked)
     }
 
     // ── evaluateAll ──────────────────────────────────────────────────────────────────────
@@ -403,7 +421,7 @@ class AchievementProgressTest {
     fun `standalone non-distance achievements belong to no ladder`() {
         val standaloneGeographic = AchievementProgress.evaluateGeographic(africaGeo())
             .filter { it.familyId == null }
-        val behavioral = AchievementProgress.evaluateBehavioral(listOf(flight(distanceKm = 1.0)))
+        val behavioral = AchievementProgress.evaluateBehavioral(listOf(flight(distanceKm = 1.0)), noGeo)
 
         assertTrue((standaloneGeographic + behavioral).all { it.familyId == null })
     }

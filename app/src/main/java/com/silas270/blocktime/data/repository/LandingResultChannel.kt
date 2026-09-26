@@ -44,7 +44,7 @@ sealed class LandingResult {
 /**
  * One challenge's change from a single landing - either it advanced (challenges.md's "Per-leg
  * progress feedback") but didn't reach 100%, or it completed (challenges.md's "Completion
- * celebration"). [oldProgress]/[newProgress] are 0f..1f, per
+ * presentation"). [oldProgress]/[newProgress] are 0f..1f, per
  * [com.silas270.blocktime.data.model.progressFraction].
  */
 sealed interface ChallengeOutcome {
@@ -126,8 +126,6 @@ class LandingResultChannel {
     private val _result = MutableStateFlow<LandingResult>(LandingResult.Pending)
     val result: StateFlow<LandingResult> = _result.asStateFlow()
 
-    /** Call at the start of every new flight (`InFlightViewModel.init`) so a stale result from a
-     *  previous flight can never leak into this one's landing sequence. */
     /**
      * False until a flight in *this process* has reset the channel for its landing. A fresh
      * channel after process death is `Pending` forever - nothing will ever publish to it - so the
@@ -137,6 +135,8 @@ class LandingResultChannel {
     var isArmed: Boolean = false
         private set
 
+    /** Call at the start of every new flight (`InFlightViewModel.init`) so a stale result from a
+     *  previous flight can never leak into this one's landing sequence. */
     fun reset() {
         isArmed = true
         _result.value = LandingResult.Pending

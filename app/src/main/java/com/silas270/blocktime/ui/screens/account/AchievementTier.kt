@@ -95,11 +95,13 @@ internal fun achievementTier(achievement: AchievementStatus): AchievementTier =
         AchievementCategory.BEHAVIORAL -> AchievementTier.RUBY
     }
 
-/** Cumulative km. The catalog's own ladder - 5k / 40k / 384k / 1M - straddles these two cuts. */
-private fun distanceTier(targetKm: Double): AchievementTier = when {
-    targetKm >= 10_000_000.0 -> AchievementTier.DIAMOND
-    targetKm >= 100_000.0 -> AchievementTier.GOLD
-    targetKm >= 20_000.0 -> AchievementTier.SILVER
+/** Cumulative **miles**: [AchievementStatus.target] is in the unit the UI shows, and the distance
+ *  catalog reports in miles. Its ladder - 5,000 / 24,901 / 477,710 / 1,000,000 / 23,000,000 mi -
+ *  lands one milestone on Bronze, Silver and Diamond each and two on Gold. */
+private fun distanceTier(targetMi: Double): AchievementTier = when {
+    targetMi >= 10_000_000.0 -> AchievementTier.DIAMOND
+    targetMi >= 100_000.0 -> AchievementTier.GOLD
+    targetMi >= 20_000.0 -> AchievementTier.SILVER
     else -> AchievementTier.BRONZE
 }
 

@@ -7,10 +7,10 @@ import com.silas270.blocktime.data.model.AchievementStatus
  * One Passport tile.
  *
  * Most achievements are a stack of exactly one - [earned] has a single entry and [nextLocked] is
- * null - and render as the ordinary badge they always did. A ladder family (today only the four
- * cumulative-distance milestones, see `DistanceAchievementCatalog.FAMILY_ID`) collapses into a
- * single tile showing [top], because four plaques that all say "you have flown a lot of km" is
- * three plaques of noise.
+ * null - and render as the ordinary badge they always did. A ladder family (the five
+ * cumulative-distance milestones, see `DistanceAchievementCatalog.FAMILY_ID`, and the country-count
+ * ladder) collapses into a single tile showing [top], because five plaques that all say "you have
+ * flown a lot of miles" is four plaques of noise.
  */
 data class AchievementStack(
     /** The family id when there is one, else the lone achievement's own id. Unique per tile, so

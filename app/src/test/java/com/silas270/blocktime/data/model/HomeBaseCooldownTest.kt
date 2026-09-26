@@ -45,7 +45,7 @@ class HomeBaseCooldownTest {
 
     @Test
     fun `the two cooldown lengths are actually distinct`() {
-        // Guards against the two actions' cooldowns ever getting conflated (story-mode.md is
+        // Guards against the two actions' cooldowns ever getting conflated (docs/modes.md is
         // explicit that they must stay separate) - 15 days elapsed clears the 7-day return-home
         // cooldown but not the 30-day change-home-base one.
         val now = 50 * dayMs
@@ -87,7 +87,7 @@ class HomeBaseCooldownTest {
 
     @Test
     fun `seeded timestamp makes the very first change-home-base immediately eligible`() {
-        // This is the crux of story-mode.md's "no separate grace mechanic needed" claim: seeding
+        // This is the crux of docs/modes.md's point that no separate grace mechanic is needed: seeding
         // at onboarding must be immediately eligible through the exact same isEligible() check
         // every later change uses - not a special-cased first-time branch.
         val onboardingTime = 1_000 * dayMs

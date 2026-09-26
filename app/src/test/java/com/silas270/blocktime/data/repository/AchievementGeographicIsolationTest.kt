@@ -9,6 +9,7 @@ import com.silas270.blocktime.data.model.AchievementProgress
 import com.silas270.blocktime.data.model.GeographicAchievementGoal
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -35,10 +36,12 @@ class AchievementGeographicIsolationTest {
         "NA" to setOf("US", "CA")
     )
 
-    private inner class FakeAirportRepository : AirportRepository {
+    private inner class FakeAirportRepository(
+        private val airports: Map<String, Airport> = emptyMap()
+    ) : AirportRepository {
         override fun ensureDatabaseCopied() = Unit
         override fun searchAirports(query: String): List<Airport> = emptyList()
-        override fun getAirportByIata(iataCode: String): Airport? = null
+        override fun getAirportByIata(iataCode: String): Airport? = airports[iataCode]
         override fun getRunwaysForAirport(airportId: Int): List<Runway> = emptyList()
         override fun getOutboundRoutes(originIata: String, searchQuery: String, sortBy: String): List<FlightRoute> = emptyList()
         override fun getContinentCountryMap(): Map<String, Set<String>> = continentMap
@@ -131,5 +134,35 @@ class AchievementGeographicIsolationTest {
         val geo = repo.getVisitedGeography(history, homeAirportIata = null)
 
         assertFalse("US" in geo.visitedCountries)
+    }
+
+    private fun airport(iata: String, lat: Double, elevationFt: Double = 100.0) = Airport(
+        id = iata.hashCode(), ident = iata, iataCode = iata, name = iata, lat = lat, lon = 0.0,
+        elevationFt = elevationFt, continent = "EU", isoCountry = "GB", isoRegion = "GB-ENG",
+        municipality = iata, type = "large_airport"
+    )
+
+    private val hemisphereAirports = mapOf(
+        "LHR" to airport("LHR", lat = 51.47),
+        "JFK" to airport("JFK", lat = 40.64),
+        "JNB" to airport("JNB", lat = -26.13, elevationFt = 5_558.0),
+        "LPB" to airport("LPB", lat = -16.51, elevationFt = 13_325.0)
+    )
+
+    @Test
+    fun `a Story flight between hemispheres crosses the equator and one within a hemisphere does not`() {
+        val repo = FakeAirportRepository(hemisphereAirports)
+        assertFalse(repo.getVisitedGeography(listOf(flight("JFK", FlightMode.STORY)), null).crossedEquator)
+        assertTrue(repo.getVisitedGeography(listOf(flight("JNB", FlightMode.STORY)), null).crossedEquator)
+        assertFalse(repo.getVisitedGeography(listOf(flight("JNB", FlightMode.FREE)), null).crossedEquator)
+    }
+
+    @Test
+    fun `only Story landings set the highest landing elevation`() {
+        val repo = FakeAirportRepository(hemisphereAirports)
+        val departingHigh = listOf(flight("JNB", FlightMode.STORY).copy(originIata = "LPB"))
+        assertEquals(5_558.0, repo.getVisitedGeography(departingHigh, null).highestLandingElevationFt, 0.0)
+        assertEquals(0.0, repo.getVisitedGeography(listOf(flight("LPB", FlightMode.FREE)), null).highestLandingElevationFt, 0.0)
+        assertEquals(13_325.0, repo.getVisitedGeography(listOf(flight("LPB", FlightMode.STORY)), null).highestLandingElevationFt, 0.0)
     }
 }

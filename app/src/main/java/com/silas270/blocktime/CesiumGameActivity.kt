@@ -675,7 +675,7 @@ class CesiumGameActivity : GameActivity() {
                                     val destIata = backStackEntry.arguments?.getString("destIata") ?: ""
                                     val durationMin = backStackEntry.arguments?.getInt("durationMin") ?: 0
                                     val rank = backStackEntry.arguments?.getString("rank") ?: ""
-                                    // Not consumed by this screen itself - mechanics.md's post-landing
+                                    // Not consumed by this screen itself - docs/core-loop.md's post-landing
                                     // pipeline step 5 branches purely on `landingResultChannel`, not on mode.
                                     @Suppress("UNUSED_VARIABLE")
                                     val mode = backStackEntry.arguments?.getString("mode")
@@ -684,7 +684,7 @@ class CesiumGameActivity : GameActivity() {
                                     val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
                                     // Snapshot only - already resolved (or not) by InFlightViewModel's
                                     // prefetch well before this screen is reached, same as how
-                                    // landingResultChannel.result.value is read below at line ~639.
+                                    // landingResultChannel.result.value is read on the outcome screen.
                                     val destPhoto = destinationPhotoChannel.photo.value
                                     // For "Welcome to <city>". Looked up rather than passed in the route,
                                     // where a free-text city name would need escaping.
@@ -702,7 +702,7 @@ class CesiumGameActivity : GameActivity() {
                                         destPhoto = destPhoto,
                                         destCity = destCity,
                                         onContinue = {
-                                            // mechanics.md's post-landing pipeline step 5: the rank stamp above
+                                            // docs/core-loop.md's post-landing pipeline step 5: the rank stamp above
                                             // always shows first, unchanged - this is the "always sequenced,
                                             // never replaced" hand-off into whatever step 4's challenge check
                                             // found (Phase 3b). `first { it != Pending }` awaits a resolved value

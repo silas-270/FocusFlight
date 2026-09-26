@@ -39,7 +39,7 @@ object AchievementProgress {
         AchievementBoard(
             geographic = evaluateGeographic(geo),
             distance = evaluateDistance(flightHistory),
-            behavioral = evaluateBehavioral(flightHistory)
+            behavioral = evaluateBehavioral(flightHistory, geo)
         )
 
     fun evaluateGeographic(geo: VisitedGeography): List<AchievementStatus> =
@@ -137,16 +137,12 @@ object AchievementProgress {
     private const val RED_EYE_HOUR_START = 0
     private const val RED_EYE_HOUR_END_EXCLUSIVE = 5 // local midnight..4:59am
 
-    private val HIGH_ALTITUDE_IATAS = setOf(
-        "ANS", "JAU", "JUL", "CUZ", "IXL", "BPX", "DIG", "LXA", "UYU", "JZH",
-        "YUS", "NGQ", "GXH", "NLH", "GMQ", "DCY", "KGT", "HBQ", "SRE", "GZG",
-        "DDR", "HQL", "LGZ", "LPB"
-    )
+    const val HIGH_ALTITUDE_MIN_FT = 10_000.0
 
-    private val SOUTHERN_CONTINENTS = setOf("SA", "OC", "AN")
-    private val NORTHERN_CONTINENTS = setOf("EU", "NA", "AS")
-
-    fun evaluateBehavioral(flightHistory: List<FlightLog>): List<AchievementStatus> {
+    /** [geo] supplies the two facts that need airport coordinates and elevations
+     *  ([VisitedGeography.crossedEquator], [VisitedGeography.highestLandingElevationFt]); the
+     *  other two are read off the flight log directly. */
+    fun evaluateBehavioral(flightHistory: List<FlightLog>, geo: VisitedGeography): List<AchievementStatus> {
         val story = flightHistory.filter { it.mode == FlightMode.STORY }
 
         val longestDurationMin = story.maxOfOrNull { it.durationMin } ?: 0
@@ -173,7 +169,7 @@ object AchievementProgress {
             isUnlocked = hasRedEye
         )
 
-        val hasHighAltitude = story.any { it.destIata in HIGH_ALTITUDE_IATAS || it.originIata in HIGH_ALTITUDE_IATAS }
+        val hasHighAltitude = geo.highestLandingElevationFt >= HIGH_ALTITUDE_MIN_FT
         val highAltitude = AchievementStatus(
             id = HIGH_ALTITUDE_ID,
             category = AchievementCategory.BEHAVIORAL,
@@ -185,11 +181,7 @@ object AchievementProgress {
             isUnlocked = hasHighAltitude
         )
 
-        val hasEquatorCross = story.any {
-            // Distance over 5000 km between long-haul flights or known trans-hemisphere routes
-            it.distanceKm >= 5000.0 && (it.originIata in setOf("LHR", "CDG", "FRA", "JFK", "DEL", "PEK", "HND") && it.destIata in setOf("JNB", "CPT", "SYD", "MEL", "EZE", "GRU", "SCL")) ||
-            (it.originIata in setOf("JNB", "CPT", "SYD", "MEL", "EZE", "GRU", "SCL") && it.destIata in setOf("LHR", "CDG", "FRA", "JFK", "DEL", "PEK", "HND"))
-        }
+        val hasEquatorCross = geo.crossedEquator
         val equator = AchievementStatus(
             id = EQUATOR_CROSSING_ID,
             category = AchievementCategory.BEHAVIORAL,

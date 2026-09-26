@@ -27,5 +27,12 @@ data class VisitedGeography(
      *  physically sits on it (Honolulu reaches Oceania though the US counts under North America).
      *  Backs "Globetrotter". */
     val reachedContinents: Set<String> = continentStats.filter { it.visitedCountries.isNotEmpty() }
-        .mapTo(HashSet()) { it.continentCode }
+        .mapTo(HashSet()) { it.continentCode },
+    /** Whether any Story flight connected the two hemispheres. A great circle between a point
+     *  north of the equator and one south of it has to cross it, so the endpoints' latitudes
+     *  decide it. Backs "Equator Crossing". */
+    val crossedEquator: Boolean = false,
+    /** Elevation of the highest airport a Story flight has *landed* at, in feet; `0.0` with no
+     *  landings. Departures and the home base do not count. Backs "High Altitude Club". */
+    val highestLandingElevationFt: Double = 0.0
 )

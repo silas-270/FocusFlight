@@ -1,182 +1,189 @@
-# The CesiumRS engine
+# The CesiumRS engine bridge
 
-## What it is
-
-CesiumRS is a Rust/wgpu 3D globe renderer maintained **outside this repository**. The
-Android app links it as a single shared library, `libcesium_rs.so`, and talks to it
-through two independent bridges that serve different purposes and use different calling
-conventions.
+CesiumRS is the Rust/wgpu globe renderer that draws the flight. It is developed in its own
+repository and linked into the app as one shared library, `libcesium_rs.so`. This file covers the
+Android side of that boundary: how the engine is hosted, the live JNI bridge call by call, and how
+the library is built. The offscreen renders drawn through the JNA bridge are described in
+[maps.md](maps.md#headless-globe-renders); how the engine turns a pair of airports and a duration
+into a flight profile is documented in CesiumRS's own `docs/flight-plan.md`.
 
 | Bridge | Mechanism | Used for | Code |
 |---|---|---|---|
-| Live | JNI (`System.loadLibrary`) | The interactive 3D scene during check-in and flight | `engine/live/CesiumLiveJniBridge.kt` |
-| Headless | JNA (`Native.load`) | Offscreen PNG route-map renders for 2D screens | `engine/headless/CesiumHeadlessJnaBindings.kt` |
+| Live | JNI (`System.loadLibrary`) | the interactive scene on Check-In and In-Flight | `engine/live/CesiumLiveJniBridge.kt` |
+| Headless | JNA (`Native.load`) | offscreen PNG globes for the 2D screens | `engine/headless/CesiumHeadlessJnaBindings.kt` |
 
-They share one `.so` but nothing else. The headless path never touches the live engine's
-state, and can run while the live engine is suspended — which is the point: the Hub needs
-a route-map image while no flight is in progress.
+The two share the `.so` and nothing else. The headless path never touches the live engine's state
+and works while the live engine is suspended, which is the point: the Hub needs a globe image while
+no flight is running.
 
-`arm64-v8a` is the only ABI built. Adding another means adding it to the `targets` map in
-`app/build.gradle.kts`'s `cargoNdkBuild` task, not just to an ABI filter.
+## Hosting the engine
 
-## The live bridge
+The app's Activity is a `GameActivity` (androidx.games) rather than a `ComponentActivity`, because
+the engine runs its own event loop on the native side (`android_main`) and renders into the
+Activity's native surface. `CesiumGameActivity` takes that `SurfaceView` out of its default parent
+and puts it in a `FrameLayout` underneath a `ComposeView`, so the Compose UI is drawn on top of the
+globe.
 
-`CesiumLiveJniBridge` is a stateless Kotlin `object` — every call is a `external fun`
-straight into Rust. It has no lifecycle of its own; the engine's lifecycle is managed by
-the two mechanisms below.
+On the two flight screens the root Compose `Surface` is transparent and the surface view is visible,
+so the scene shows through the HUD. Everywhere else the surface view is `GONE` and the Compose
+background is opaque. The transparency and the native surface belong to the same window, which is
+why the UI host cannot simply be swapped for a different Activity type.
 
-### Surface and host activity
+### Two independent switches
 
-The app's activity is `GameActivity` (androidx.games), not `ComponentActivity`. The
-engine renders directly into the activity's native surface, *behind* the Compose tree.
-Compose is hosted in a `ComposeView` added on top, and on flight screens the Compose
-`Surface` colour is set to `Color.Transparent` so the 3D scene shows through. Everywhere
-else it is opaque `MaterialTheme.colorScheme.background`.
+The engine has two on/off states that answer different questions, and they are named differently
+so they are not confused.
 
-This is why the Compose UI cannot simply be replaced with a different host: the
-transparency and the native surface are the same window.
+**Suspend and resume follow the Activity lifecycle.** `CesiumEngineManager`, a
+`DefaultLifecycleObserver` attached once in `onCreate()` before any Compose content, calls
+`nativeSetSuspended(false)` on `ON_START` and `nativeSetSuspended(true)` on `ON_STOP`. Suspending
+puts the engine's event loop into a blocking wait, so a backgrounded app burns no CPU or GPU on it.
+Because it observes the Activity and not a composition, recomposition never re-triggers it.
 
-### Two orthogonal on/off switches
+**Rendering follows the navigation route.** `CesiumGameActivity` calls
+`nativeSetRenderingEnabled(true)` only while the current route starts with `check_in/` or
+`in_flight/`. Every other screen leaves the engine awake but drawing nothing, so switching to a
+flight screen is immediate while the menus cost nothing. The same route test shows or hides the
+surface view and keeps the screen awake.
 
-Confusing these is the most common way to break the engine, so they are named
-differently on purpose.
+**Destruction is guarded.** `CesiumEngineManager.onDestroy` calls `nativeDestroyEngine()`, which
+tells the event loop to exit and release its Vulkan resources, only when
+`!activity.isChangingConfigurations`. The manifest declares orientation, size, UI-mode, density and
+the other common configuration changes as handled by the Activity itself, so rotating on In-Flight,
+the one screen that allows it, does not recreate the Activity at all; the guard covers any
+configuration change that still does.
 
-**Suspend/resume is lifecycle-scoped.** `CesiumEngineManager`, a
-`DefaultLifecycleObserver` attached once in `onCreate()` before `setContent()`, calls
-`nativeSetSuspended(false)` on `ON_START` and `nativeSetSuspended(true)` on `ON_STOP`.
-This wakes and sleeps winit's event loop so a backgrounded app stops burning CPU and GPU.
-It is attached to the *activity's* lifecycle, not a Compose scope, so it survives
-recomposition.
+## The call surface
 
-**Rendering enable/disable is route-scoped.** `CesiumGameActivity` watches the current
-nav destination and calls `nativeSetRenderingEnabled(true)` only while the route starts
-with `check_in/` or `in_flight/`. Every other screen renders nothing.
+Every call is an `external fun` on the stateless `CesiumLiveJniBridge` object; its `init` block
+loads the library, which is why a class that touches it cannot run in a JVM unit test. No structs
+cross JNI: every parameter is a primitive or a primitive array.
 
-**Destroy is guarded.** `CesiumEngineManager.onDestroy` calls `nativeDestroyEngine()`
-only when `!activity.isChangingConfigurations`. Without that guard, rotating the device
-mid-flight would drop the Vulkan device while the pilot expects the flight to continue.
-InFlight is the one screen that allows rotation, so this guard is reachable in normal use,
-not theoretical.
+### Loading a flight
 
-> The clean-exit path (winit loop exiting and releasing Vulkan resources before process
-> death) is implemented but has not been verified on a physical device.
-
-### The call surface
-
-**Loading a flight** — always through `PendingFlightLoader`, never by calling the bridge
-directly. It looks up both airports, picks each one's longest runway, and pushes runways
-then field elevations, then route, then load, in that order:
+Always through `PendingFlightLoader`, never directly. It resolves both airports, picks each
+airport's **longest** runway, and pushes, in this order:
 
 ```
-nativeSetRunways(...)      → geometry for the departure and arrival runways
+nativeSetRunways(ids, lengthFt, widthFt, leHeading, leLat, leLon, heHeading, heLat, heLon)
 nativeSetFieldElevations(depElevationM, arrElevationM)
 nativeSetPendingFlight(depLon, depLat, arrLon, arrLat, durationMs)
 nativeLoadPendingFlight()
 ```
 
-It is the single owner of that sequence because two call sites need it — resuming a
-paused flight from the Hub, and confirming a route in Flight Search — and they must not
-drift apart.
+The first three only stage data; `nativeLoadPendingFlight` consumes it and plans the flight.
+Runways are sent as parallel arrays, one entry per airport, and an airport without runway rows is
+simply absent, in which case the engine lays out a runway along the route's own bearing. Elevations
+are converted from feet to metres; the engine plans takeoff and landing at the real field elevation.
 
-**Driving the flight** — `nativeSetProgress(0.0..1.0)`, pushed by `InFlightViewModel`'s
-timer loop. Progress is the *only* thing the app tells the engine about time; the engine
-derives position, attitude and camera from it. Landing pushes `1.0`.
+The loader is the single owner of this sequence because several paths need it (confirming a route in
+Flight Search, booking the next itinerary leg, resuming a paused flight), and one implementation
+means they cannot drift apart. It also remembers the last flight it loaded in this process, so `ensureLoaded` on Check-In and
+In-Flight is a no-op on the normal path and a reload after process death
+([paused-flights.md](paused-flights.md#process-death)).
 
-**Reading back** — `nativeGetTelemetry()` returns a `DoubleArray`; the ViewModel reads
-indices 1–3 as lat, lon and altitude when the array has at least 8 elements. The HUD's
-displayed position and altitude come from the engine, not from interpolating the route
-in Kotlin.
+### Driving the flight
 
-**Camera** — `nativeSetCameraMode(mode)` where `0 = Free`, `1 = Chase`, `2 = Cockpit`.
-`nativeGetCameraPose()` / `nativeSetCameraPose(...)` save and restore a free-camera
-position and quaternion across a pause/resume, so a paused flight comes back to the view
-it was left in. Set the mode *before* setting the pose, so the mode is already correct
-when the pose lands.
+`nativeSetProgress(0.0..1.0)`, pushed by `InFlightViewModel` on every 33 ms tick. Progress is the
+**only** thing the app tells the engine about time. The engine derives position, attitude, camera
+and lighting from it, and the flight lands exactly when progress reaches 1. The landing pipeline
+pushes 1.0 explicitly.
 
-**Map style** — `nativeSetMapStyle(style)`:
+### Reading telemetry
 
-| Id | Constant | Source | Network |
-|---|---|---|---|
-| `0` | `MAP_STYLE_STANDARD` | CARTO dark basemap, flat globe | yes |
-| `1` | `MAP_STYLE_SATELLITE_TERRAIN` | Esri imagery on Terrarium 3D relief | yes |
-| `2` | `MAP_STYLE_OFFLINE` | Natural Earth vector map built into the `.so`, rasterized on the CPU, flat | none |
+`nativeGetTelemetry()` returns eight doubles:
 
-Unknown ids fall back to Standard on the Rust side. The screen never pushes the pilot's
-stored choice directly. It pushes `InFlightViewModel.effectiveMapStyle`, which is `2`
-whenever `OfflineModeController` reports the app is offline (see
-[architecture.md](architecture.md#network)). The stored choice stays put and comes back
-once the app is online again.
-
-**Route line** — `nativeSetRouteLineMode(mode, behindNm, aheadNm)` where `0 = Full` (entire route,
-default), `1 = Window` (fading window around the aircraft, default 40 NM behind / 150 NM ahead),
-and `2 = Hidden` (no route line drawn).
-
-### Adding a native call
-
-Both sides must change together. A Kotlin `external fun` whose Rust counterpart does not
-exist fails at first call with `UnsatisfiedLinkError`, not at build time. `PerfScenarioReceiver`
-shows the pattern for a call that only exists in some builds: gate it behind
-`BuildConfig.DEBUG` and catch the link error.
-
-## The headless bridge
-
-JNA rather than JNI because the signature is a plain C function over a struct array, with
-no JVM object involved:
-
-```
-render_routes_headless(width, height, routes: *const HeadlessRoute, count, outPath) -> bool
-```
-
-`LatLon` and `HeadlessRoute` are JNA `Structure`s mirroring the Rust layout. Field order
-is declared with `@Structure.FieldOrder` and **must match the Rust struct exactly** —
-a mismatch is silent memory corruption, not a compile error.
-
-Every headless render uses the bundled offline vector map (`headless_tile_config()` in
-CesiumRS's `src/headless/api.rs`), online or not. The globes on the Hub, Onboarding,
-Account and arrival screens therefore never need the network. Because the source is SVG,
-light and dark palettes can be added later without a new tile set. The C signature is
-unchanged, so a palette would arrive as a new parameter there.
-
-`CesiumHeadlessMapRenderer` wraps it and owns the whole fetch-routes → render →
-prune-cache sequence. Callers never touch the JNA bindings directly. It returns a sealed
-`Result` (`Success(path, fromCache)` / `Failure(message)`) rather than throwing, because
-every caller runs it in a background scope whose only sensible response to a failure is a
-retryable "map unavailable" state.
-
-Three screens use it, and the `reuseCachedFile` flag is what distinguishes them:
-
-| Caller | `reuseCachedFile` | Why |
+| Index | Value | Unit |
 |---|---|---|
-| `HubViewModel.generateRouteMap()` | `true` | The map for the current airport is usually already on disk; re-rendering it would add a visible delay to opening the app |
-| `OnboardingViewModel.preRenderMap()` | `false` | Warms the cache for a freshly chosen home base |
-| `InFlightViewModel.preRenderDestinationMap()` | `false` | Runs at landing so the destination's map is ready by the time the arrival sequence ends |
+| 0 | progress | 0..1 |
+| 1 | latitude | degrees |
+| 2 | longitude | degrees |
+| 3 | altitude | metres |
+| 4 | speed | m/s |
+| 5 | heading | radians |
+| 6 | pitch | radians, nose up positive |
+| 7 | roll | radians |
 
-Output files are named `MapImageCache.fileNameFor(iata)`, i.e.
-`hub_route_map_v<RENDER_VERSION>_<IATA>.png`, in the cache directory. Bump
-`RENDER_VERSION` whenever the look of headless renders changes. `pruneMapCache` deletes
-every file from an older version outright, then keeps the five most recently modified, **plus** any pinned
-IATA — the home base is pinned, because return-home is on a 7-day cooldown and would
-otherwise always find a cold cache.
+All zeros means "no telemetry yet", and the ViewModel ignores such a reading rather than showing the
+aircraft at 0°N 0°E. The HUD's position, altitude and speed come from here, rounded for display.
+`EnginePowerModel` reads the raw doubles instead, because the rounded copies lose exactly the
+precision it needs ([engine-sound.md](engine-sound.md#reading-the-telemetry)).
+
+### Camera
+
+`nativeSetCameraMode(mode)`: `0` Free, `1` Tracking (labelled CHASE in the app), `2` Cockpit;
+unknown values fall back to Free. A new flight starts in Tracking.
+
+`nativeGetCameraPose()` returns `[mode, x, y, z, qx, qy, qz, qw]`, and `nativeSetCameraPose(...)`
+applies a saved position and rotation the next time the view resets. Together they let a paused
+flight come back to the view it was left in. The mode is set before the pose, so it is already
+correct when the pose lands.
+
+### Map style
+
+`nativeSetMapStyle(style)`:
+
+| Id | Constant | Imagery | Terrain | Network |
+|---|---|---|---|---|
+| `0` | `MAP_STYLE_STANDARD` | CARTO dark basemap | flat | yes |
+| `1` | `MAP_STYLE_SATELLITE_TERRAIN` | Esri World Imagery | 3D relief from Terrarium elevation tiles | yes |
+| `2` | `MAP_STYLE_OFFLINE` | Natural Earth vector map compiled into the `.so`, rasterised on the CPU | flat | none |
+
+Unknown ids fall back to Standard on the Rust side. The screen never pushes the pilot's stored
+preference directly; it pushes `InFlightViewModel.effectiveMapStyle`, which is the offline map
+whenever the app is offline, so the preference survives an outage untouched
+([network.md](network.md#the-live-globe)).
+
+### Route line
+
+`nativeSetRouteLineMode(mode, behindNm, aheadNm)`: `0` the whole route (the default), `1` a window
+around the aircraft that fades out at both ends, `2` no line. The distances are in nautical miles
+and only apply to the window; the app passes 40 NM behind and 150 NM ahead. They cross the boundary
+as parameters rather than being compiled into the engine, so a change of taste does not need a new
+native build. Showing the whole route from the first second of a long-haul flight both gives the
+route away and fills the screen with a line nowhere near the aircraft, which is why the window
+exists.
+
+Nothing on the native side persists across restarts. The app owns every setting (camera, style,
+route line) and pushes it again whenever In-Flight starts.
+
+### Calls that exist only in some builds
+
+A Kotlin `external fun` without a Rust counterpart fails at its first call with
+`UnsatisfiedLinkError`, not at build time. `nativeRunPerfScenario(id)` is exported only when the
+library is built with the `perf_trace` feature, so its only caller, the debug-only
+`PerfScenarioReceiver`, catches the error and logs it on any other build.
 
 ## Building the native library
 
-`preBuild` depends on the `cargoNdkBuild` task, so a normal Gradle build cross-compiles
-CesiumRS and copies the `.so` into `jniLibs/arm64-v8a/`. It shells out to `cargo ndk`
-and needs a CesiumRS checkout on the machine.
+`preBuild` depends on the `cargoNdkBuild` task, so every Gradle build cross-compiles CesiumRS first.
+For each target (`aarch64-linux-android` → `arm64-v8a`, `x86_64-linux-android` → `x86_64`) it runs
+
+```
+cargo ndk --target <target> build --lib --release --no-default-features --features debug_panel
+```
+
+in the CesiumRS checkout and copies `target/<target>/release/libcesium_rs.so` into
+`app/src/main/jniLibs/<abi>/`. Cargo's output is appended to `cargo_build.log` in the CesiumRS
+checkout rather than streamed into Gradle's, so that log is where a native build failure explains
+itself.
 
 | Variable | Purpose | Fallback |
 |---|---|---|
-| `CESIUM_RS_HOME` | Path to the CesiumRS checkout | `~/CesiumRS` |
-| `ANDROID_NDK_HOME` | NDK to build against | derived from `ANDROID_HOME` / `ANDROID_SDK_ROOT` |
+| `CESIUM_RS_HOME` | path to the CesiumRS checkout | `~/CesiumRS` |
+| `ANDROID_NDK_HOME` | NDK to build against | `$ANDROID_HOME/ndk/27.1.12297006` (or `ANDROID_SDK_ROOT`) |
 
-The task appends to `cargo_build.log` inside the CesiumRS checkout rather than streaming
-to Gradle's output — that log is where a native build failure explains itself.
+`CARTO_API_KEY` and `ESRI_API_KEY` from `local.properties` are passed to Cargo as environment
+variables, because CesiumRS reads them at compile time into the tile URLs
+([network.md](network.md#map-tiles)).
 
-### Cargo features
+The ABI list is set in two places that have to agree: the task's target map and
+`defaultConfig.ndk.abiFilters`. The filter matters on its own account: JNA ships its own
+`libjnidispatch.so` for 32-bit ABIs too, and without the filter those would pull 32-bit ABIs into
+the bundle, and the app would be installable on 32-bit devices that have no engine library.
 
-Day-to-day builds use `--no-default-features --features debug_panel`. `debug_panel` pulls
-in egui only far enough to draw the city-label pills; the actual debug-slider window is
-skipped on Android, so no dev UI reaches the real app.
+The `debug_panel` feature pulls in just enough of egui to draw the city-label pills on the globe;
+the engine's debug-slider window is skipped on Android, so no developer UI reaches the app.
 
 ### Profiling builds
 
@@ -185,16 +192,14 @@ skipped on Android, so no dev UI reaches the real app.
 tools/run_perf_scenario.sh <scenario_id> [duration_seconds]
 ```
 
-`-Pcesium.profile=profiling` selects CesiumRS's `profiling` Cargo profile (release
-codegen, debug symbols kept) and adds the `perf_trace` feature (ATrace spans and
-per-subsystem timings). `packaging.jniLibs.keepDebugSymbols` stops AGP stripping those
+`-Pcesium.profile=profiling` builds CesiumRS's `profiling` Cargo profile (release code generation
+with debug symbols kept) with the `perf_trace` feature, which adds ATrace spans and per-subsystem
+timings. `packaging.jniLibs.keepDebugSymbols` stops the Android Gradle plugin from stripping those
 symbols, without which an on-device simpleperf or Perfetto capture cannot be symbolicated.
 
-`nativeRunPerfScenario(id)` exists **only** in such a build — it throws
-`UnsatisfiedLinkError` against a normal release `.so`, which is why `PerfScenarioReceiver`
-is debug-source-set only. Scenario ids `2`, `3` and `4` also switch the camera to Free,
-Tracking and Cockpit respectively; any other integer just tags the trace.
-
-The script builds, installs, captures a combined Perfetto trace plus a memory-sample log,
-pulls both into `perf_runs/`, and runs CesiumRS's `analyze_perf.py` over them. It needs
-`adb` with exactly one device attached.
+`run_perf_scenario.sh` builds and installs such an APK, captures a Perfetto trace and a memory log for
+one scenario (ids `2`, `3` and `4` also switch the camera to Free, Tracking and Cockpit), pulls both
+into `perf_runs/`, and runs CesiumRS's `analyze_perf.py` over them. `run_perf_multimode.sh` and
+`analyze_multimode.py` capture one 35-minute flight that walks all three camera modes, so the three
+measurement windows share a flight, a warm start and the same terrain, and break the trace down per
+subsystem and per mode.

@@ -7,23 +7,20 @@ package com.silas270.blocktime.data.model
  * it instead of computing it after the fact. Write-once at session start —
  * nothing in the design implies reclassifying a flight later.
  *
- * See mechanics.md's isolation matrix for the full read/write rules per tag.
- * This phase only introduces the tag itself; FREE and CHALLENGE aren't produced
- * anywhere yet (Free Mode / Challenges are later phases) — every flight logged
- * today is STORY.
+ * See docs/modes.md's isolation matrix for the full read/write rules per tag.
  */
 enum class FlightMode {
-    /** Normal Story Mode flying (the default, unchanged today). Full read/write
+    /** Normal Story Mode flying, and the default. Full read/write
      *  of `currentAirport` and the visited-set. */
     STORY,
 
     /** A Free Mode session. Logged like any other flight, but never writes
      *  `currentAirport`/visited-set and never counts toward achievements or
-     *  challenges. Not yet produced anywhere - see Phase 2 (Free Mode). */
+     *  challenges. */
     FREE,
 
     /** A session flown explicitly under one active Route challenge. Doesn't
      *  write `currentAirport`, but does move that challenge's own position
-     *  pointer. Not yet produced anywhere - see Phase 3 (Challenges). */
+     *  pointer. */
     CHALLENGE
 }

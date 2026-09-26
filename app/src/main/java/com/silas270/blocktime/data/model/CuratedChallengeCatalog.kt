@@ -1,11 +1,11 @@
 package com.silas270.blocktime.data.model
 
 /**
- * A curated challenge template a player can start (from the Hub's quest log) -
+ * A curated challenge template a player can start from the Challenges screen -
  * name/description/definition, but no instance state: `ChallengeRepository.startCuratedChallenge`
  * assigns an id, position pointer (Route), and zeroed progress when it instantiates a [Challenge]
  * row from one of these. A handful of real examples per type, per docs/challenges.md's
- * "What to build" - not exhaustive content, that's later authoring work.
+ * "Where it comes from" - not exhaustive content, that's later authoring work.
  */
 data class CuratedChallengeTemplate(
     val catalogId: String,

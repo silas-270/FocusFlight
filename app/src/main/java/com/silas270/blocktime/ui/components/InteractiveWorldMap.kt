@@ -133,7 +133,7 @@ private fun buildMergedMapPaths(
 }
 
 /**
- * World map drawn from paths extracted from natural_earth_vectors.svg.
+ * World map drawn from paths extracted from `assets/world-map.svg`.
  *
  * Visited countries are filled with Amber; unvisited countries are dark slate.
  */

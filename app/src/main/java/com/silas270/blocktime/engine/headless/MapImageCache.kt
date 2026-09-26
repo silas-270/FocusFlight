@@ -25,8 +25,8 @@ object MapImageCache {
      * the one render the pilot waits on after a 10-second animation was, in practice, always a
      * cold one.
      *
-     * Set once at startup and again whenever the home base changes; see
-     * `CesiumGameActivity.pinHomeBaseMap`.
+     * Kept in sync with the profile's home base by `CesiumGameActivity`, which re-reads it from
+     * the profile flow.
      */
     @Volatile
     var pinnedIatas: Set<String> = emptySet()

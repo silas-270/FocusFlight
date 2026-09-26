@@ -148,9 +148,9 @@ tasks.register("cargoNdkBuild") {
         targets.forEach { (rustTarget, androidAbi) ->
             println("Building Rust library for target: $rustTarget (ABI: $androidAbi)...")
             
-            // debug_panel (not the full "testing" default) pulls in egui just far enough to
-            // draw the city-label pills; app.rs skips the actual debug-sliders window on
-            // Android, so this doesn't put any dev UI in front of the real app.
+            // debug_panel rather than the full "testing" default keeps the test harnesses out
+            // of the library; app.rs skips the debug-sliders window on Android, so no dev UI
+            // reaches the real app.
             //
             // cesium.profile=profiling swaps in the `profiling` Cargo profile (release
             // codegen, debug symbols kept) plus the `perf_trace` feature (ATrace spans +

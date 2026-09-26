@@ -6,7 +6,7 @@ package com.silas270.blocktime.data.model
  * pattern so this is directly unit-testable (see HomeBaseCooldownTest) independent of
  * `PreferencesRepository`.
  *
- * Two distinct cooldowns gate two distinct actions (story-mode.md's "Cooldowns" - don't conflate
+ * Two distinct cooldowns gate two distinct actions (docs/modes.md's "The two cooldowns" - don't conflate
  * them): the 7-day return-home teleport, and the 30-day change-home-base. Both use the same
  * rolling-elapsed-time check below (`now - lastTimestamp >= days * 24h` in millis) rather than
  * calendar-day boundaries - nothing in the design implies calendar-day semantics, and a rolling
@@ -43,8 +43,8 @@ object HomeBaseCooldown {
     }
 
     /**
-     * The "last home base changed" timestamp to seed at onboarding, per story-mode.md's
-     * "Changing home base needs no separate 'grace change' mechanic": 31 days before [now], one
+     * The "last home base changed" timestamp to seed at onboarding, per docs/modes.md's
+     * "The two cooldowns" - changing home base needs no separate 'grace change' mechanic: 31 days before [now], one
      * day past [CHANGE_HOME_BASE_COOLDOWN_DAYS], so the very first real change-home-base call
      * [isEligible] the exact same way every later change does, instead of a special-cased
      * "first time" branch.

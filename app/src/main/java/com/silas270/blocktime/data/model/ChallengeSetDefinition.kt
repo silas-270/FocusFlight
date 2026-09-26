@@ -2,8 +2,8 @@ package com.silas270.blocktime.data.model
 
 /**
  * A curated Set-completion definition: which members exist and how to test a landed destination
- * against them. Set-completion is curated-only (docs/challenges.md - "unlike Distance's
- * target number, there's no cheap way to let a player define their own"), so [CuratedChallengeSets]
+ * against them. Set-completion is curated-only (docs/challenges.md's "The four types" -
+ * a set has to be authored to mean anything), so [CuratedChallengeSets]
  * is the only source of Set-completion challenges; there is no custom-authored equivalent.
  */
 data class ChallengeSetDefinition(

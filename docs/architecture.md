@@ -1,261 +1,218 @@
 # Architecture
 
+How the app is put together: what it is for, how its layers depend on each other, where state
+lives, and how the native engine is built into it.
+
 ## What Blocktime is
 
-A focus timer shaped like a flight simulator. The pilot books a real scheduled route
-between two real airports, and the flight's duration *is* the study session. While the
-timer runs, a native 3D globe renders the aircraft travelling the actual great-circle
-path. On landing, the flight is written to a logbook, the pilot's position moves to the
-destination, and everything derived from that history — visited countries, achievements,
-challenge progress — updates.
+A focus timer shaped like a flight. The pilot books a real scheduled route between two real
+airports, and the flight's scheduled duration *is* the study session. While the timer runs, a
+native 3D globe renders the aircraft flying that route. On landing the flight goes into a
+logbook, the pilot's position moves to the destination, and everything derived from that
+history (visited countries, achievements, challenge progress) follows.
 
-Two properties are load-bearing and constrain most design decisions:
+Two properties shape most of the decisions described in these documents.
 
-1. **It is a study tool first, a game second.** Any mechanic that adds friction before a
-   session starts has to justify itself against that. The one-tap "start a session" path
-   must not get harder to reach.
-2. **Everything real-world stays real-world.** The bundled database contains only
-   actual scheduled routes between actual airports. There are no fictional routes or
-   airports — in normal play the puzzle is *finding* a real path across the world.
+**It is a study tool first and a game second.** Every mechanic is measured against how much
+friction it puts in front of starting a session. The one-tap path from the Hub to a running
+timer is deliberately kept short: in Flight Search, tapping the centred route card books it
+directly, and the Hub globe itself is a booking button.
 
-   Authored itineraries do exist, in `PredefinedRouteCatalog`, but they do not weaken
-   this: every leg must be a real route present in `flights.db`, and
-   `PredefinedRouteCatalogTest` checks each one leg by leg. That test is what stands
-   between an authoring typo and a challenge nobody can fly.
+**Everything real-world stays real-world.** The bundled database holds real scheduled routes
+between real airports, and there are no invented ones. Because position only moves by flying,
+getting across the world means finding a real path across it, which is the game. The authored
+itineraries in `PredefinedRouteCatalog` obey the same rule: every leg is a route that exists in
+`flights.db`, and `PredefinedRouteCatalogTest` checks each one leg by leg against the database
+(see [challenges.md](challenges.md)).
 
-Single-player, with no account, no sync, and no server. The network is only used for
-live-globe map tiles and one optional destination-photo fetch, and the app works fully
-without it (see [Network](#network)).
+The app is single-player, with no account, no sync and no server. The network is used only for
+live-globe map tiles and one optional destination photo per flight, and the app is fully usable
+without it ([network.md](network.md)).
 
 ## Stack
 
 | Layer | Technology |
 |---|---|
 | UI | Jetpack Compose, Material 3, Navigation Compose |
-| Presentation | ViewModels with `StateFlow`, manual `ViewModelProvider.Factory` per screen |
-| Persistence | Room (`user_data.db`, mutable) + a bundled read-only SQLite asset (`flights.db`) + `SharedPreferences` |
-| 3D engine | CesiumRS — an out-of-tree Rust/wgpu renderer, linked as `libcesium_rs.so` |
-| Native bridge | JNI for the live engine, JNA for the headless renderer |
-| Host activity | `GameActivity` (androidx.games), not `ComponentActivity` |
-| Build | Gradle KTS, KSP for Room, `cargo-ndk` for the Rust library |
+| Presentation | One ViewModel per screen exposing `StateFlow`s, each built by a hand-written `ViewModelProvider.Factory` |
+| Persistence | Room (`user_data.db`), a bundled read-only SQLite asset (`flights.db`), `SharedPreferences` |
+| 3D engine | CesiumRS, a Rust/wgpu globe renderer built into `libcesium_rs.so` |
+| Native bridges | JNI for the live engine, JNA for offscreen renders |
+| Host activity | `GameActivity` from androidx.games |
+| Build | Gradle Kotlin DSL, KSP for Room, `cargo-ndk` for the Rust library |
 
-`minSdk` 26, `targetSdk` 36, `arm64-v8a` only (the sole ABI the native library is built
-for — see [engine.md](engine.md)).
-
-There is no dependency-injection framework. Every repository is constructed once in
-`CesiumGameActivity.onCreate()` and passed down explicitly through ViewModel factories.
-This is deliberate: the graph is small enough to read in one screen, and the construction
-order is itself meaningful (see [state.md](state.md)'s ordering invariants).
+`minSdk` 26, `targetSdk` 36, `compileSdk` 37. Only `arm64-v8a` and `x86_64` are built, the two
+ABIs the native library is compiled for ([engine.md](engine.md)).
 
 ## Layers
 
 ```
-CesiumGameActivity          composition root · NavHost · engine lifecycle
-        │
-        ├── ui/screens/     Compose screens, one package per destination
-        ├── ui/components/  cross-screen reusable composables
-        ├── ui/viewmodel/   one ViewModel per screen, StateFlow-exposed
-        │
-        ├── domain/         pure orchestration over repositories, no Android deps
-        │
-        ├── audio/          real-time engine-sound synthesis — see [engine-sound.md](engine-sound.md)
-        │
-        ├── data/repository/  interface + Local* implementation per concern
-        ├── data/model/       entities, enums, catalogs, pure progress math
-        ├── data/local/       Room DAOs, migrations, the flights.db data source
-        │
-        └── engine/live/      JNI bridge to the running 3D engine
-            engine/headless/  JNA bridge to the offscreen map renderer
+CesiumGameActivity            composition root · NavHost · engine lifecycle
+   │
+   ├── ui/screens/            Compose screens, one package per destination
+   ├── ui/components/         cross-screen composables (world map, modals, buttons)
+   ├── ui/viewmodel/          one ViewModel per screen
+   ├── ui/map/, ui/theme/     world-map parsing and projection, colours, design scale
+   │
+   ├── domain/                orchestration and pure logic: route network, search,
+   │                          next-leg resolution, map-style policy, thrust model
+   ├── audio/                 real-time engine-sound synthesis
+   │
+   ├── data/repository/       an interface plus a Local* implementation per concern
+   ├── data/model/            entities, enums, catalogs, pure progress math
+   ├── data/local/            Room DAOs and migrations, the flights.db data source
+   ├── data/network/          connectivity and offline mode
+   │
+   ├── engine/live/           JNI bridge to the running engine
+   ├── engine/headless/       JNA bridge to the offscreen renderer, render cache
+   └── util/                  units, search normalisation, country names, airport clocks
 ```
 
-The dependency direction is strictly downward. `data/model` in particular has no
-Android, Room-behaviour, or JNI dependency in its pure parts (`ChallengeProgress`,
-`AchievementProgress`, `Tour`, `HomeBaseCooldown`), which is what makes those
-JVM-unit-testable without a device.
+Dependencies point downward. The pure parts of `data/model` (`ChallengeProgress`,
+`AchievementProgress`, `Tour`, `HomeBaseCooldown`, `PredefinedRoute`) and most of `domain/`
+(`RouteNetwork`, `AirportSearchIndex`, `EnginePowerModel`) carry no Android, Room or JNI
+dependency, which is what lets them run as plain JVM unit tests.
 
-**Repositories are interfaces with a single `Local*` implementation.** The interface is
-not there for a future remote backend — it is the seam that lets JVM tests substitute a
-fake without Room or the NDK. Where a piece of logic needed to be testable but lived
-inside a ViewModel that loads the native engine on touch, it was pulled out into a
-standalone function instead: `processLandingForChallenges`, `resolveLandingOutcome`,
-`resolveNextLeg`, `loadRouteContext`.
+**Repositories are interfaces with a single `Local*` implementation.** The interface is not a
+placeholder for a remote backend; it is the seam that lets a JVM test substitute a fake without
+Room or the NDK. The same reasoning pulled several pieces of logic out of ViewModels into
+standalone functions: `InFlightViewModel` loads the native library the moment it touches
+`CesiumLiveJniBridge`, so it cannot be instantiated in a unit test, and anything that needs
+testing is moved out of it. That is where `processLandingForChallenges`,
+`resolveLandingOutcome`, `loadRouteContext` and `resolveNextLeg` come from, and why the
+landing's concurrency guarantee lives in `SessionPausedFlightStore` rather than in a flag on
+the ViewModel ([state.md](state.md#concurrent-writers)).
+
+## The composition root
+
+There is no dependency-injection framework. `CesiumGameActivity.onCreate()` constructs every
+repository once and hands them to screens through the ViewModel factories. The graph is small
+enough to read in one screen, and the order in which it is built carries meaning:
+
+1. The `flights.db` data source and airport repository, the `PendingFlightLoader`, the
+   preferences repository, and the process-wide `OfflineModeController`.
+2. The Room database and the user, flight-log, challenge and achievement repositories.
+3. `PilotProgressRepository`, on an `appScope` that outlives every ViewModel, so the shared
+   derivation of the pilot's progress stays warm across navigation
+   ([achievements.md](achievements.md#the-shared-derivation)).
+4. `ensureDatabaseCopied()`, which refreshes the bundled database if the app was installed or
+   updated since the last copy ([flight-data.md](flight-data.md#copying-and-opening-it)).
+5. `CesiumEngineManager`, attached to the Activity lifecycle before any Compose content exists.
+6. Two background jobs: one keeps the home base's globe render pinned in the image cache
+   ([maps.md](maps.md#the-cache)); the other parses the world-map SVG ahead of the first screen
+   that draws it.
+7. A startup self-heal: if `onboarding_completed` is set but no profile row exists, the flag is
+   reset, so the start destination is Onboarding rather than a Hub whose repositories would all
+   throw on `requireProfileId()`.
+
+Two Activity-scoped channels, `LandingResultChannel` and `DestinationPhotoChannel`, are built as
+plain fields. They carry per-landing results to screens that exist after `InFlightViewModel` has
+been destroyed ([navigation.md](navigation.md#what-travels-outside-the-route)).
 
 ## Where each concept lives
 
-| Concept | Anchor |
+| Concept | Where |
 |---|---|
 | App entry, nav graph, repository construction | `CesiumGameActivity.kt` |
-| Route definitions and argument encoding | `ui/Screen.kt` — see [navigation.md](navigation.md) |
-| A completed flight | `data/model/FlightLog.kt` — the only durable record a flight happened |
-| Session mode tag | `data/model/FlightMode.kt` — see [modes.md](modes.md) |
-| Landing pipeline | `InFlightViewModel.completeFlight()` — see [core-loop.md](core-loop.md) |
-| Challenge instances and progress | `data/repository/LocalChallengeRepository.kt`, `data/model/ChallengeProgress.kt` — see [challenges.md](challenges.md) |
-| Achievement evaluation | `data/model/AchievementProgress.kt` — see [achievements.md](achievements.md) |
-| Everything derived from history | `data/repository/PilotProgressRepository.kt` |
+| Route patterns and argument encoding | `ui/Screen.kt`, see [navigation.md](navigation.md) |
+| A completed flight | `data/model/FlightLog.kt`, the only durable record that a flight happened |
+| Session mode tag | `data/model/FlightMode.kt`, see [modes.md](modes.md) |
+| Landing pipeline | `InFlightViewModel.completeFlight()`, see [core-loop.md](core-loop.md#the-post-landing-pipeline) |
+| Paused flights | `data/model/PausedFlight.kt`, `data/repository/PausedFlightStore.kt`, see [paused-flights.md](paused-flights.md) |
+| Challenge instances and progress | `LocalChallengeRepository`, `ChallengeProgress`, see [challenges.md](challenges.md) |
+| Achievement evaluation | `AchievementProgress`, see [achievements.md](achievements.md) |
+| Everything derived from history | `PilotProgressRepository` |
 | Persisted-value ownership | [state.md](state.md) |
-| Native engine | `engine/live/`, `engine/headless/` — see [engine.md](engine.md) |
-| Engine sound | `domain/EnginePowerModel.kt` (telemetry → fan speed), `audio/` (fan speed → PCM) — see [engine-sound.md](engine-sound.md) |
+| Route network and search | `domain/RouteNetwork.kt`, `domain/AirportSearchIndex.kt`, see [route-network.md](route-network.md) |
+| Airport local time | `util/FlightClock.kt`, `util/AirportTimeZones.kt`, see [time-zones.md](time-zones.md) |
+| Native engine | `engine/live/`, see [engine.md](engine.md); `engine/headless/`, see [maps.md](maps.md) |
+| Offline mode | `data/network/`, `domain/OfflineMapPolicy.kt`, see [network.md](network.md) |
+| Engine sound | `domain/EnginePowerModel.kt`, `audio/`, see [engine-sound.md](engine-sound.md) |
+| Design scale | `ui/theme/DesignScale.kt`, see [ui.md](ui.md) |
 
 ## The two databases
 
-They are unrelated and must not be confused.
+They are unrelated and have opposite lifecycles.
 
-**`flights.db`** — bundled in `assets/`, copied to the databases directory by
-`AirportRepository.ensureDatabaseCopied()` on first run *and again after every install or
-update* (keyed on the package's `lastUpdateTime` in a `flights.db.stamp` sidecar), then opened
-read-only through `AirportRouteSqliteDataSource`. It is reference data, not user data. The copy
-goes through a temp file and a rename, so an interrupted copy never leaves a truncated database.
+**`flights.db`** is reference data: 4,170 airports, 57,570 routes and 5,670 runways, bundled in
+`assets/`, copied into the app's databases directory and opened read-only. Nothing in the app
+writes it, which is what makes the several process-lifetime caches on top of it safe. Its
+provenance, contents and quirks are in [flight-data.md](flight-data.md).
 
-| Table | Rows | Contents |
-|---|---|---|
-| `airports` | 4,170 | IATA/ICAO, name, lat/lon, elevation, continent, ISO country/region, municipality |
-| `routes` | 57,570 | origin/dest IATA, distance km, flight time min, carriers |
-| `runways` | 5,670 | per-airport length, width, both ends' heading and lat/lon |
+**`user_data.db`** is the pilot's own data: a Room database at schema version 10 with four
+entities, `user_profile`, `flight_log`, `challenges` and `achievement_unlocks`. Migrations from
+version 6 onward are explicit `Migration` objects in `AppDatabase.kt`, each validated by the
+instrumented `MigrationTest` against the schema JSON exported to `app/schemas/`. Versions 1 to 5
+predate the exported schemas and are listed in `fallbackToDestructiveMigrationFrom`, so only
+those are ever rebuilt from scratch; any other schema change without a migration fails at launch
+rather than silently deleting the logbook ([state.md](state.md#migrations)).
 
-Nothing writes it. It is replaced wholesale by shipping a new asset. Because it is
-immutable within a build, several process-level caches on top of it are safe — see
-[state.md](state.md)'s cache table.
-
-**`user_data.db`** — Room, version 9, `exportSchema = true`. Four entities:
-`user_profile`, `flight_log`, `challenges`, `achievement_unlocks`.
-
-Migrations are explicit and required. The destructive fallback that used to be here
-silently deleted the whole logbook on any schema bump; it is gone. Every version bump
-needs a `Migration` object in `AppDatabase.kt` and a committed
-`app/schemas/<db>/<version>.json`. Never delete an old version's JSON — a migration can
-only be tested against the schema it migrates *from*, and `MigrationTest` is what stops
-a broken migration reaching a device.
+A third store, `SharedPreferences` (`blocktime_prefs`), holds short-lived, fast-changing values
+such as the pilot's current airport and the Story and Free paused-flight slots. Which value lives
+where, and why, is the subject of [state.md](state.md).
 
 ## Assets
 
 | Asset | Used by |
 |---|---|
-| `flights.db` | `AirportRouteSqliteDataSource` (above) |
-| `world-map.svg` | `WorldMapParser` → `InteractiveWorldMap`, the passport's visited-country map |
+| `flights.db` | `AirportRouteSqliteDataSource`, see [flight-data.md](flight-data.md) |
+| `world-map.svg` | `WorldMapParser` and `InteractiveWorldMap`, see [maps.md](maps.md#the-2d-world-map) |
 | `Boeing787Cockpit.glb` | CesiumRS, cockpit camera mode |
 
-## Network
-
-Two things go outbound:
-
-- **Live-globe tiles.** The in-flight map styles Standard (CARTO) and Satellite + Terrain
-  (Esri imagery, Terrarium heights) stream tiles from inside CesiumRS. The Offline style
-  and every headless render use the vector map built into the `.so` and need nothing.
-  CARTO needs an API key, which `cargoNdkBuild` passes to the Rust build from
-  `local.properties`; without it every Standard tile comes back stamped "API KEY REQUIRED".
-  Esri's licensed imagery service needs `ESRI_API_KEY` the same way; without it the engine
-  falls back to Esri's keyless service, which is not licensed for commercial use.
-- **Destination photo.** `PexelsDestinationPhotoRepository` fetches a photo of the
-  destination city for the arrival screen, with its photographer, which the arrival screen
-  credits above CONTINUE as Pexels requires. The API key comes from `local.properties` via a
-  `buildConfigField`, so it never enters the repo. A failure is silent and the arrival
-  screen renders without a photo.
-
-**Credits are part of adding a source.** Every third-party source the app shows is listed in
-`CreditsCatalog` (Settings → Credits & licenses), and a network map style also needs its on-map
-line in `InFlightScreen`'s `MapAttribution`, because CARTO and Esri require the credit on the map
-while their tiles show. A new source without both is not finished.
-
-**Offline mode.** `OfflineModeController` (`data/network/`) is the single source of truth.
-It combines two inputs:
-
-- `ConnectivityMonitor`: a default-network callback. The device counts as connected only
-  when the network is INTERNET-capable *and* VALIDATED.
-- The **Offline maps** switch in Settings (`PreferencesRepository.isOfflineDataSaverEnabled`),
-  which forces offline mode to save data.
-
-The result is a `NetworkMode`: `ONLINE`, `OFFLINE_NO_CONNECTION` or `OFFLINE_DATA_SAVER`.
-The controller is process-wide (`getInstance`), because ViewModels can outlive a recreated
-Activity. While offline:
-
-- the Hub header shows an OFFLINE badge (`OfflineBadge`). The in-flight HUD shows its own
-  smaller status pill, shaped so it is not mistaken for one of the top-bar buttons;
-- the live globe switches to the Offline style, and the network styles are locked in the
-  map picker. The pilot's stored style is kept and restored when the app is back online,
-  with a short notice pill in both directions;
-- the destination-photo prefetch waits for the app to be online instead of timing out.
-
-## Screen scaling
-
-Every screen is designed on a 360 dp-wide phone (Galaxy S23) and shown *upscaled*, not
-re-flowed, on bigger phones. `ProvideDesignDensity` (`ui/theme/DesignScale.kt`) wraps the whole
-NavHost and sets the density so the window's shortest side is always 360 dp: paddings, radii,
-fixed heights and text all scale by the same factor, so proportions, line breaks and column
-counts match the S23 exactly. It never goes below the system density, caps at 1.35x, is off on
-tablets and unfolded foldables, and passes the system font scale through.
-
-Two rules follow from it:
-
-- **Never read `LocalConfiguration.current.screenWidthDp/screenHeightDp`.** Those stay in the
-  system's dp and disagree with everything else on screen. Use `LocalDesignScreenSize`.
-- **Don't open separate windows** (`Dialog`, `Popup`, `DropdownMenu`, `ModalBottomSheet`): they
-  get their own `LocalDensity` and would render unscaled. Modals are in-window (`ScrimCardModal`).
-
-The headless map renders scale their pixel size to the display the same way, so the Hub globe
-stays sharp.
-
-## Display formatting
-
-- **Numbers are always formatted with `Locale.US`** (`String.format(Locale.US, …)`, never a bare
-  `"…".format(…)`), so a German phone doesn't show "3,9 %" next to "6,838 mi".
-- **Lengths of time use `formatDuration`** (`util/Units.kt`): `45m`, `1h`, `1h 25m`. Only running
-  clocks (the In-Flight countdown and its elapsed/total readout) use `hh:mm:ss`.
-- Distances, altitudes and speeds go through `formatMiles` / `formatFeet` / `formatMph` in the
-  same file.
+The offline vector world map that the engine rasterises is compiled into `libcesium_rs.so`
+itself, not shipped as an asset.
 
 ## Debug-only code
 
-Debug tooling lives in the `app/src/debug/` source set, so it is never compiled into a release
-APK. When main code has to call it, `app/src/release/` provides a same-signature stand-in that
-does nothing - e.g. the In-Flight debug menu (`FlightDebugMenu`: seek, flight speed,
-pause/resume, skip to landing). The ViewModel hooks it drives (`debugSeek`,
-`setDebugTimeScale`, `skipFlight`) stay in main but are only ever called from there, so
-release flights always run at 1x real time.
+Debug tooling lives in the `app/src/debug/` source set and is never compiled into a release
+build. Where main code has to call into it, `app/src/release/` provides a same-signature
+stand-in that does nothing. The In-Flight `FlightDebugMenu` is the main example: a collapsed
+"DBG" chip that opens seek, flight speed (0.1× to 500×), pause/resume and skip-to-landing. The
+ViewModel hooks it drives (`debugSeek`, `setDebugTimeScale`, `skipFlight`) are in main code, but
+nothing in a release build calls them, so release flights always run at real time.
+
+The debug manifest also registers two broadcast receivers: `PerfScenarioReceiver`, which tags a
+Perfetto capture for `tools/run_perf_scenario.sh`, and `DebugSeedReceiver`, which inserts a set
+of demonstration flights. `CesiumGameActivity` registers a debug-only receiver for navigation and
+screen capture, used by `tools/capture_all_screens.sh`.
 
 ## Build
 
 ```
-./gradlew :app:assembleDebug         # also runs cargoNdkBuild via preBuild
-./gradlew test                       # JVM unit tests
-./gradlew connectedAndroidTest       # instrumented: MigrationTest, catalog tests
+./gradlew :app:assembleDebug        # preBuild runs cargoNdkBuild first
+./gradlew test                      # JVM unit tests
+./gradlew connectedAndroidTest      # instrumented: MigrationTest, PredefinedRouteCatalogTest
 ```
 
-`preBuild` depends on `cargoNdkBuild`, which cross-compiles CesiumRS and copies the
-resulting `.so` into `jniLibs/arm64-v8a/`. It needs a CesiumRS checkout — see
-[engine.md](engine.md) for the environment variables and the profiling build.
+`preBuild` depends on `cargoNdkBuild`, which cross-compiles CesiumRS with `cargo ndk` for both
+ABIs and copies each `libcesium_rs.so` into `src/main/jniLibs/<abi>/`. The environment it needs
+and the profiling variant are described in [engine.md](engine.md#building-the-native-library).
 
-Machine-local configuration lives in `local.properties` (gitignored): SDK paths,
-`PEXELS_API_KEY`, `CARTO_API_KEY` and `ESRI_API_KEY`, plus the Play upload key for release
-builds (`RELEASE_STORE_FILE`, `RELEASE_STORE_PASSWORD`, `RELEASE_KEY_ALIAS`,
-`RELEASE_KEY_PASSWORD`). Without those four the release build is simply left unsigned.
+Machine-local configuration lives in the untracked `local.properties`: SDK paths, the optional
+`PEXELS_API_KEY` (compiled into `BuildConfig`), `CARTO_API_KEY` and `ESRI_API_KEY` (passed to the
+Rust build as environment variables), and the four `RELEASE_*` signing properties. Without all
+four signing properties the release build is produced unsigned.
 
 ## Testing
 
-JVM unit tests cover the pure layers: progress math, tour segmentation, cooldowns,
-sorting, achievement evaluation, and the two seams pulled out of ViewModels for exactly
-this purpose. Two tests are load-bearing rather than incidental and should not be
-weakened:
+JVM unit tests cover the pure layers and the seams extracted for them: progress math, tour
+segmentation, cooldowns, achievement evaluation and stacking, route-network and search logic,
+airport clocks, the world-map projection, offline-mode resolution, the render cache and route
+selection, the landing outcome diff, challenge crediting, and the two audio classes.
 
-- `ChallengeRowConcurrentWriteTest` pins the concurrent-writer rules in
-  [state.md](state.md). Its fake DAO models Room's real write granularity, so it cannot
-  pass against a DAO that could not exist.
-- `MigrationTest` (instrumented) validates every migration against its committed schema
-  JSON.
-- `EngineSoundSynthTest` renders the synthesised engine audio and measures it, so its
-  spectral shape is a check rather than a listening session. Two of its assertions pin
-  that shape and should not be weakened — see [engine-sound.md](engine-sound.md).
+A few of them test a property rather than a function, and are worth knowing about:
 
-The same seam argument applies to audio: `EngineSoundSynth` is split from
-`EngineSoundEngine` precisely so the DSP carries no Android type and can be rendered on the
-JVM, leaving only the `AudioTrack` and its thread untested.
-
-`InFlightViewModel` has no unit test — it loads the native engine on first touch. That
-is why its concurrency rule lives in `SessionPausedFlightStore`, a JVM-testable seam,
-rather than only in a flag inside the ViewModel.
-
-## Known scaffolding
-
-`DEV_FEATURES_TO_REVERT.md` tracks temporary shortcuts that must be undone before
-release (disabled cooldowns, the in-flight skip button). While the cooldown override is
-in place, two assertions in `HomeBaseCooldownTest` fail by design — `./gradlew test` is
-red, and reverting the override turns it green.
+- `ChallengeRowConcurrentWriteTest` reproduces the concurrent writes to a challenge row that a
+  landing and an in-flight save can produce. Its fake DAO models Room's real write granularity
+  (a whole-row `@Update` rewrites every column, a scoped `UPDATE` does not), so it cannot pass
+  against a DAO that could not exist ([state.md](state.md#concurrent-writers)).
+- `PilotProgressRepositoryTest` pins that a failed derivation keeps the previous snapshot and that
+  a username edit does not trigger a recompute.
+- `EngineSoundSynthTest` renders the synthesised audio and measures it, so "does this still sound
+  like a jet" is a spectral check rather than a listening session
+  ([engine-sound.md](engine-sound.md#testing)).
+- `MigrationTest` (instrumented) runs every migration against its exported schema. The build adds
+  `app/schemas` to the androidTest assets, because `MigrationTestHelper` loads the old schema from
+  there at runtime.
+- `PredefinedRouteCatalogTest` (instrumented) checks every authored itinerary against the real
+  `flights.db`.

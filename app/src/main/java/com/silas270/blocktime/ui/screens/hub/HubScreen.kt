@@ -123,7 +123,7 @@ fun HubScreen(
 
     // Hub's ViewModel (and its data) is loaded once in init, but the Hub's own back-stack entry
     // survives a popBackStack() from Account/Passport - so returning from there after using
-    // story-mode.md's return-home teleport (a direct currentAirport write, no flight/session)
+    // docs/modes.md's return-home teleport (a direct currentAirport write, no flight/session)
     // needs an explicit refresh, or the globe/greeting would keep showing the pre-teleport
     // airport until the next full Hub recreation. ON_START (not just first composition) fires
     // both on initial entry and on returning to this screen - same lifecycle-observer pattern

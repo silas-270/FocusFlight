@@ -66,8 +66,8 @@ class ChallengesViewModel(
     private val _celebrationQueue = MutableStateFlow<List<Challenge>>(emptyList())
     val celebrationQueue: StateFlow<List<Challenge>> = _celebrationQueue.asStateFlow()
 
-    /** Still-unearned achievements, flat and ungrouped (no category headers by design), ordered
-     *  closest-to-done first so the next reachable goal is always on top. Earned ones are
+    /** Still-unearned achievements, ordered closest-to-done first (the screen groups them under
+     *  category headers) so the next reachable goal is always on top. Earned ones are
      *  deliberately absent - they live on the Passport as badges. */
     private val _unfinishedAchievements = MutableStateFlow<List<AchievementStatus>>(emptyList())
     val unfinishedAchievements: StateFlow<List<AchievementStatus>> = _unfinishedAchievements.asStateFlow()
